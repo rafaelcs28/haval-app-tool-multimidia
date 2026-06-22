@@ -366,8 +366,48 @@ fun BasicSettingsTab() {
                         prefs.getFloat(SharedPreferencesKeys.OPEN_SUNROOF_CURTAIN_MAX_TEMP.key, -1f)
                 )
         }
+        var aaClusterOffset by remember {
+                mutableIntStateOf(
+                        prefs.getInt(SharedPreferencesKeys.AA_CLUSTER_LEFT_OFFSET.key, 145)
+                )
+        }
 
         val settingsList = mutableListOf<SettingItem>()
+
+        settingsList.add(
+                SettingItem(
+                        title = "Deslocamento do Android Auto (cluster)",
+                        description = "Move a projeção do AA para a direita no display 3 (px), pra não sobrepor a barra do cluster. Ajuste olhando a tela — aplica ao vivo ao soltar.",
+                        checked = true,
+                        onCheckedChange = {},
+                        hideSwitch = true,
+                        customContent = {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                        Text(
+                                                "Deslocamento: $aaClusterOffset px",
+                                                color = AppColors.TextPrimary,
+                                                fontSize = 14.sp
+                                        )
+                                        Slider(
+                                                value = aaClusterOffset.toFloat(),
+                                                onValueChange = { aaClusterOffset = it.toInt() },
+                                                onValueChangeFinished = {
+                                                        prefs.edit {
+                                                                putInt(SharedPreferencesKeys.AA_CLUSTER_LEFT_OFFSET.key, aaClusterOffset)
+                                                        }
+                                                        br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.reapplyAndroidAutoClusterBounds()
+                                                },
+                                                valueRange = 0f..400f,
+                                                colors = SliderDefaults.colors(
+                                                        thumbColor = AppColors.Primary,
+                                                        activeTrackColor = AppColors.Primary,
+                                                        inactiveTrackColor = Color(0xFF2C3139)
+                                                )
+                                        )
+                                }
+                        }
+                )
+        )
 
         if (isAdvancedUse && !selfInstallationCheck) {
                 settingsList.add(

@@ -2546,7 +2546,34 @@ object DisplayAppLauncher {
 
     private fun getAndroidAutoDisplayBounds(displayId: Int): IntArray {
         val res = getDisplayResolution(displayId)
+        // Cluster (display 3): desloca a janela do AA pra direita da barra preta do modo mapa,
+        // pra a barra cobrir o app-rail do AA em vez de o mapa ser cortado por baixo dela.
+        // Offset ajustavel pelo slider no app (pref); padrao 145 = largura da barra.
+        // Borda direita fixa em res.first -> aumentar o offset so estreita, nao corta a direita.
+        if (displayId == 3) {
+            val offset = getPrefs()
+                .getInt(SharedPreferencesKeys.AA_CLUSTER_LEFT_OFFSET.key, 145)
+                .coerceIn(0, res.first - 200)
+            return intArrayOf(offset, 0, res.first, res.second)
+        }
         return intArrayOf(0, 0, res.first, res.second)
+    }
+
+    // Re-aplica os bounds do AA no cluster ao vivo (chamado quando o slider de offset muda),
+    // pra ajustar sem precisar reprojetar o AA.
+    fun reapplyAndroidAutoClusterBounds() {
+        scope.launch {
+            try {
+                val task = findTaskForPackageOnDisplay(ANDROID_AUTO_PACKAGE, 3)
+                if (task != null) {
+                    resizeAndFocusAndroidAuto(task, 3, getAndroidAutoDisplayBounds(3), "AA_CLUSTER_OFFSET_TUNE")
+                } else {
+                    Log.w(TAG, "[AA_CLUSTER_OFFSET_TUNE] AA nao esta no display 3; offset aplica na proxima projecao")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "reapplyAndroidAutoClusterBounds falhou", e)
+            }
+        }
     }
 
     internal fun getCarPlayConfigForDisplay(
