@@ -150,18 +150,8 @@ fun InstallAppsTab() {
         }
     }
 
-    fun compareVersions(v1: String?, v2: String): Int {
-        if (v1 == null) return -1
-        val clean1 = v1.removeSuffix("-preview")
-        val clean2 = v2.removeSuffix("-preview")
-        val parts1 = clean1.split(".").map { it.toIntOrNull() ?: 0 }
-        val parts2 = clean2.split(".").map { it.toIntOrNull() ?: 0 }
-        for (i in 0 until min(parts1.size, parts2.size)) {
-            if (parts1[i] > parts2[i]) return 1
-            if (parts1[i] < parts2[i]) return -1
-        }
-        return parts1.size.compareTo(parts2.size)
-    }
+    fun compareVersions(v1: String?, v2: String): Int =
+        br.com.redesurftank.havalshisuku.utils.VersionUtils.compareVersions(v1, v2)
 
     fun startDownload(app: AppInfo) {
         downloadingApp = app.packageName
