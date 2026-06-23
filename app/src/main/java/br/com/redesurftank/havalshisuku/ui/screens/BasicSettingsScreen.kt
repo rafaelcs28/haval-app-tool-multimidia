@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
@@ -372,6 +373,24 @@ fun BasicSettingsTab() {
                 )
         }
 
+        var mqttEnabled by remember { mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.ENABLE_MQTT_BRIDGE.key, false)) }
+        var mqttHost by remember { mutableStateOf(prefs.getString(SharedPreferencesKeys.MQTT_BROKER_HOST.key, "") ?: "") }
+        var mqttPort by remember { mutableStateOf(prefs.getString(SharedPreferencesKeys.MQTT_BROKER_PORT.key, "1883") ?: "1883") }
+        var mqttUser by remember { mutableStateOf(prefs.getString(SharedPreferencesKeys.MQTT_USERNAME.key, "") ?: "") }
+        var mqttPass by remember { mutableStateOf(prefs.getString(SharedPreferencesKeys.MQTT_PASSWORD.key, "") ?: "") }
+        var mqttTls by remember { mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.MQTT_USE_TLS.key, false)) }
+        var mqttWifiOnly by remember { mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.MQTT_WIFI_ONLY.key, true)) }
+        var enablePersistHevSoc by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.key, false)
+                )
+        }
+        var hevSocTarget by remember {
+                mutableIntStateOf(
+                        prefs.getInt(SharedPreferencesKeys.HEV_SOC_TARGET_VALUE.key, 50)
+                )
+        }
+
         val settingsList = mutableListOf<SettingItem>()
 
         settingsList.add(
@@ -405,6 +424,97 @@ fun BasicSettingsTab() {
                                                 )
                                         )
                                 }
+                        }
+                )
+        )
+
+        settingsList.add(
+                SettingItem(
+                        title = "Ponte Home Assistant (MQTT/WiFi)",
+                        description = "Publica os dados do carro no seu Home Assistant pela WiFi, independente do 4G. Configure o broker abaixo e ligue aqui.",
+                        checked = mqttEnabled,
+                        onCheckedChange = {
+                                mqttEnabled = it
+                                prefs.edit { putBoolean(SharedPreferencesKeys.ENABLE_MQTT_BRIDGE.key, it) }
+                                br.com.redesurftank.havalshisuku.managers.MqttBridgeManager.notifyConfigChanged(App.getContext())
+                        }
+                )
+        )
+
+        settingsList.add(
+                SettingItem(
+                        title = "Broker MQTT (Home Assistant)",
+                        description = "Endereço do broker (Mosquitto do HA), porta, usuário e senha. Toque em Salvar para (re)conectar.",
+                        checked = true,
+                        onCheckedChange = {},
+                        hideSwitch = true,
+                        customContent = {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                        OutlinedTextField(
+                                                value = mqttHost,
+                                                onValueChange = { mqttHost = it },
+                                                label = { Text("Host / IP do broker") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedTextField(
+                                                value = mqttPort,
+                                                onValueChange = { v -> mqttPort = v.filter { it.isDigit() } },
+                                                label = { Text("Porta (1883 padrão, 8883 TLS)") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedTextField(
+                                                value = mqttUser,
+                                                onValueChange = { mqttUser = it },
+                                                label = { Text("Usuário MQTT") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedTextField(
+                                                value = mqttPass,
+                                                onValueChange = { mqttPass = it },
+                                                label = { Text("Senha MQTT") },
+                                                singleLine = true,
+                                                visualTransformation = PasswordVisualTransformation(),
+                                                modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Switch(checked = mqttTls, onCheckedChange = { mqttTls = it })
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Usar TLS/SSL", color = AppColors.TextPrimary, fontSize = 14.sp)
+                                        }
+                                        Spacer(Modifier.height(12.dp))
+                                        Button(
+                                                onClick = {
+                                                        prefs.edit {
+                                                                putString(SharedPreferencesKeys.MQTT_BROKER_HOST.key, mqttHost.trim())
+                                                                putString(SharedPreferencesKeys.MQTT_BROKER_PORT.key, mqttPort.trim())
+                                                                putString(SharedPreferencesKeys.MQTT_USERNAME.key, mqttUser.trim())
+                                                                putString(SharedPreferencesKeys.MQTT_PASSWORD.key, mqttPass)
+                                                                putBoolean(SharedPreferencesKeys.MQTT_USE_TLS.key, mqttTls)
+                                                        }
+                                                        br.com.redesurftank.havalshisuku.managers.MqttBridgeManager.notifyConfigChanged(App.getContext())
+                                                }
+                                        ) { Text("Salvar e reconectar") }
+                                }
+                        }
+                )
+        )
+
+        settingsList.add(
+                SettingItem(
+                        title = "Só publicar pela WiFi",
+                        description = "Ligado: a ponte só envia com o carro no WiFi; no 4G fica em silêncio (a integração gwmbrasil já cobre). Desligado: publica em qualquer rede.",
+                        checked = mqttWifiOnly,
+                        onCheckedChange = {
+                                mqttWifiOnly = it
+                                prefs.edit { putBoolean(SharedPreferencesKeys.MQTT_WIFI_ONLY.key, it) }
+                                br.com.redesurftank.havalshisuku.managers.MqttBridgeManager.notifyConfigChanged(App.getContext())
                         }
                 )
         )

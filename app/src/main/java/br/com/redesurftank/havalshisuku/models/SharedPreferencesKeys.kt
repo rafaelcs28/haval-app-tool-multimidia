@@ -216,5 +216,19 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     TRIP_CONSISTENCY_CLUSTER_SCORE("tripConsistencyClusterScore", "Score de consistência em tempo real no cluster"),
     AA_PATCH_AUTO_MOUNT("aaPatchAutoMount", "Habilitar montagem automática dos patches do Android Auto ao iniciar"),
     CARPLAY_PATCH_AUTO_MOUNT("carPlayPatchAutoMount", "Habilitar montagem automática dos patches do CarPlay ao iniciar"),
-    AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)")
+    AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)"),
+
+    // --- Ponte MQTT / Home Assistant (WiFi) ---
+    ENABLE_MQTT_BRIDGE("enableMqttBridge", "Habilitar ponte MQTT / Home Assistant (WiFi)"),
+    MQTT_BROKER_HOST("mqttBrokerHost", "Endereço do broker MQTT (IP/host do Home Assistant)"),
+    MQTT_BROKER_PORT("mqttBrokerPort", "Porta do broker MQTT"),
+    MQTT_USERNAME("mqttUsername", "Usuário MQTT"),
+    MQTT_PASSWORD("mqttPassword", "Senha MQTT"),
+    MQTT_USE_TLS("mqttUseTls", "Usar TLS/SSL no MQTT"),
+    MQTT_WIFI_ONLY("mqttWifiOnly", "Só publicar quando estiver na WiFi (não usar 4G)"),
+    MQTT_DEVICE_NAME("mqttDeviceName", "Nome do dispositivo no Home Assistant"),
+    MQTT_DISCOVERY_PREFIX("mqttDiscoveryPrefix", "Prefixo de discovery do Home Assistant"),
+    MQTT_POLL_INTERVAL_SEC("mqttPollIntervalSec", "Intervalo de leitura dos sensores (segundos)"),
+    ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
+    HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)")
 }

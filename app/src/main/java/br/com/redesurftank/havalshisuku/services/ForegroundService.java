@@ -641,6 +641,14 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             return;
         }
         startCarPlaySystemUiIconWatchdogSafely("post-service-init");
+
+        // Inicia a ponte MQTT/Home Assistant (WiFi) se habilitada nas configurações.
+        try {
+            br.com.redesurftank.havalshisuku.managers.MqttBridgeManager.startIfEnabled(getApplicationContext());
+        } catch (Exception e) {
+            Log.e(TAG, "MQTT bridge start failed: " + e.getMessage(), e);
+        }
+
         try {
             DisplayAppLauncher.INSTANCE.startAndroidAutoSteeringMediaFocusKeepAlive();
         } catch (Exception e) {

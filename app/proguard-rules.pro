@@ -1,3 +1,7 @@
+# Eclipse Paho MQTT (ponte Home Assistant) — usado em runtime, manter intacto
+-keep class org.eclipse.paho.** { *; }
+-dontwarn org.eclipse.paho.**
+
 -keep class com.autolink.** { *; }
 -keepnames class com.autolink.**
 -keepclassmembers class com.autolink.** { *; }
