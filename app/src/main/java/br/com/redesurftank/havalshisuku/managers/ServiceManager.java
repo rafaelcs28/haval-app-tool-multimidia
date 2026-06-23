@@ -204,6 +204,7 @@ public class ServiceManager {
             CarConstants.CAR_INTELLIGENT_DRIVING_SETTING_SRAS_RSA_RSB_STATE,
             CarConstants.CAR_INTELLIGENT_DRIVING_SETTING_SRAS_RSA_RSB_WARNING_STATE,
             CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG,
+            CarConstants.CAR_BASIC_SEATED_STATE,
     };
     private static ServiceManager instance;
     private final List<IDataChanged> dataChangedListeners;
@@ -1310,6 +1311,27 @@ public class ServiceManager {
         }
     }
 
+    /**
+     * True se há alguém sentado no banco do passageiro dianteiro.
+     * car.basic.seated_state vem como "{d,p,rl,rm,rr}" — índice 1 = passageiro dianteiro
+     * (mesma ordem das portas: dianteiro-esq, dianteiro-dir, ...). Qualquer valor != 0 = ocupado.
+     */
+    private boolean isPassengerSeatOccupied() {
+        try {
+            String seated = getUpdatedData(CarConstants.CAR_BASIC_SEATED_STATE.getValue());
+            if (seated == null) return false;
+            String[] parts = seated.replace("{", "").replace("}", "").trim().split(",");
+            if (parts.length < 2) return false;
+            String passenger = parts[1].trim();
+            boolean occupied = !passenger.isEmpty() && !passenger.equals("0");
+            ClusterPersistentEventLogger.logText("passenger_seat_check", "seated=" + seated + " occupied=" + occupied);
+            return occupied;
+        } catch (Exception e) {
+            Log.e(TAG, "isPassengerSeatOccupied failed: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
     private void maybeCounterPulseSceneNotify(String value) {
         // Ignore re-entrant notifications produced by our own counter-pulse write.
         if (isSelfWritingSceneNotify) {
@@ -1586,10 +1608,31 @@ public class ServiceManager {
                         autoOpenSunroofCurtain();
                     }
                 }
-            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1") && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
-                updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "3");
-            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0") && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
-                updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1")) {
+                // A/C ligou: ventila o banco do motorista (se habilitado) e o do passageiro (se habilitado E ocupado).
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "3");
+                }
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false) && isPassengerSeatOccupied()) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "3");
+                }
+            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0")) {
+                // A/C desligou: zera a ventilação dos bancos cujas funções estão habilitadas.
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+                }
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+                }
+            } else if (key.equals(CarConstants.CAR_BASIC_SEATED_STATE.getValue())) {
+                // Alguem sentou ou saiu de um banco. Se a funcao estiver habilitada E o A/C ligado,
+                // liga (ocupado) ou desliga (vazio) a ventilacao do banco do passageiro em tempo real.
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    String acPower = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
+                    if (acPower != null && acPower.trim().equals("1")) {
+                        updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), isPassengerSeatOccupied() ? "3" : "0");
+                    }
+                }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
             }

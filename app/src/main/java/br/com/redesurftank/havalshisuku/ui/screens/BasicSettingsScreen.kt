@@ -203,6 +203,14 @@ fun BasicSettingsTab() {
                         )
                 )
         }
+        var enablePassengerSeatVentilationOnAcOn by remember {
+                mutableStateOf(
+                        prefs.getBoolean(
+                                SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.key,
+                                false
+                        )
+                )
+        }
         var enableCustomSteeringWheelButtons by remember {
                 mutableStateOf(
                         prefs.getBoolean(
@@ -1524,6 +1532,24 @@ fun BasicSettingsTab() {
                                                 putBoolean(
                                                         SharedPreferencesKeys
                                                                 .ENABLE_SEAT_VENTILATION_ON_AC_ON
+                                                                .key,
+                                                        it
+                                                )
+                                        }
+                                }
+                        ),
+                        SettingItem(
+                                title = "Ligar ventilação do banco do passageiro com A/C (só se ocupado)",
+                                description =
+                                        SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON
+                                                .description,
+                                checked = enablePassengerSeatVentilationOnAcOn,
+                                onCheckedChange = {
+                                        enablePassengerSeatVentilationOnAcOn = it
+                                        prefs.edit {
+                                                putBoolean(
+                                                        SharedPreferencesKeys
+                                                                .ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON
                                                                 .key,
                                                         it
                                                 )
