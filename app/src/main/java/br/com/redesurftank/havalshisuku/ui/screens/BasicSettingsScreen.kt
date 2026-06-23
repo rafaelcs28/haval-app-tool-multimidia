@@ -403,6 +403,47 @@ fun BasicSettingsTab() {
 
         settingsList.add(
                 SettingItem(
+                        title = "Manter % de bateria no HEV Prioritário",
+                        description = "Se o carro alterar sozinho o % a salvar, o app reaplica o valor que você escolheu. Só vale em HEV Prioritário.",
+                        checked = enablePersistHevSoc,
+                        onCheckedChange = {
+                                enablePersistHevSoc = it
+                                prefs.edit {
+                                        putBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.key, it)
+                                }
+                                if (it) ServiceManager.getInstance().applyHevSocTargetIfActive("UI_TOGGLE")
+                        },
+                        customContent = {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                        Text(
+                                                "Salvar bateria em: $hevSocTarget%",
+                                                color = AppColors.TextPrimary,
+                                                fontSize = 14.sp
+                                        )
+                                        Slider(
+                                                value = hevSocTarget.toFloat(),
+                                                onValueChange = { hevSocTarget = it.toInt() },
+                                                onValueChangeFinished = {
+                                                        prefs.edit {
+                                                                putInt(SharedPreferencesKeys.HEV_SOC_TARGET_VALUE.key, hevSocTarget)
+                                                        }
+                                                        ServiceManager.getInstance().applyHevSocTargetIfActive("UI_SLIDER")
+                                                },
+                                                valueRange = 20f..80f,
+                                                steps = 11,
+                                                colors = SliderDefaults.colors(
+                                                        thumbColor = AppColors.Primary,
+                                                        activeTrackColor = AppColors.Primary,
+                                                        inactiveTrackColor = Color(0xFF2C3139)
+                                                )
+                                        )
+                                }
+                        }
+                )
+        )
+
+        settingsList.add(
+                SettingItem(
                         title = "Deslocamento do Android Auto (cluster)",
                         description = "Move a projeção do AA para a direita no display 3 (px), pra não sobrepor a barra do cluster. Ajuste olhando a tela — aplica ao vivo ao soltar.",
                         checked = true,

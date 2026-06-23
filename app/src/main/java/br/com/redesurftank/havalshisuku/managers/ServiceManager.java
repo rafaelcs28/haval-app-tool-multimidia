@@ -204,6 +204,7 @@ public class ServiceManager {
             CarConstants.CAR_INTELLIGENT_DRIVING_SETTING_SRAS_RSA_RSB_STATE,
             CarConstants.CAR_INTELLIGENT_DRIVING_SETTING_SRAS_RSA_RSB_WARNING_STATE,
             CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG,
+            CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG,
             CarConstants.CAR_BASIC_SEATED_STATE,
     };
     private static ServiceManager instance;
@@ -1607,6 +1608,8 @@ public class ServiceManager {
                     if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_OPEN_SUNROOF_CURTAIN_ON_START.getKey(), false)) {
                         autoOpenSunroofCurtain();
                     }
+                    // Ao ligar o carro, reaplica o % de bateria do HEV Prioritario (o carro costuma resetar).
+                    applyHevSocTargetIfActive("POWER_ON");
                 }
             } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1")) {
                 // A/C ligou: ventila o banco do motorista (se habilitado) e o do passageiro (se habilitado E ocupado).
@@ -1635,9 +1638,49 @@ public class ServiceManager {
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
+            } else if (key.equals(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue())) {
+                // O carro (ou o usuario) alterou o % alvo de bateria do HEV. Se a persistencia estiver
+                // ligada e o sub-modo for Prioritario, reaplica o valor que o usuario escolheu.
+                applyHevSocTargetIfActive("SOC_CHANGED");
+            } else if (key.equals(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.getValue()) && value.trim().equals("2")) {
+                // Entrou em HEV Prioritario -> aplica o % desejado.
+                applyHevSocTargetIfActive("ENTER_PRIORITARIO");
             }
         } catch (Exception e) {
             Log.e(TAG, "Error in OnDataChanged", e);
+        }
+    }
+
+    // Reaplica o % de bateria escolhido pelo usuario no HEV Prioritario, caso o carro o tenha
+    // alterado sozinho. So atua quando a persistencia esta ligada E o carro JA esta em HEV
+    // Prioritario (modo HEV + sub-modo Prioritario). NUNCA escreve o modo nem o sub-modo: se nao
+    // estiver exatamente em HEV Prioritario, sai sem fazer nada (o modo quem define e o usuario no
+    // carro). O eco da propria escrita nao re-dispara (current == desired).
+    public void applyHevSocTargetIfActive(String reason) {
+        try {
+            if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.getKey(), false)) {
+                return;
+            }
+            // 1) tem que estar em HEV (power_model_config == 0). Em EV/Prioridade EV, nao mexe em nada.
+            String driveMode = getUpdatedData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.getValue());
+            if (driveMode == null || !driveMode.trim().equals("0")) {
+                return;
+            }
+            // 2) e o sub-modo tem que ser Prioritario (power_reserve_config == 2).
+            String subMode = getUpdatedData(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.getValue());
+            if (subMode == null || !subMode.trim().equals("2")) {
+                return;
+            }
+            int desired = sharedPreferences.getInt(SharedPreferencesKeys.HEV_SOC_TARGET_VALUE.getKey(), 50);
+            String currentStr = getUpdatedData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue());
+            int current = Integer.MIN_VALUE;
+            try { current = Integer.parseInt(currentStr.trim()); } catch (Exception ignored) {}
+            if (current != desired) {
+                updateData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue(), String.valueOf(desired));
+                Log.w(TAG, "[HEV-SOC " + reason + "] alvo estava " + current + ", reaplicado " + desired);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "applyHevSocTargetIfActive falhou", e);
         }
     }
 
