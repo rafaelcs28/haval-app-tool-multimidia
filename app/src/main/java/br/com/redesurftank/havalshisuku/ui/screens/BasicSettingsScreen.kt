@@ -227,6 +227,11 @@ fun BasicSettingsTab() {
                         )
                 )
         }
+        var passengerPresent by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.key, false)
+                )
+        }
         var enableCustomSteeringWheelButtons by remember {
                 mutableStateOf(
                         prefs.getBoolean(
@@ -1596,7 +1601,7 @@ fun BasicSettingsTab() {
                                 }
                         ),
                         SettingItem(
-                                title = "Ligar ventilação do banco do passageiro com A/C (só se ocupado)",
+                                title = "Ventilação do passageiro com A/C (presença pela porta)",
                                 description =
                                         SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON
                                                 .description,
@@ -1611,7 +1616,56 @@ fun BasicSettingsTab() {
                                                         it
                                                 )
                                         }
-                                }
+                                },
+                                customContent =
+                                        if (enablePassengerSeatVentilationOnAcOn) {
+                                                {
+                                                        Column(
+                                                                verticalArrangement =
+                                                                        Arrangement.spacedBy(8.dp)
+                                                        ) {
+                                                                HorizontalDivider(
+                                                                        color = Color(0xFF3A3F47),
+                                                                        thickness = 1.dp
+                                                                )
+                                                                Text(
+                                                                        "Passageiro: " +
+                                                                                if (passengerPresent)
+                                                                                        "presente"
+                                                                                else "ausente",
+                                                                        color =
+                                                                                if (passengerPresent)
+                                                                                        Color(
+                                                                                                0xFF4A9EFF
+                                                                                        )
+                                                                                else
+                                                                                        AppColors.TextSecondary,
+                                                                        fontSize = 15.sp,
+                                                                        fontWeight =
+                                                                                FontWeight.Medium
+                                                                )
+                                                                Text(
+                                                                        "A presença alterna sozinha ao abrir a porta do passageiro. Use o botão se a leitura ficar invertida (ex.: você parou, desceu e voltou sem abrir a porta dele).",
+                                                                        color =
+                                                                                AppColors.TextSecondary,
+                                                                        fontSize = 12.sp
+                                                                )
+                                                                Button(
+                                                                        onClick = {
+                                                                                ServiceManager
+                                                                                        .getInstance()
+                                                                                        .togglePassengerPresent()
+                                                                                passengerPresent =
+                                                                                        !passengerPresent
+                                                                        }
+                                                                ) {
+                                                                        Text(
+                                                                                "Inverter presença"
+                                                                        )
+                                                                }
+                                                        }
+                                                }
+                                        } else null
                         ),
                         SettingItem(
                                 title = "Desligar bluetooth ao desligar",

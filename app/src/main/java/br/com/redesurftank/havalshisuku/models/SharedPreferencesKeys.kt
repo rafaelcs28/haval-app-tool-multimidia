@@ -120,7 +120,7 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     ),
     ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON(
             "enablePassengerSeatVentilationOnAcOn",
-            "Habilitar ventilação do banco do passageiro ao ligar o A/C (só se ocupado)"
+            "Habilitar ventilação do banco do passageiro com A/C (só se houver presença detectada pela porta)"
     ),
     ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS(
             "enableSteeringWheelCustomButtons",
@@ -246,5 +246,6 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     MQTT_DISCOVERY_PREFIX("mqttDiscoveryPrefix", "Prefixo de discovery do Home Assistant"),
     MQTT_POLL_INTERVAL_SEC("mqttPollIntervalSec", "Intervalo de leitura dos sensores (segundos)"),
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
-    HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)")
+    HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
+    PASSENGER_PRESENT("passengerPresent", "Passageiro presente (proxy pela porta; alterna ao abrir a porta do passageiro)")
 }

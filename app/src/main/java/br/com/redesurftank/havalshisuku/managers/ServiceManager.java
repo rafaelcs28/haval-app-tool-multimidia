@@ -205,7 +205,6 @@ public class ServiceManager {
             CarConstants.CAR_INTELLIGENT_DRIVING_SETTING_SRAS_RSA_RSB_WARNING_STATE,
             CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG,
             CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG,
-            CarConstants.CAR_BASIC_SEATED_STATE,
     };
     private static ServiceManager instance;
     private final List<IDataChanged> dataChangedListeners;
@@ -1316,25 +1315,44 @@ public class ServiceManager {
         }
     }
 
-    /**
-     * True se há alguém sentado no banco do passageiro dianteiro.
-     * car.basic.seated_state vem como "{d,p,rl,rm,rr}" — índice 1 = passageiro dianteiro
-     * (mesma ordem das portas: dianteiro-esq, dianteiro-dir, ...). Qualquer valor != 0 = ocupado.
-     */
-    private boolean isPassengerSeatOccupied() {
+    // Esse carro NAO tem sensor de ocupacao do passageiro (seated_state morto, sem camera OMS).
+    // Proxy pela porta: a presenca do passageiro alterna a cada abertura da porta do passageiro
+    // (entrou/saiu) e e PERSISTIDA nas prefs (nao zera ao desligar o carro). Indice 1 do door_status.
+    private volatile int prevPassengerDoorState = -1;
+
+    /** Presenca do passageiro (proxy pela porta), persistida nas prefs. */
+    private boolean isPassengerPresent() {
+        return sharedPreferences.getBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), false);
+    }
+
+    /** Estado da porta do passageiro a partir do car.basic.door_status "{a,b,...}" (indice 1).
+     *  1 = aberta, 0 = fechada, -1 se nao der pra ler. */
+    private int passengerDoorOpenState(String doorStatus) {
         try {
-            String seated = getUpdatedData(CarConstants.CAR_BASIC_SEATED_STATE.getValue());
-            if (seated == null) return false;
-            String[] parts = seated.replace("{", "").replace("}", "").trim().split(",");
-            if (parts.length < 2) return false;
-            String passenger = parts[1].trim();
-            boolean occupied = !passenger.isEmpty() && !passenger.equals("0");
-            ClusterPersistentEventLogger.logText("passenger_seat_check", "seated=" + seated + " occupied=" + occupied);
-            return occupied;
+            if (doorStatus == null) return -1;
+            String[] p = doorStatus.replace("{", "").replace("}", "").trim().split(",");
+            if (p.length < 2) return -1;
+            return p[1].trim().equals("1") ? 1 : 0;
         } catch (Exception e) {
-            Log.e(TAG, "isPassengerSeatOccupied failed: " + e.getMessage(), e);
-            return false;
+            return -1;
         }
+    }
+
+    /** Aplica a ventilacao do passageiro conforme presenca + estado do A/C (so com a funcao ligada). */
+    public void applyPassengerVentilation() {
+        if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) return;
+        String ac = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
+        if (ac != null && ac.trim().equals("1")) {
+            updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), isPassengerPresent() ? "3" : "0");
+        }
+    }
+
+    /** Inverte manualmente a presenca do passageiro (botao na UI) e reaplica a ventilacao. */
+    public void togglePassengerPresent() {
+        boolean now = !isPassengerPresent();
+        sharedPreferences.edit().putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), now).apply();
+        ClusterPersistentEventLogger.logText("passenger_present", "toggle_manual present=" + now);
+        applyPassengerVentilation();
     }
 
     private void maybeCounterPulseSceneNotify(String value) {
@@ -1625,7 +1643,7 @@ public class ServiceManager {
                 if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
                     updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "3");
                 }
-                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false) && isPassengerSeatOccupied()) {
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false) && isPassengerPresent()) {
                     updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "3");
                 }
             } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0")) {
@@ -1636,14 +1654,18 @@ public class ServiceManager {
                 if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
                     updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
                 }
-            } else if (key.equals(CarConstants.CAR_BASIC_SEATED_STATE.getValue())) {
-                // Alguem sentou ou saiu de um banco. Se a funcao estiver habilitada E o A/C ligado,
-                // liga (ocupado) ou desliga (vazio) a ventilacao do banco do passageiro em tempo real.
-                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
-                    String acPower = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
-                    if (acPower != null && acPower.trim().equals("1")) {
-                        updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), isPassengerSeatOccupied() ? "3" : "0");
+            } else if (key.equals(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) {
+                // Porta do passageiro (indice 1). A borda fechado->aberto ALTERNA a presenca
+                // (entrou/saiu); persiste nas prefs e reaplica a ventilacao se o A/C estiver ligado.
+                int pdoor = passengerDoorOpenState(value);
+                if (pdoor >= 0) {
+                    if (prevPassengerDoorState == 0 && pdoor == 1) {
+                        boolean now = !isPassengerPresent();
+                        sharedPreferences.edit().putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), now).apply();
+                        ClusterPersistentEventLogger.logText("passenger_present", "door_edge present=" + now);
+                        applyPassengerVentilation();
                     }
+                    prevPassengerDoorState = pdoor;
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
