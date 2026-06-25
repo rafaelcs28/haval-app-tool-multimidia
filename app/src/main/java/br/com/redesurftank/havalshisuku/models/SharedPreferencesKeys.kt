@@ -120,7 +120,7 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     ),
     ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON(
             "enablePassengerSeatVentilationOnAcOn",
-            "Habilitar ventilação do banco do passageiro com A/C (só se houver presença detectada pela porta)"
+            "Habilitar ventilação do banco do passageiro com A/C (só com presença detectada pelo cinto + porta)"
     ),
     ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS(
             "enableSteeringWheelCustomButtons",
@@ -153,6 +153,38 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_2(
             "steeringWheelOpenAppPackageButton2",
             "Pacote do aplicativo para o botão personalizado 2 do volante"
+    ),
+    STEERING_WHEEL_CUSTOM_BUTON_1_ACTION_DOUBLE(
+            "steeringWheelCustomButon1ActionDouble",
+            "Ação do botão personalizado 1 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_CUSTOM_BUTON_2_ACTION_DOUBLE(
+            "steeringWheelCustomButon2ActionDouble",
+            "Ação do botão personalizado 2 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_CUSTOM_BUTON_1_ACTION_LONG(
+            "steeringWheelCustomButon1ActionLong",
+            "Ação do botão personalizado 1 do volante (toque longo)"
+    ),
+    STEERING_WHEEL_CUSTOM_BUTON_2_ACTION_LONG(
+            "steeringWheelCustomButon2ActionLong",
+            "Ação do botão personalizado 2 do volante (toque longo)"
+    ),
+    STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_1_DOUBLE(
+            "steeringWheelOpenAppPackageButton1Double",
+            "Pacote do app para o botão 1 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_2_DOUBLE(
+            "steeringWheelOpenAppPackageButton2Double",
+            "Pacote do app para o botão 2 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_1_LONG(
+            "steeringWheelOpenAppPackageButton1Long",
+            "Pacote do app para o botão 1 do volante (toque longo)"
+    ),
+    STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_2_LONG(
+            "steeringWheelOpenAppPackageButton2Long",
+            "Pacote do app para o botão 2 do volante (toque longo)"
     ),
     LAST_CLUSTER_SCREEN("lastClusterScreen", "Última tela exibida no cluster"),
     LAST_CLUSTER_MENU_ITEM(
@@ -247,5 +279,5 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     MQTT_POLL_INTERVAL_SEC("mqttPollIntervalSec", "Intervalo de leitura dos sensores (segundos)"),
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
-    PASSENGER_PRESENT("passengerPresent", "Passageiro presente (proxy pela porta; alterna ao abrir a porta do passageiro)")
+    PASSENGER_PRESENT("passengerPresent", "Passageiro presente (detectado pelo sensor de cinto + porta)")
 }

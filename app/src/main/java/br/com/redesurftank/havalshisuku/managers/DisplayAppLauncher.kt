@@ -1494,7 +1494,12 @@ object DisplayAppLauncher {
             recoverAndroidAutoLinkDeviceForMediaCommand(reason)
         }
 
-        sendAndroidAutoVehicleInfoForMediaCommand(reason)
+        // FIX regressao PR#93 (commit 5668965): este SEND_VEHICLE_INFO mandava um IfVehicleInfo
+        // escrito a mao que o servico do AA NAO consegue desserializar (ClassNotFoundException "eu0"
+        // / BadParcelableException em LinkCommand.onTransact). O crash desfazia a transacao no meio do
+        // pause -> o AA nunca aplicava a pausa e o OEM voltava ao default (tocando) ~1s depois.
+        // O caminho que funcionava (pre-5668965) NUNCA mandava vehicle-info antes do play/pause.
+        // sendAndroidAutoVehicleInfoForMediaCommand(reason)
         sendAndroidAutoMediaCommandFocus(
             displayId = targetDisplayId,
             reason = reason,
@@ -4981,15 +4986,68 @@ object DisplayAppLauncher {
                 keyCode == KeyEvent.KEYCODE_MEDIA_NEXT
     }
 
+    // Caminho DEDICADO e rapido do play/pause do volante (NAO usa a cadeia do card).
+    // Resolve a direcao pelo estado REAL (source 402), aplica hint otimista (so BottomBarState,
+    // SEM armar o hold de 45s que causava o "toca-e-pausa") e dispara SO o comando AAP — a unica
+    // perna que realmente move o AA — sem os 2x verify de 1350ms nem sustain. Reverte o hint se nao enviar.
+    private fun sendAndroidAutoSteeringFastPlayback(keyCode: Int, reasonPrefix: String) {
+        val nativeIsPlaying = BottomBarService.getAndroidAutoNativeMediaCenterIsPlaying()
+        val currentlyPlaying = nativeIsPlaying ?: BottomBarState.mediaIsPlaying
+        val targetPlaying = resolveAndroidAutoSteeringPlaybackTarget(
+            keyCode = keyCode,
+            mediaIsPlaying = BottomBarState.mediaIsPlaying,
+            nativeMediaCenterIsPlaying = nativeIsPlaying
+        ) ?: !currentlyPlaying
+
+        applyAndroidAutoSteeringPlaybackStateHint(
+            keyCode = keyCode,
+            targetPlaying = targetPlaying,
+            reason = "${reasonPrefix}_FAST"
+        )
+
+        scope.launch {
+            // sendAndroidAutoDashboardPlaybackAapCommand(hint): hint=true -> PAUSE, hint=false -> PLAY.
+            // Queremos ATINGIR targetPlaying, entao o hint e o estado ATUAL (pre-toggle) = !targetPlaying.
+            val sent = sendAndroidAutoDashboardPlaybackAapCommand(
+                mediaIsPlayingHint = !targetPlaying
+            )
+            if (!sent) {
+                // prepare falhou (AA nao visivel/pronto): nada foi enviado -> reverte o hint.
+                applyAndroidAutoSteeringPlaybackStateHint(
+                    keyCode = keyCode,
+                    targetPlaying = currentlyPlaying,
+                    reason = "${reasonPrefix}_FAST_REVERT"
+                )
+                Log.w(
+                    TAG,
+                    "[${reasonPrefix}_FAST] AAP playback not sent (AA not ready); reverted hint"
+                )
+            }
+        }
+    }
+
     private fun shouldUseAndroidAutoSteeringAppCommandRoute(
         keyCode: Int,
         action: Int,
         source: AndroidAutoMediaKeySource,
         nativeMediaCenterActive: Boolean = BottomBarService.isNativeAndroidAutoMediaCenterRouteActive()
     ): Boolean {
-        // The physical steering key is already delivered to the native MediaCenter.
-        // Sending the same command app-side immediately can double-skip tracks or
-        // undo play/pause. Keep MediaCenter commands for explicit dashboard taps.
+        // PLAY/PAUSE do volante: rotear pelo MESMO comando que o card usa
+        // (LinkCommand one-shot via sendAndroidAutoNativePlaybackDirectCommand), que pausa
+        // e SUSTENTA. A rota nativa do OEM nao controla o AA wireless (so atualiza nosso hint
+        // e delega pro OEM, que ignora) -> o botao "nao faz nada" na tela do carro.
+        // Historicamente isso causava loops/double-skip por causa do AndroidAutoNowPlayingMonitor
+        // (auto-resume) + do reconcile atrasado, AMBOS agora desligados -> o app-command voltou a
+        // ser seguro (mesma funcao do card, cuja pausa ja sustenta). Gateado em ACTION_UP pra nao
+        // disparar 2x no par down/up. Skip/next/previous continuam na rota nativa (nao reativar
+        // aqui pra evitar double-skip).
+        if (source == AndroidAutoMediaKeySource.STEERING_INPUT &&
+            action == KeyEvent.ACTION_UP &&
+            isAndroidAutoSteeringPlaybackKey(keyCode) &&
+            nativeMediaCenterActive
+        ) {
+            return true
+        }
         return false
     }
 
@@ -5410,13 +5468,7 @@ object DisplayAppLauncher {
                 "[$reasonPrefix] Android Auto physical media key observed; " +
                         "using app command route"
             )
-            scope.launch {
-                val sent = sendAndroidAutoSteeringAppMediaCommand(
-                    keyCode = keyCode,
-                    reason = "${reasonPrefix}_STEERING_APP"
-                )
-                Log.w(TAG, "[$reasonPrefix] Android Auto steering app media command sent=$sent")
-            }
+            sendAndroidAutoSteeringFastPlayback(keyCode, reasonPrefix)
             return true
         }
 
@@ -5510,36 +5562,16 @@ object DisplayAppLauncher {
         initialSignature: String,
         reason: String
     ) {
-        val generation = androidAutoSteeringSkipFallbackGeneration.incrementAndGet()
+        // DESATIVADO (causava "pula 2 faixas" no avancar): a rota nativa do OEM ja faz next/previous
+        // de forma confiavel com o MediaCenter (source 402) ativo. Este fallback disparava um 2o skip
+        // quando a assinatura de midia (titulo/artista) ainda nao tinha atualizado no poll do card
+        // (~1.5s) e o delay aqui era so 900ms -> falso "nao mudou" -> skip duplo. No "previous" a
+        // metadata da faixa recem-tocada atualizava dentro de 900ms, por isso so o "next" duplicava.
+        // initialSignature/keyCode mantidos na assinatura por compatibilidade do call site.
         Log.w(
             TAG,
-            "[$reason] Scheduling Android Auto LinkCommand skip fallback keyCode=$keyCode"
+            "[$reason] Android Auto steering skip fallback disabled (native handles skip) keyCode=$keyCode"
         )
-        scope.launch {
-            delay(ANDROID_AUTO_STEERING_SKIP_FALLBACK_DELAY_MS)
-            if (generation != androidAutoSteeringSkipFallbackGeneration.get()) {
-                Log.w(TAG, "[${reason}_SKIP_FALLBACK] Skipping stale Android Auto skip fallback")
-                return@launch
-            }
-            val currentSignature = androidAutoSteeringMediaSignature()
-            if (currentSignature != initialSignature) {
-                Log.w(
-                    TAG,
-                    "[${reason}_SKIP_FALLBACK] Native route changed media; " +
-                        "skipping LinkCommand fallback keyCode=$keyCode"
-                )
-                return@launch
-            }
-            val sent = sendAndroidAutoNativeMediaDirectCommand(
-                keyCode = keyCode,
-                reason = "${reason}_SKIP_FALLBACK"
-            )
-            Log.w(
-                TAG,
-                "[${reason}_SKIP_FALLBACK] Android Auto LinkCommand skip fallback " +
-                    "keyCode=$keyCode sent=$sent"
-            )
-        }
     }
 
     private fun scheduleAndroidAutoSteeringPlaybackTargetReconcile(

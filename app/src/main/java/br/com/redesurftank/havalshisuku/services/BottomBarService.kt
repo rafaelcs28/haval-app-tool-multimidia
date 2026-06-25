@@ -1210,18 +1210,17 @@ class BottomBarService : LifecycleService() {
             if (!ok) return null
             reply.readException()
             if (reply.readInt() == 0) return null
-
             val mediaSource = reply.readInt()
+            // Layout real do reply: [int hasValue][int source][byte][Serializable java.lang.Class][MediaInfo].
             reply.readByte()
-            reply.readSerializable()
-            val value = reply.readParcelable(MediaInfo::class.java.classLoader) as? MediaInfo
-            if (value == null) {
-                Log.w(
-                        "BottomBarService",
-                        "Native MediaCenter Android Auto metadata returned empty value source=$source"
-                )
-                return null
-            }
+            // Pula o Serializable SEM desserializar (writeSerializable = writeString(nome)+writeByteArray);
+            // desserializar o java.lang.Class do OEM dava ClassNotFoundException.
+            val serName = reply.readString()
+            if (serName != null) reply.createByteArray()
+            // O MediaInfo do OEM tem o mesmo FQN, mas readParcelable nao carrega a classe no contexto do
+            // binder; le o nome da classe e descarta, e parseia os campos inline com o nosso createFromParcel.
+            reply.readString()
+            val value = MediaInfo(reply)
             NativeMediaCenterMediaInfo(
                     mediaSource = mediaSource,
                     title = value.title?.takeIf { it.isNotBlank() },
@@ -1353,6 +1352,10 @@ class BottomBarService : LifecycleService() {
     }
 
     private fun startAndroidAutoNowPlayingMonitoring(skipReadinessCheck: Boolean = false) {
+        // TESTE de regressao: o monitor binda no servico do AA + registra callback + polla, e essa
+        // presenca faz o OEM religar a pausa (comprovado: app desabilitado -> pausa cola). Desligado
+        // aqui pra confirmar que e SO o monitor. Se a pausa colar, viro numa correcao cirurgica.
+        if (DISABLE_AA_NOWPLAYING_MONITOR_FOR_PAUSE_TEST) return
         if (androidAutoNowPlayingMonitor != null) return
         if (isNativeRadioProtectionActive(queryNativeGuard = true)) return
         if (!skipReadinessCheck && !isAndroidAutoMediaSessionReadyForDashboard()) return
@@ -1553,7 +1556,14 @@ class BottomBarService : LifecycleService() {
         ) {
             return true
         }
-        return DisplayAppLauncher.hasActiveAndroidAutoAudioPlaybackForMedia("AA_MEDIA_TRANSPORT_AUDIO")
+        if (DisplayAppLauncher.hasActiveAndroidAutoAudioPlaybackForMedia("AA_MEDIA_TRANSPORT_AUDIO")) {
+            return true
+        }
+        // Fallback PASSIVO (Change B): o proprio MediaCenter do OEM ja reporta o AA (source 402) como
+        // fonte ativa. Int cacheado pelo poll passivo (txn 25/26) — sem bind/callback no servico do AA,
+        // entao NAO re-quebra a pausa. Cobre o caso AA wireless/pausado que os fallbacks acima nao pegam.
+        return nativeMediaCenterCurrentSource == NATIVE_MEDIA_CENTER_ANDROID_AUTO_SOURCE ||
+                nativeMediaCenterCurrentAudioSource == NATIVE_MEDIA_CENTER_ANDROID_AUTO_SOURCE
     }
 
     private fun startAudioMuteStateMonitoring() {
@@ -3618,6 +3628,7 @@ class BottomBarService : LifecycleService() {
         private const val ACTION_DEBUG_MEDIA_COMMAND =
                 "br.com.redesurftank.havalshisuku.DEBUG_MEDIA_COMMAND"
         private const val EXTRA_DEBUG_MEDIA_COMMAND = "command"
+        private const val DISABLE_AA_NOWPLAYING_MONITOR_FOR_PAUSE_TEST = true
         private const val EXTRA_DEBUG_MEDIA_DEV_ID = "devId"
         private const val CARPLAY_MEDIA_PACKAGE = "com.ts.carplay"
         private const val CARPLAY_MEDIA_APP_PACKAGE = "com.ts.carplay.app"
