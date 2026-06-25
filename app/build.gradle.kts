@@ -14,6 +14,17 @@ val appVersionCode = providers.gradleProperty("appVersionCode")
     .orElse(1)
 val appVersionName = providers.gradleProperty("appVersionName")
     .orElse("0.0.1")
+// Cherry-pick do upstream PR#96: destrava os logs persistentes (ClusterPersistentEventLogger +
+// snapshot de logcat) em builds release de PREVIEW, ja que release tem BuildConfig.DEBUG=false.
+// Auto-on quando appVersionName contem "preview"; override por -PimpulseReportDiagnosticsEnabled=true.
+val impulseReportDiagnosticsEnabled =
+    providers.gradleProperty("impulseReportDiagnosticsEnabled")
+        .map(String::toBoolean)
+        .orElse(
+            appVersionName.map { versionName ->
+                versionName.contains("preview", ignoreCase = true)
+            }
+        )
 
 fun buildConfigString(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -30,6 +41,11 @@ android {
         versionCode = appVersionCode.get()
         versionName = appVersionName.get()
         buildConfigField("boolean", "EMBED_FRIDA_TOOLS", "true")
+        buildConfigField(
+            "boolean",
+            "IMPULSE_REPORT_DIAGNOSTICS_ENABLED",
+            impulseReportDiagnosticsEnabled.get().toString()
+        )
     }
 
     signingConfigs {
@@ -56,11 +72,13 @@ android {
     buildTypes {
         named("debug") {
             buildConfigField("boolean", "EMBED_FRIDA_TOOLS", "true")
+            buildConfigField("boolean", "IMPULSE_REPORT_DIAGNOSTICS_ENABLED", "true")
         }
         create("leanDebug") {
             initWith(getByName("debug"))
             matchingFallbacks += listOf("debug")
             buildConfigField("boolean", "EMBED_FRIDA_TOOLS", "false")
+            buildConfigField("boolean", "IMPULSE_REPORT_DIAGNOSTICS_ENABLED", "true")
         }
         named("release") {
             signingConfig = signingConfigs.getByName("release")
