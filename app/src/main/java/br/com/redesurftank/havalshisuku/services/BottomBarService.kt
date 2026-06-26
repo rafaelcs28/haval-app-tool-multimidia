@@ -773,7 +773,10 @@ class BottomBarService : LifecycleService() {
                         BottomBarState.mediaAlbum = null
                     }
 
-                    if (sourceChanged || trackChanged || update.artwork != null) {
+                    // Só troca a capa em mudança de fonte/faixa ou pra preencher quando está vazia.
+                    // Evita substituir a capa do MESMO track por uma instância nova a cada frame
+                    // (o monitor re-decodifica um bitmap novo todo update -> Compose recarregava = flicker).
+                    if (sourceChanged || trackChanged || BottomBarState.mediaArtwork == null) {
                         BottomBarState.mediaArtwork = update.artwork
                     }
 

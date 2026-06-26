@@ -38,6 +38,7 @@ class CarPlayNowPlayingMonitor(
     private var lastServiceBindAttemptAtMs = 0L
     private var lastSubscriptionAttemptAtMs = 0L
     private var lastUpdateAtMs = 0L
+    @Volatile private var lastValidNowPlayingAtMs = 0L
 
     private val connection =
             object : ServiceConnection {
@@ -319,7 +320,14 @@ class CarPlayNowPlayingMonitor(
                     } else {
                         lastUpdateAtMs = SystemClock.elapsedRealtime()
                         callbackRegistered = true
-                        publishClear("empty now playing update")
+                        // O CarPlay intercala updates VAZIOS (readInt==0) com os reais; tratar cada
+                        // um como clear fazia o card piscar (capa <-> em branco). So limpa se o vazio
+                        // persistir alem da janela de graca (= parada de verdade).
+                        if (System.currentTimeMillis() - lastValidNowPlayingAtMs >=
+                                        BLANK_NOW_PLAYING_GRACE_MS
+                        ) {
+                            publishClear("empty now playing update")
+                        }
                     }
                     true
                 }
@@ -370,9 +378,16 @@ class CarPlayNowPlayingMonitor(
             val artist = info.artist?.takeIf { it.isNotBlank() }
             val isPlaying = info.playbackStatus == PLAYBACK_STATE_PLAYING
             if (title == null && artist == null && artwork == null && !isPlaying) {
+                // O CarPlay manda frames em branco TRANSITORIOS entre os reais; tratar cada um como
+                // "clear" fazia o card piscar (capa <-> em branco/icone). So limpa se o branco
+                // persistir por mais que a janela de graca (= parada de verdade).
+                if (System.currentTimeMillis() - lastValidNowPlayingAtMs < BLANK_NOW_PLAYING_GRACE_MS) {
+                    return@launch
+                }
                 publishClear("blank stopped now playing update")
                 return@launch
             }
+            lastValidNowPlayingAtMs = System.currentTimeMillis()
             val update =
                     CarPlayNowPlayingUpdate(
                             title = title,
@@ -508,6 +523,8 @@ class CarPlayNowPlayingMonitor(
 
     companion object {
         private const val TAG = "CarPlayNowPlayingMonitor"
+        // Janela de graca pra ignorar frames de now-playing em branco transitorios do CarPlay.
+        private const val BLANK_NOW_PLAYING_GRACE_MS = 4_000L
         private const val CARPLAY_PACKAGE_NAME = "com.ts.carplay"
         private const val CARPLAY_SERVICE_CLASS_NAME = "com.ts.carplay.CarPlayService"
         private const val CARPLAY_SERVICE_ACTION = "com.ts.carplay.action.CarPlayService"
