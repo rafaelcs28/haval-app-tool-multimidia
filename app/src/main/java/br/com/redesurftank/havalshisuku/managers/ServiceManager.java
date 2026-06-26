@@ -78,6 +78,7 @@ public class ServiceManager {
             CarConstants.CAR_BASIC_GEAR_STATUS,
             CarConstants.CAR_BASIC_DOOR_STATUS,
             CarConstants.CAR_BASIC_DOOR_LOCK_STATUS,
+            CarConstants.CAR_BASIC_SEAT_BELT_WARNING,
             CarConstants.CAR_BASIC_DRIVING_READY_STATE,
             CarConstants.CAR_BASIC_INSIDE_TEMP,
             CarConstants.CAR_BASIC_MAINTENANCE_WARNING,
@@ -797,6 +798,10 @@ public class ServiceManager {
         MainUiManager.getInstance().updateScreen();
         timeInitialized = SystemClock.uptimeMillis();
         Log.w(TAG, "Services initialized successfully");
+        // Safety-net p/ a ventilacao ao ligar o carro: o AC liga sozinho mas o evento power_mode->1
+        // pode chegar antes do app estar pronto -> handler perde. Re-checa com atraso e aplica.
+        backgroundHandler.postDelayed(() -> applySeatVentilationOnAcIfActive("INIT+8s"), 8000);
+        backgroundHandler.postDelayed(() -> applySeatVentilationOnAcIfActive("INIT+18s"), 18000);
         backgroundHandler.post(() -> {
             try {
                 ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "settings put global enable_freeform_support 1"});
@@ -1772,10 +1777,47 @@ public class ServiceManager {
                     // Ao ligar o carro, reaplica o % de bateria do HEV Prioritario (o carro costuma resetar).
                     applyHevSocTargetIfActive("POWER_ON");
                 }
-            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1") && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
-                updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "3");
-            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0") && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
-                updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1")) {
+                // A/C ligou: aplica a ventilacao dos bancos (motorista + passageiro se presente).
+                applySeatVentilationOnAcIfActive("AC_ON");
+            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0")) {
+                // A/C desligou: zera a ventilação dos bancos cujas funções estão habilitadas.
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+                }
+                if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                    updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+                }
+            } else if (key.equals(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) {
+                // So marcamos QUANDO a porta do passageiro abriu (borda fechado->aberto). Esse instante
+                // distingue "saiu" de "afivelou" quando o alerta de cinto do passageiro volta a 0.
+                int pdoor = passengerDoorOpenState(value);
+                if (pdoor >= 0) {
+                    if (prevPassengerDoorState == 0 && pdoor == 1) {
+                        lastPassengerDoorOpenMs = System.currentTimeMillis();
+                    }
+                    prevPassengerDoorState = pdoor;
+                }
+            } else if (key.equals(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue())) {
+                int belt = passengerBeltWarnState(value);
+                if (belt >= 0) {
+                    if (belt == 1 && prevPassengerBeltState == 0) {
+                        // Alguem sentou (sem cinto) ENQUANTO o carro roda -> presente. Exige 0->1 real:
+                        // no startup prev=-1 NAO marca presenca (senao re-liga o banco do passageiro
+                        // vazio e ignora o "ausente" manual). Respeita o valor persistido no startup.
+                        setPassengerPresent(true, "belt_occupied");
+                    } else if (belt == 0 && prevPassengerBeltState == 1) {
+                        // O alerta zerou: ou afivelou (continua no banco) ou levantou e saiu.
+                        // Porta do passageiro aberta agora (ou aberta ha <12s) -> SAIU; senao so afivelou.
+                        boolean doorOpenNow = passengerDoorOpenState(getUpdatedData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) == 1;
+                        boolean doorJustOpened = (System.currentTimeMillis() - lastPassengerDoorOpenMs) < 12000L;
+                        if (doorOpenNow || doorJustOpened) {
+                            setPassengerPresent(false, "belt_clear_left");
+                        }
+                        // senao: so afivelou -> mantem a presenca atual.
+                    }
+                    prevPassengerBeltState = belt;
+                }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
             } else if (key.equals(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue())) {
@@ -1797,6 +1839,83 @@ public class ServiceManager {
 
     // Reaplica o % de bateria escolhido pelo usuario no HEV Prioritario, caso o carro o tenha
     // alterado sozinho. So atua quando a persistencia esta ligada E o carro JA esta em HEV
+    // ===== Ventilacao do banco do passageiro (com gate de ocupacao) =====
+    // Esse carro NAO tem seated_state vivo nem camera OMS, MAS car.basic.seat_belt_warning e um
+    // sensor de ocupacao real POR BANCO: "{d,p,rl,rm,rr}", indice 1 (passageiro) = 1 quando alguem
+    // senta SEM cinto e volta a 0 quando afivela OU sai. Presenca = esse sinal + a porta do passageiro
+    // (para separar "afivelou" de "saiu") e e PERSISTIDA nas prefs (nao zera ao desligar o carro).
+    private volatile int prevPassengerDoorState = -1;
+    private volatile int prevPassengerBeltState = -1;
+    private volatile long lastPassengerDoorOpenMs = 0L;
+
+    /** Presenca do passageiro, persistida nas prefs. */
+    private boolean isPassengerPresent() {
+        return sharedPreferences.getBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), false);
+    }
+
+    /** Grava a presenca do passageiro e reaplica a ventilacao. */
+    private void setPassengerPresent(boolean present, String reason) {
+        sharedPreferences.edit().putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), present).apply();
+        applyPassengerVentilation();
+    }
+
+    /** Estado da porta do passageiro a partir do car.basic.door_status "{a,b,...}" (indice 1).
+     *  1 = aberta, 0 = fechada, -1 se nao der pra ler. */
+    private int passengerDoorOpenState(String doorStatus) {
+        try {
+            if (doorStatus == null) return -1;
+            String[] p = doorStatus.replace("{", "").replace("}", "").trim().split(",");
+            if (p.length < 2) return -1;
+            return p[1].trim().equals("1") ? 1 : 0;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Alerta de cinto do passageiro (car.basic.seat_belt_warning "{d,p,...}", indice 1).
+     *  1 = passageiro sentado e SEM cinto, 0 = vazio ou com cinto, -1 se nao der pra ler. */
+    private int passengerBeltWarnState(String warn) {
+        try {
+            if (warn == null) return -1;
+            String[] p = warn.replace("{", "").replace("}", "").trim().split(",");
+            if (p.length < 2) return -1;
+            return p[1].trim().equals("1") ? 1 : 0;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Aplica a ventilacao do passageiro conforme presenca + estado do A/C (so com a funcao ligada). */
+    public void applyPassengerVentilation() {
+        if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) return;
+        String ac = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
+        if (ac != null && ac.trim().equals("1")) {
+            updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), isPassengerPresent() ? "3" : "0");
+        }
+    }
+
+    /** Inverte manualmente a presenca do passageiro (botao na UI) e reaplica a ventilacao. */
+    public void togglePassengerPresent() {
+        setPassengerPresent(!isPassengerPresent(), "toggle_manual");
+    }
+
+    // Aplica a ventilacao dos bancos SE o AC estiver ligado (power_mode==1) E a pref estiver on.
+    // Usado no evento de AC-on E como safety-net no startup (o evento power_mode->1 pode chegar
+    // ANTES de servicesInitialized e ser perdido -> por isso os checks com atraso no init). Idempotente.
+    private void applySeatVentilationOnAcIfActive(String reason) {
+        try {
+            String pm = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
+            boolean acOn = pm != null && pm.trim().equals("1");
+            if (!acOn) return;
+            if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+                updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), "3");
+            }
+            applyPassengerVentilation();
+        } catch (Exception e) {
+            Log.e(TAG, "applySeatVentilationOnAcIfActive falhou", e);
+        }
+    }
+
     // Prioritario (modo HEV + sub-modo Prioritario). NUNCA escreve o modo nem o sub-modo: se nao
     // estiver exatamente em HEV Prioritario, sai sem fazer nada (o modo quem define e o usuario no
     // carro). O eco da propria escrita nao re-dispara (current == desired).
