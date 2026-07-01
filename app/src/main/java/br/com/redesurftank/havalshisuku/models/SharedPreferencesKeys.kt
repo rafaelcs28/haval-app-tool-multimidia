@@ -198,6 +198,22 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "steeringWheelClimateCommandButton2",
             "Comando do ar-condicionado para o botão personalizado 2 do volante"
     ),
+    STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_DOUBLE(
+            "steeringWheelClimateCommandButton1Double",
+            "Comando do ar-condicionado para o botão 1 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_DOUBLE(
+            "steeringWheelClimateCommandButton2Double",
+            "Comando do ar-condicionado para o botão 2 do volante (toque duplo)"
+    ),
+    STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_LONG(
+            "steeringWheelClimateCommandButton1Long",
+            "Comando do ar-condicionado para o botão 1 do volante (toque longo)"
+    ),
+    STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_LONG(
+            "steeringWheelClimateCommandButton2Long",
+            "Comando do ar-condicionado para o botão 2 do volante (toque longo)"
+    ),
     LAST_CLUSTER_SCREEN("lastClusterScreen", "Última tela exibida no cluster"),
     LAST_CLUSTER_MENU_ITEM(
             "lastClusterMenuItem",

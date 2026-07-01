@@ -890,6 +890,17 @@ public class ServiceManager {
         return sharedPreferences.getString(key.getKey(), SteeringWheelCustomActionType.DEFAULT.getKey());
     }
 
+    private String steeringClimateCommandKey(int button, String tapType) {
+        if (button == 1) {
+            return (tapType.equals("DOUBLE") ? SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_DOUBLE
+                    : tapType.equals("LONG") ? SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_LONG
+                    : SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1).getKey();
+        }
+        return (tapType.equals("DOUBLE") ? SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_DOUBLE
+                : tapType.equals("LONG") ? SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_LONG
+                : SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2).getKey();
+    }
+
     private String steeringOpenAppPackageKey(int button, String tapType) {
         if (button == 1) {
             return (tapType.equals("DOUBLE") ? SharedPreferencesKeys.STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_1_DOUBLE
@@ -1045,7 +1056,7 @@ public class ServiceManager {
                 }
                 break;
             case CLIMATE_COMMAND:
-                handleSteeringWheelClimateCommand(button);
+                handleSteeringWheelClimateCommand(button, tapType);
                 break;
             case TOGGLE_PROJECTION_DISPLAY:
                 handleSteeringWheelProjectionDisplayToggle(button);
@@ -1091,7 +1102,7 @@ public class ServiceManager {
         }
     }
 
-    private void handleSteeringWheelClimateCommand(int button) {
+    private void handleSteeringWheelClimateCommand(int button, String tapType) {
         long now = SystemClock.uptimeMillis();
         boolean duplicateCommand =
                 lastClimateCommandButton == button
@@ -1105,9 +1116,7 @@ public class ServiceManager {
         lastClimateCommandAtMs = now;
 
         String commandKey = sharedPreferences.getString(
-                button == 1
-                        ? SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1.getKey()
-                        : SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2.getKey(),
+                steeringClimateCommandKey(button, tapType),
                 SteeringWheelClimateCommandType.TOGGLE_AC.getKey()
         );
         if (commandKey == null) {

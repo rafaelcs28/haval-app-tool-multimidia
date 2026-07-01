@@ -1820,6 +1820,30 @@ fun BasicSettingsTab() {
                                                                                 ?: ""
                                                                 )
                                                         }
+                                                        var steeringWheelButton1ClimateCommandDouble by remember {
+                                                                mutableStateOf(
+                                                                        prefs.getString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_DOUBLE.key, "")
+                                                                                ?: ""
+                                                                )
+                                                        }
+                                                        var steeringWheelButton2ClimateCommandDouble by remember {
+                                                                mutableStateOf(
+                                                                        prefs.getString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_DOUBLE.key, "")
+                                                                                ?: ""
+                                                                )
+                                                        }
+                                                        var steeringWheelButton1ClimateCommandLong by remember {
+                                                                mutableStateOf(
+                                                                        prefs.getString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_LONG.key, "")
+                                                                                ?: ""
+                                                                )
+                                                        }
+                                                        var steeringWheelButton2ClimateCommandLong by remember {
+                                                                mutableStateOf(
+                                                                        prefs.getString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_LONG.key, "")
+                                                                                ?: ""
+                                                                )
+                                                        }
 
                                                         Column(
                                                                 verticalArrangement =
@@ -2129,6 +2153,7 @@ fun BasicSettingsTab() {
                                                                         label = "Botão 1 (toque duplo)",
                                                                         actionKey = steeringWheelButton1ActionDouble,
                                                                         packageName = steeringWheelButton1PackageDouble,
+                                                                        climateCommandKey = steeringWheelButton1ClimateCommandDouble,
                                                                         onActionSelected = { newKey ->
                                                                                 steeringWheelButton1ActionDouble = newKey
                                                                                 prefs.edit {
@@ -2141,12 +2166,19 @@ fun BasicSettingsTab() {
                                                                                 prefs.edit {
                                                                                         putString(SharedPreferencesKeys.STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_1_DOUBLE.key, newPkg)
                                                                                 }
+                                                                        },
+                                                                        onClimateCommandSelected = { command ->
+                                                                                steeringWheelButton1ClimateCommandDouble = command.key
+                                                                                prefs.edit {
+                                                                                        putString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_DOUBLE.key, command.key)
+                                                                                }
                                                                         }
                                                                 )
                                                                 SteeringActionPicker(
                                                                         label = "Botão 2 (toque duplo)",
                                                                         actionKey = steeringWheelButton2ActionDouble,
                                                                         packageName = steeringWheelButton2PackageDouble,
+                                                                        climateCommandKey = steeringWheelButton2ClimateCommandDouble,
                                                                         onActionSelected = { newKey ->
                                                                                 steeringWheelButton2ActionDouble = newKey
                                                                                 prefs.edit {
@@ -2158,6 +2190,12 @@ fun BasicSettingsTab() {
                                                                                 steeringWheelButton2PackageDouble = newPkg
                                                                                 prefs.edit {
                                                                                         putString(SharedPreferencesKeys.STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_2_DOUBLE.key, newPkg)
+                                                                                }
+                                                                        },
+                                                                        onClimateCommandSelected = { command ->
+                                                                                steeringWheelButton2ClimateCommandDouble = command.key
+                                                                                prefs.edit {
+                                                                                        putString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_DOUBLE.key, command.key)
                                                                                 }
                                                                         }
                                                                 )
@@ -2174,6 +2212,7 @@ fun BasicSettingsTab() {
                                                                         label = "Botão 1 (toque longo)",
                                                                         actionKey = steeringWheelButton1ActionLong,
                                                                         packageName = steeringWheelButton1PackageLong,
+                                                                        climateCommandKey = steeringWheelButton1ClimateCommandLong,
                                                                         onActionSelected = { newKey ->
                                                                                 steeringWheelButton1ActionLong = newKey
                                                                                 prefs.edit {
@@ -2186,12 +2225,19 @@ fun BasicSettingsTab() {
                                                                                 prefs.edit {
                                                                                         putString(SharedPreferencesKeys.STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_1_LONG.key, newPkg)
                                                                                 }
+                                                                        },
+                                                                        onClimateCommandSelected = { command ->
+                                                                                steeringWheelButton1ClimateCommandLong = command.key
+                                                                                prefs.edit {
+                                                                                        putString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_1_LONG.key, command.key)
+                                                                                }
                                                                         }
                                                                 )
                                                                 SteeringActionPicker(
                                                                         label = "Botão 2 (toque longo)",
                                                                         actionKey = steeringWheelButton2ActionLong,
                                                                         packageName = steeringWheelButton2PackageLong,
+                                                                        climateCommandKey = steeringWheelButton2ClimateCommandLong,
                                                                         onActionSelected = { newKey ->
                                                                                 steeringWheelButton2ActionLong = newKey
                                                                                 prefs.edit {
@@ -2203,6 +2249,12 @@ fun BasicSettingsTab() {
                                                                                 steeringWheelButton2PackageLong = newPkg
                                                                                 prefs.edit {
                                                                                         putString(SharedPreferencesKeys.STEERING_WHEEL_OPEN_APP_PACKAGE_BUTTON_2_LONG.key, newPkg)
+                                                                                }
+                                                                        },
+                                                                        onClimateCommandSelected = { command ->
+                                                                                steeringWheelButton2ClimateCommandLong = command.key
+                                                                                prefs.edit {
+                                                                                        putString(SharedPreferencesKeys.STEERING_WHEEL_CLIMATE_COMMAND_BUTTON_2_LONG.key, command.key)
                                                                                 }
                                                                         }
                                                                 )
@@ -2626,10 +2678,13 @@ private fun SteeringActionPicker(
         label: String,
         actionKey: String,
         packageName: String,
+        climateCommandKey: String,
         onActionSelected: (String) -> Unit,
         onPackageChanged: (String) -> Unit,
+        onClimateCommandSelected: (SteeringWheelClimateCommandType) -> Unit,
 ) {
         var expanded by remember { mutableStateOf(false) }
+        var climateCommandExpanded by remember { mutableStateOf(false) }
         Text(label, color = Color(0xFFB0B8C4), fontSize = 14.sp)
         ExposedDropdownMenuBox(
                 expanded = expanded,
@@ -2666,6 +2721,17 @@ private fun SteeringActionPicker(
                 AppSelectorField(
                         packageName = packageName,
                         onPackageSelected = onPackageChanged
+                )
+        }
+        if (actionKey == SteeringWheelCustomActionType.CLIMATE_COMMAND.key) {
+                SteeringWheelClimateCommandDropdown(
+                        selectedCommandKey = climateCommandKey,
+                        expanded = climateCommandExpanded,
+                        onExpandedChange = { climateCommandExpanded = it },
+                        onCommandSelected = { command ->
+                                onClimateCommandSelected(command)
+                                climateCommandExpanded = false
+                        }
                 )
         }
 }
