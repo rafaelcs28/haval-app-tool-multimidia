@@ -156,6 +156,7 @@ object DisplayAppLauncher {
     private const val ANDROID_AUTO_TOGGLE_MEDIA_KEY_COOLDOWN_MS = 2_000L
     private const val ANDROID_AUTO_POST_NATIVE_PANEL_FOCUS_COOLDOWN_MS = 1_500L
     private const val ANDROID_AUTO_NATIVE_PANEL_ACTIVE_FOCUS_COOLDOWN_MS = 1_500L
+    private const val ANDROID_AUTO_NAMED_FOCUS_ONCE_COOLDOWN_MS = 3_000L
     private const val ANDROID_AUTO_NATIVE_MEDIA_KEY_UP_DELAY_MS = 70L
     private const val ANDROID_AUTO_NATIVE_MEDIA_KEY_BIND_WAIT_MS = 180L
     private const val ANDROID_AUTO_LINK_COMMAND_BIND_STALE_MS = 2_500L
@@ -1283,6 +1284,32 @@ object DisplayAppLauncher {
         Log.w(TAG, "[$reason] Sending Android Auto video focus for display $displayId")
         sh("am broadcast -a ts.car.androidauto.view_state --es state foreground --ei displayId $displayId")
         sh("am broadcast -a com.ts.androidauto.action.AndroidAutoService --es \"command\" \"requestVideoFocus\" --ei \"displayId\" $displayId")
+    }
+
+    // Espelha sendCarPlayVideoFocusOnly, mas pro host do AA e NOMEANDO o pacote (--es package),
+    // que e a unica diferenca estrutural documentada vs o CarPlay (que sobrevive a camera). So o
+    // command de video, sem tocar view_state. Chamado como PULSO UNICO (nao loop) — os experimentos
+    // antigos em loop falharam; isto testa so o lever do host nomeado. Ver haval-aa-cluster-camera-freeze.
+    private fun sendAndroidAutoVideoFocusOnly(displayId: Int, reason: String) {
+        Log.w(TAG, "[$reason] Sending lite Android Auto video focus (named host) for display $displayId")
+        sh("am broadcast -a com.ts.androidauto.action.AndroidAutoService --es \"command\" \"requestVideoFocus\" --es \"package\" \"$ANDROID_AUTO_PACKAGE\" --ei \"displayId\" $displayId")
+    }
+
+    @Volatile
+    private var lastAndroidAutoNamedFocusOnceAt = 0L
+
+    /** Pulso UNICO de video-focus nomeado pro AA no cluster (tentativa app-side contra o freeze da
+     *  camera). Guardado por AA-no-cluster; NAO faz loop. Cooldown pra nao re-disparar se o carro
+     *  re-emitir AVM_PREVIEW_STATUS=1 varias vezes com a camera aberta (OnDataChanged nao deduplica). */
+    fun requestAndroidAutoVideoFocusNamedOnce(reason: String) {
+        if (!isAndroidAutoOnDisplay(3)) return
+        val now = System.currentTimeMillis()
+        if (now - lastAndroidAutoNamedFocusOnceAt < ANDROID_AUTO_NAMED_FOCUS_ONCE_COOLDOWN_MS) {
+            Log.w(TAG, "[$reason] Skipping AA named video-focus once (cooldown active)")
+            return
+        }
+        lastAndroidAutoNamedFocusOnceAt = now
+        sendAndroidAutoVideoFocusOnly(3, "${reason}_AA_NAMED_ONCE")
     }
 
     internal fun shouldRequestAndroidAutoMediaCommandVideoFocusForPlaybackTarget(

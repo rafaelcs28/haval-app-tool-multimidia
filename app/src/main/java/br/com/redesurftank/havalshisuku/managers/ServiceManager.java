@@ -1757,6 +1757,10 @@ public class ServiceManager {
                     Log.w(TAG, "Skipping projection guard for AVM_PREVIEW_STATUS_" + value + " because Android Auto is active on D3");
                     if (value.equals("1")) {
                         DisplayAppLauncher.INSTANCE.pulseAndroidAutoFocusDuringNativePanel("AVM_PREVIEW_STATUS_" + value);
+                        // Tentativa app-side (pulso UNICO) contra o freeze do AA com a camera: pede
+                        // o video-focus nomeando o host, como o CarPlay faz. Se nao destravar, e
+                        // limitacao do OEM (nao devolve o foco enquanto scene=8/camera ativa).
+                        DisplayAppLauncher.INSTANCE.requestAndroidAutoVideoFocusNamedOnce("AVM_PREVIEW_STATUS_1");
                     } else if (value.equals("0")) {
                         DisplayAppLauncher.INSTANCE.pulseAndroidAutoFocusAfterNativePanelExit("AVM_PREVIEW_STATUS_" + value);
                     }

@@ -92,6 +92,12 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private var projectorWarmupBypassUntilMs = 0L
     private var projectionBypassRestoreScheduledUntilMs = 0L
     private var nativeCardPassThroughActive: Boolean? = null
+    // Idempotencia p/ evitar relayout redundante do cluster (flicker na saida da camera, que
+    // dispara updateVirtualClusterVisibility 2x). So reescreve alpha/visibility/JS se o estado mudou.
+    private var lastAppliedProjectorVisible: Boolean? = null
+    private var lastAppliedProjectorHidden: Boolean? = null
+    private var lastPushedClusterEnabled: Boolean? = null
+    private var lastPushedAppInDash: String? = null
 
     private fun isWarningValueActive(value: String?): Boolean {
         return ClusterWarningPolicy.isWarningValueActive(value)
@@ -478,11 +484,21 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                         projectionActive
                 )
         val hidden = bypassActive || nativeCardPassThrough
+        val effectiveVisible = visible && !hidden
+        // Idempotente: se o estado efetivo (visivel/oculto) nao mudou, NAO reescreve alpha/visibility
+        // — reescrever numa Presentation forca relayout/recomposicao = o flicker do cluster. Isso
+        // torna as chamadas redundantes (ex.: os 2 disparos na saida da camera) um no-op visual.
+        if (lastAppliedProjectorVisible == effectiveVisible && lastAppliedProjectorHidden == hidden) {
+            nativeCardPassThroughActive = nativeCardPassThrough
+            return
+        }
         val alpha = if (hidden) 0f else 1f
         root.alpha = alpha
-        root.isVisible = visible && !hidden
+        root.isVisible = effectiveVisible
         webView?.alpha = alpha
         webView?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
+        lastAppliedProjectorVisible = effectiveVisible
+        lastAppliedProjectorHidden = hidden
         if (nativeCardPassThroughActive != nativeCardPassThrough) {
             nativeCardPassThroughActive = nativeCardPassThrough
             Log.w(
@@ -503,6 +519,12 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         lastCarPlayInDash = null
         lastProjectionMirrorInDash = null
         lastProjectionPreparingD3 = null
+        // O WebView recarregou (DOM/JS perdido): zera as caches de idempotencia pra o proximo
+        // updateVirtualClusterVisibility reaplicar/re-empurrar o estado inteiro na pagina nova.
+        lastAppliedProjectorVisible = null
+        lastAppliedProjectorHidden = null
+        lastPushedClusterEnabled = null
+        lastPushedAppInDash = null
     }
 
     private fun isProjectionActive(
@@ -1712,10 +1734,16 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     else -> "false"
                 }
 
-        evaluateJsIfReady(
-                webView,
-                "(function(){control('clusterEnabled', $clusterEnabled);control('appInDash', $appInDashValue);})()"
-        )
+        // Idempotente: só empurra o JS de layout se clusterEnabled/appInDash mudaram — reenviar os
+        // mesmos valores re-dispara relayout no WebView do cluster (contribui pro flicker).
+        if (lastPushedClusterEnabled != clusterEnabled || lastPushedAppInDash != appInDashValue) {
+            lastPushedClusterEnabled = clusterEnabled
+            lastPushedAppInDash = appInDashValue
+            evaluateJsIfReady(
+                    webView,
+                    "(function(){control('clusterEnabled', $clusterEnabled);control('appInDash', $appInDashValue);})()"
+            )
+        }
         pushProjectionStateToWebView(carPlayInDash, projectionMirrorInDash, projectionPreparingD3)
     }
 
@@ -1959,7 +1987,15 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     }
 
     override fun carMainScreenOff() {
-        ensureUi { root.visibility = View.INVISIBLE }
+        ensureUi {
+            root.visibility = View.INVISIBLE
+            // Escrevemos root.visibility direto (nao via applyProjectorViewVisibility), entao a cache
+            // de idempotencia fica dessincronizada. Invalida-la aqui garante que carMainScreenOn()
+            // reaplique de fato a visibilidade no religar da tela — senao o early-return deixaria o
+            // cluster preto (a cache ainda diria "visivel" enquanto a view esta INVISIBLE).
+            lastAppliedProjectorVisible = null
+            lastAppliedProjectorHidden = null
+        }
     }
 
     override fun carMainScreenOn() {
