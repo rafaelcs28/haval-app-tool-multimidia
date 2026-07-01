@@ -1905,10 +1905,23 @@ public class ServiceManager {
                 int belt = passengerBeltWarnState(value);
                 if (belt >= 0) {
                     if (belt == 1 && prevPassengerBeltState == 0) {
-                        // Alguem sentou (sem cinto) ENQUANTO o carro roda -> presente. Exige 0->1 real:
-                        // no startup prev=-1 NAO marca presenca (senao re-liga o banco do passageiro
-                        // vazio e ignora o "ausente" manual). Respeita o valor persistido no startup.
-                        setPassengerPresent(true, "belt_occupied");
+                        // Alguem sentou (sem cinto) ENQUANTO o carro roda. Exige 0->1 real: no startup
+                        // prev=-1 NAO marca presenca (senao re-liga o banco vazio e ignora o "ausente"
+                        // manual). Alem disso, exige CORROBORACAO DA PORTA (simetrico ao caminho de
+                        // saida, que ja exige) + DEBOUNCE (confirma so se o cinto continuar em 1 apos
+                        // alguns segundos). Sem isso, ruido/pisca do sensor de cinto no power-on (sem
+                        // ninguem ter entrado, porta nunca abriu) marcava presenca por conta propria.
+                        boolean doorOpenNow = passengerDoorOpenState(getUpdatedData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) == 1;
+                        boolean doorRecentlyOpened = (System.currentTimeMillis() - lastPassengerDoorOpenMs) < PASSENGER_DOOR_CORRELATION_WINDOW_MS;
+                        if (doorOpenNow || doorRecentlyOpened) {
+                            schedulePassengerPresenceConfirmation();
+                            prevPassengerBeltState = belt;
+                        } else {
+                            // Rejeitado (sem porta): NAO avanca prevPassengerBeltState (fica em 0).
+                            // Se avancasse, um 1->0 espurio subsequente cairia no ramo de SAIDA e
+                            // poderia zerar uma presenca real sem ninguem ter saido de fato.
+                            Log.w(TAG, "Ignoring passenger belt-occupied signal without door corroboration (possible sensor noise)");
+                        }
                     } else if (belt == 0 && prevPassengerBeltState == 1) {
                         // O alerta zerou: ou afivelou (continua no banco) ou levantou e saiu.
                         // Porta do passageiro aberta agora (ou aberta ha <12s) -> SAIU; senao so afivelou.
@@ -1918,8 +1931,10 @@ public class ServiceManager {
                             setPassengerPresent(false, "belt_clear_left");
                         }
                         // senao: so afivelou -> mantem a presenca atual.
+                        prevPassengerBeltState = belt;
+                    } else {
+                        prevPassengerBeltState = belt;
                     }
-                    prevPassengerBeltState = belt;
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
@@ -1950,10 +1965,32 @@ public class ServiceManager {
     private volatile int prevPassengerDoorState = -1;
     private volatile int prevPassengerBeltState = -1;
     private volatile long lastPassengerDoorOpenMs = 0L;
+    // Janela p/ correlacionar porta+cinto na ENTRADA (espelha a janela de 12s ja usada na saida).
+    private static final long PASSENGER_DOOR_CORRELATION_WINDOW_MS = 15000L;
+    // So confirma presenca se o cinto continuar em 1 apos esse tempo (filtra ruido/pisca do sensor).
+    private static final long PASSENGER_BELT_CONFIRM_DEBOUNCE_MS = 4000L;
+    private volatile Runnable pendingPassengerPresenceConfirm;
 
     /** Presenca do passageiro, persistida nas prefs. */
     private boolean isPassengerPresent() {
         return sharedPreferences.getBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), false);
+    }
+
+    // Confirma presenca do passageiro apos o debounce, relendo o cinto fresh (fica pendente ate
+    // disparar; um novo 0->1 corroborado cancela e reagenda, evitando confirmacoes acumuladas).
+    private void schedulePassengerPresenceConfirmation() {
+        if (pendingPassengerPresenceConfirm != null) {
+            backgroundHandler.removeCallbacks(pendingPassengerPresenceConfirm);
+        }
+        Runnable confirm = () -> {
+            pendingPassengerPresenceConfirm = null;
+            int belt = passengerBeltWarnState(getUpdatedData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue()));
+            if (belt == 1) {
+                setPassengerPresent(true, "belt_occupied_confirmed");
+            }
+        };
+        pendingPassengerPresenceConfirm = confirm;
+        backgroundHandler.postDelayed(confirm, PASSENGER_BELT_CONFIRM_DEBOUNCE_MS);
     }
 
     /** Grava a presenca do passageiro e reaplica a ventilacao. */
