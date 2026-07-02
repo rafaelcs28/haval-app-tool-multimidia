@@ -53,6 +53,8 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     private static final String TAG = "ForegroundService";
     private static final String CHANNEL_ID = "ForegroundServiceChannel";
     private static final int NOTIFICATION_ID = 1;
+    // Acao interna: tocar na notificacao de aviso do Shizuku re-dispara o bootstrap (via restart()).
+    public static final String ACTION_SHIZUKU_RESTART = "br.com.redesurftank.havalshisuku.ACTION_SHIZUKU_RESTART";
     private static final int MAX_AUTOMATIC_SHIZUKU_BOOTSTRAP_UID = 10999;
     private static final long SHIZUKU_BINDER_RECEIVE_TIMEOUT_MS = 15000L;
     private static final int SHIZUKU_BINDER_TIMEOUTS_BEFORE_RESTART = 3;
@@ -98,6 +100,9 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                     "foreground_service_shizuku_timeout",
                     "restarting=false timeoutCount=" + timeoutCount
             );
+            // Passou a janela normal de startup e o Shizuku ainda nao subiu: avisa o usuario (a
+            // notificacao vira "⚠️ Shizuku nao conectou" e vira botao de reinicio ao toque).
+            updateServiceNotification(true);
             armShizukuBinderListenerWithTimeout();
         }
     };
@@ -347,6 +352,25 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     public int onStartCommand(Intent intent, int flags, int startId) {
         var sharedPreferences = App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE);
 
+        // Reinicio manual do Shizuku (toque na notificacao de aviso). Precisa rodar ANTES do guard
+        // isServiceRunning, senao viraria no-op quando o servico esta vivo mas travado esperando o
+        // telnet. Garante startForeground (o servico ja e foreground, mas defensivo p/ nao crashar)
+        // e chama restart() que zera o estado e re-arma o bootstrap telnet.
+        if (intent != null && ACTION_SHIZUKU_RESTART.equals(intent.getAction())) {
+            Log.w(TAG, "Manual Shizuku restart requested (notification tap)");
+            ClusterPersistentEventLogger.logText(
+                    "foreground_service_manual_shizuku_restart",
+                    "source=notification"
+            );
+            try {
+                createNotificationChannel();
+                startForeground(NOTIFICATION_ID, buildServiceNotification(true));
+            } catch (Exception e) {
+                Log.e(TAG, "startForeground before manual restart failed", e);
+            }
+            restart();
+            return START_NOT_STICKY;
+        }
 
         synchronized (lifecycleLock) {
             if (isServiceRunning) {
@@ -374,10 +398,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
 
             var context = getApplicationContext();
             // Criar notificação para o Foreground Service
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle("Aplicação em execução").setContentText("Seu app está rodando em segundo plano").setSmallIcon(android.R.drawable.ic_notification_overlay) // Ícone de notificação
-                    .build();
-
-            startForeground(NOTIFICATION_ID, notification);
+            startForeground(NOTIFICATION_ID, buildServiceNotification(false));
 
             // Start bottom bar as early as possible if enabled
             ensurePersistentBottomBarStarted(sharedPreferences, "service-start");
@@ -497,6 +518,8 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
         }
         Shizuku.removeBinderReceivedListener(this::shizukuBinderReceived);
         Log.w(TAG, "Shizuku binder received");
+        // Shizuku conectou: volta a notificacao ao normal (limpa o aviso, se estava exibido).
+        updateServiceNotification(false);
         Shizuku.addBinderDeadListener(this);
         backgroundHandler.removeCallbacksAndMessages(null); // Remove any pending timeouts
         checkService();
@@ -698,6 +721,48 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
         }, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
 
         DispatchAllDatasReceiver.registerToBroadcast(App.getContext());
+    }
+
+    // Monta a notificacao persistente do foreground service. Em modo aviso (Shizuku offline) troca
+    // titulo/texto e adiciona a acao de toque que re-dispara o bootstrap.
+    private Notification buildServiceNotification(boolean shizukuWarning) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_notification_overlay)
+                .setOngoing(true);
+        if (shizukuWarning) {
+            builder.setContentTitle("⚠️ Shizuku não conectou")
+                    .setContentText("Comandos não vão funcionar. Toque para tentar reiniciar.")
+                    .setContentIntent(buildShizukuRestartPendingIntent());
+        } else {
+            builder.setContentTitle("Aplicação em execução")
+                    .setContentText("Seu app está rodando em segundo plano");
+        }
+        return builder.build();
+    }
+
+    private PendingIntent buildShizukuRestartPendingIntent() {
+        // Vai via RestartReceiver (broadcast) que faz startForegroundService — promoção correta a
+        // foreground mesmo com o processo morto sob restrição de background-start do OEM. O receiver
+        // encaminha a action, que o onStartCommand trata antes do guard isServiceRunning.
+        Intent intent = new Intent(this, RestartReceiver.class).setAction(ACTION_SHIZUKU_RESTART);
+        return PendingIntent.getBroadcast(
+                this,
+                1,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    // Atualiza a notificacao ja exibida (nao re-chama startForeground). Seguro chamar de qualquer thread.
+    private void updateServiceNotification(boolean shizukuWarning) {
+        try {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.notify(NOTIFICATION_ID, buildServiceNotification(shizukuWarning));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update service notification", e);
+        }
     }
 
     private void createNotificationChannel() {
