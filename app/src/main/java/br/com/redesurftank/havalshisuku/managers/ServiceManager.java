@@ -218,6 +218,10 @@ public class ServiceManager {
     private Boolean closeSunroofDueToeSpeed = false;
     private HandlerThread handlerThread;
     private Handler backgroundHandler;
+    // Monitor periódico do % do HEV Prioritário: reaplica o valor salvo mesmo se algum evento
+    // (power-on/entrar no modo/carro resetar) tiver sido perdido — ex.: app subiu tarde no boot.
+    private static final long HEV_SOC_MONITOR_INTERVAL_MS = 30000L;
+    private volatile Runnable hevSocMonitorRunnable;
     private IListener.Stub listener;
     private IInputListener.Stub inputListener;
     private IClusterCallback.Stub clusterCallback;
@@ -836,6 +840,11 @@ public class ServiceManager {
         // pode chegar antes do app estar pronto -> handler perde. Re-checa com atraso e aplica.
         backgroundHandler.postDelayed(() -> applySeatVentilationOnAcIfActive("INIT+8s"), 8000);
         backgroundHandler.postDelayed(() -> applySeatVentilationOnAcIfActive("INIT+18s"), 18000);
+        // Mesmo padrão p/ o HEV Prioritário: no boot o carro costuma resetar o % (ex.: 45->80) e o
+        // app pode subir depois do evento -> reaplica no init e depois monitora continuamente.
+        backgroundHandler.postDelayed(() -> applyHevSocTargetIfActive("INIT+8s"), 8000);
+        backgroundHandler.postDelayed(() -> applyHevSocTargetIfActive("INIT+18s"), 18000);
+        startHevSocMonitor();
         backgroundHandler.post(() -> {
             try {
                 ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "settings put global enable_freeform_support 1"});
@@ -2063,6 +2072,33 @@ public class ServiceManager {
     // Prioritario (modo HEV + sub-modo Prioritario). NUNCA escreve o modo nem o sub-modo: se nao
     // estiver exatamente em HEV Prioritario, sai sem fazer nada (o modo quem define e o usuario no
     // carro). O eco da propria escrita nao re-dispara (current == desired).
+    // Monitor periódico: reaplica o % salvo enquanto o carro estiver em HEV Prioritário. É a rede de
+    // segurança para eventos perdidos (power-on com app subindo tarde, corrida ao entrar no modo,
+    // carro resetando o valor). Auto-gateado por applyHevSocTargetIfActive (retorna rápido se a
+    // persistência estiver desligada ou fora de HEV Prioritário) e idempotente (só escreve se drift).
+    private void startHevSocMonitor() {
+        if (backgroundHandler == null) return;
+        if (hevSocMonitorRunnable != null) {
+            backgroundHandler.removeCallbacks(hevSocMonitorRunnable);
+        }
+        hevSocMonitorRunnable = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    applyHevSocTargetIfActive("MONITOR");
+                } catch (Exception e) {
+                    Log.e(TAG, "HEV SOC monitor tick failed", e);
+                } finally {
+                    // Só o runnable corrente reagenda (no restart o handler é recriado e este é trocado).
+                    if (backgroundHandler != null && hevSocMonitorRunnable == this) {
+                        backgroundHandler.postDelayed(this, HEV_SOC_MONITOR_INTERVAL_MS);
+                    }
+                }
+            }
+        };
+        backgroundHandler.postDelayed(hevSocMonitorRunnable, HEV_SOC_MONITOR_INTERVAL_MS);
+    }
+
     public void applyHevSocTargetIfActive(String reason) {
         try {
             if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.getKey(), false)) {
@@ -2080,6 +2116,11 @@ public class ServiceManager {
             }
             int desired = sharedPreferences.getInt(SharedPreferencesKeys.HEV_SOC_TARGET_VALUE.getKey(), 50);
             String currentStr = getUpdatedData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue());
+            // Sem leitura válida do valor atual, NÃO escreve às cegas (evita reescrever quando o
+            // control service piscou). Mesmo padrão dos gates de driveMode/subMode acima.
+            if (currentStr == null) {
+                return;
+            }
             int current = Integer.MIN_VALUE;
             try { current = Integer.parseInt(currentStr.trim()); } catch (Exception ignored) {}
             if (current != desired) {
