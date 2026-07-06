@@ -6987,6 +6987,14 @@ object DisplayAppLauncher {
     suspend fun launchOnMainDisplay(config: DisplayAppConfig) = launchAnyApp(App.getContext(), config.packageName, config.activityName)
 
     /**
+     * Fire-and-forget entry point para callers que não usam coroutines (ex.: Java, como o handler
+     * dos botões do volante no ServiceManager). Espelha o PR upstream #104.
+     */
+    fun launchAnyAppFromJava(context: Context, packageName: String, activityName: String? = null) {
+        scope.launch { launchAnyApp(context, packageName, activityName) }
+    }
+
+    /**
      * More robust launch for the main display using package manager intents.
      */
     suspend fun launchAnyApp(context: Context, packageName: String, activityName: String? = null) = withContext(Dispatchers.IO) {

@@ -1052,16 +1052,20 @@ public class ServiceManager {
             case OPEN_APP:
                 String packageName = sharedPreferences.getString(steeringOpenAppPackageKey(button, tapType), "");
                 if (!packageName.isEmpty()) {
-                    Intent launchIntent = App.getContext().getPackageManager().getLaunchIntentForPackage(packageName);
-                    if (launchIntent != null) {
-                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        App.getContext().startActivity(launchIntent);
-                        Log.w(TAG, "Launching app: " + packageName);
-                        DisplayAppLauncher.INSTANCE.preserveCarPlayClusterContract("SERVICE_OPEN_APP_" + packageName);
-                        DisplayAppLauncher.INSTANCE.preserveAndroidAutoClusterContract("SERVICE_OPEN_APP_" + packageName);
-                    } else {
-                        Log.e(TAG, "App not found: " + packageName);
+                    String target = packageName.trim();
+                    String pkg = target;
+                    String activity = null;
+                    int slashIdx = target.indexOf('/');
+                    if (slashIdx >= 0) {
+                        pkg = target.substring(0, slashIdx);
+                        String cls = target.substring(slashIdx + 1);
+                        activity = cls.startsWith(".") ? pkg + cls : cls;
                     }
+                    // Delega ao DisplayAppLauncher: apps sem launcher Activity (CarPlay, Android Auto)
+                    // resolvem automaticamente, com override opcional "pacote/Activity". O launchAnyApp
+                    // já preserva o cluster-contract em todos os caminhos. Espelha o PR upstream #104.
+                    Log.w(TAG, "Launching app via DisplayAppLauncher: " + pkg + (activity != null ? " (" + activity + ")" : ""));
+                    DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), pkg, activity);
                 }
                 break;
             case CLIMATE_COMMAND:
