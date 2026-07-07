@@ -354,5 +354,6 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),
-    AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)")
+    AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)"),
+    ENABLE_HOT_ROUTER("enableHotRouter", "Roteia o hotspot pelo 4G ou WLAN (Starlink) quando disponível")
 }

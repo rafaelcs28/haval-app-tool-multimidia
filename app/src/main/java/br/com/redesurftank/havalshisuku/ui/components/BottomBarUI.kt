@@ -1893,6 +1893,7 @@ private data class DashboardVehicleSnapshot(
         val seatVentilationMaxLevel: String,
         val insideTemp: String,
         val outsideTemp: String,
+        val hotRouterMode: String,
         val batteryPercent: String,
         val fuelPercent: String,
         val batteryRange: String,
@@ -2060,6 +2061,18 @@ private fun rememberDashboardVehicleSnapshot(
                         serviceManager.getData(CarConstants.CAR_BASIC_OUTSIDE_TEMP.getValue())
                                 ?: "--"
                 )
+        }
+        // Status do HotRouter (roteamento Starlink) — não é um sinal CAN, então é lido via shell
+        // (Shizuku) num poll periódico, fora da main thread. MODE_OFF = feature desligada -> chip some.
+        var hotRouterMode by remember { mutableStateOf(HotRouterManager.MODE_OFF) }
+        LaunchedEffect(Unit) {
+                while (true) {
+                        hotRouterMode =
+                                withContext(Dispatchers.IO) {
+                                        HotRouterManager.getInstance().readStatusBlocking().mode
+                                }
+                        delay(4000)
+                }
         }
         var batteryPercent by remember {
                 mutableStateOf(readDashboardBatteryPercent(serviceManager))
@@ -2274,6 +2287,7 @@ private fun rememberDashboardVehicleSnapshot(
                 seatVentilationMaxLevel = seatVentilationMaxLevel,
                 insideTemp = insideTemp,
                 outsideTemp = outsideTemp,
+                hotRouterMode = hotRouterMode,
                 batteryPercent = batteryPercent,
                 fuelPercent = fuelPercent,
                 batteryRange = batteryRange,
@@ -2679,6 +2693,20 @@ private fun DashboardHeader(
                                 icon = Icons.Default.WbSunny,
                                 text = "Externa ${formatTemperature(snapshot.outsideTemp)}"
                         )
+                        // Indicador do HotRouter/Starlink: só aparece quando a feature está ligada
+                        // (mode != OFF). Verde quando o tráfego está roteando pela Starlink (WLAN);
+                        // neutro no fallback 4G / iniciando / erro.
+                        if (snapshot.hotRouterMode != HotRouterManager.MODE_OFF) {
+                                // Verde = roteando pela Starlink (WLAN). Cinza = ligado mas não pela
+                                // Starlink (fallback 4G / iniciando / erro) — sem implicar Starlink ativa.
+                                val routingStarlink =
+                                        snapshot.hotRouterMode == HotRouterManager.MODE_WLAN
+                                DashboardStatusChip(
+                                        icon = Icons.Default.SatelliteAlt,
+                                        text = "Starlink",
+                                        accent = if (routingStarlink) Color(0xFF78E08F) else null
+                                )
+                        }
                         DashboardStatusChip(icon = Icons.Default.AccessTime, text = time)
                         DashboardHeaderControlButton(
                                 icon = Icons.Default.Tune,
@@ -4492,20 +4520,25 @@ private fun DashboardPanelTitle(icon: ImageVector, title: String, compact: Boole
 }
 
 @Composable
-private fun DashboardStatusChip(icon: ImageVector, text: String) {
+private fun DashboardStatusChip(icon: ImageVector, text: String, accent: Color? = null) {
+        // accent != null realça o chip (mesmo formato das temperaturas, porém colorido) — usado, p.ex.,
+        // em verde quando o HotRouter está roteando pela Starlink.
+        val iconTint = accent ?: Color(0xFF66E3FF)
+        val bg = accent?.copy(alpha = 0.15f) ?: Color.White.copy(alpha = 0.08f)
+        val borderColor = accent?.copy(alpha = 0.40f) ?: Color.White.copy(alpha = 0.12f)
         Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier =
-                        Modifier.background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                        Modifier.background(bg, RoundedCornerShape(8.dp))
                                 .border(
                                         1.dp,
-                                        Color.White.copy(alpha = 0.12f),
+                                        borderColor,
                                         RoundedCornerShape(8.dp)
                                 )
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-                Icon(icon, contentDescription = null, tint = Color(0xFF66E3FF), modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                 Text(text = text, color = Color.White, fontSize = 14.sp, fontFamily = DashboardReadableFont)
         }
 }

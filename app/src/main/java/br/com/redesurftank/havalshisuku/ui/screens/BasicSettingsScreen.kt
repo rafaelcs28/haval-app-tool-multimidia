@@ -24,7 +24,14 @@ import androidx.core.content.edit
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.ambientlight.AmbientLightService
 import br.com.redesurftank.havalshisuku.managers.AutoBrightnessManager
+import br.com.redesurftank.havalshisuku.managers.HotRouterManager
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import br.com.redesurftank.havalshisuku.models.BottomBarState
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.models.SteeringWheelClimateCommandType
@@ -468,6 +475,11 @@ fun BasicSettingsTab() {
         var aaClusterOffset by remember {
                 mutableIntStateOf(
                         prefs.getInt(SharedPreferencesKeys.AA_CLUSTER_LEFT_OFFSET.key, 145)
+                )
+        }
+        var enableHotRouter by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.ENABLE_HOT_ROUTER.key, false)
                 )
         }
 
@@ -1729,6 +1741,92 @@ fun BasicSettingsTab() {
                                 }
                         ),
                         SettingItem(
+                                title = "HotRouter",
+                                description = SharedPreferencesKeys.ENABLE_HOT_ROUTER.description,
+                                checked = enableHotRouter,
+                                onCheckedChange = {
+                                        enableHotRouter = it
+                                        prefs.edit {
+                                                putBoolean(
+                                                        SharedPreferencesKeys.ENABLE_HOT_ROUTER.key,
+                                                        it
+                                                )
+                                        }
+                                        HotRouterManager.getInstance().setEnabled(it)
+                                },
+                                customContent =
+                                        if (enableHotRouter) {
+                                                {
+                                                        var statusMode by remember {
+                                                                mutableStateOf(
+                                                                        HotRouterManager.MODE_STARTING
+                                                                )
+                                                        }
+                                                        var statusEpoch by remember {
+                                                                mutableStateOf(0L)
+                                                        }
+
+                                                        LaunchedEffect(Unit) {
+                                                                while (true) {
+                                                                        val s =
+                                                                                withContext(
+                                                                                        Dispatchers.IO
+                                                                                ) {
+                                                                                        HotRouterManager
+                                                                                                .getInstance()
+                                                                                                .readStatusBlocking()
+                                                                                }
+                                                                        statusMode = s.mode
+                                                                        statusEpoch = s.epochSeconds
+                                                                        delay(3000)
+                                                                }
+                                                        }
+
+                                                        val label =
+                                                                when (statusMode) {
+                                                                        HotRouterManager.MODE_OFF ->
+                                                                                "Desligado"
+                                                                        HotRouterManager
+                                                                                .MODE_STARTING ->
+                                                                                "Iniciando…"
+                                                                        HotRouterManager.MODE_WLAN ->
+                                                                                "Ativo (WLAN)"
+                                                                        HotRouterManager.MODE_4G ->
+                                                                                "Ativo (4G)"
+                                                                        HotRouterManager.MODE_ERROR ->
+                                                                                "Erro"
+                                                                        else -> "—"
+                                                                }
+
+                                                        Column(
+                                                                verticalArrangement =
+                                                                        Arrangement.spacedBy(8.dp)
+                                                        ) {
+                                                                HorizontalDivider(
+                                                                        color = Color(0xFF3A3F47),
+                                                                        thickness = 1.dp
+                                                                )
+                                                                Text(
+                                                                        text = "Status: $label",
+                                                                        color = Color.White,
+                                                                        fontSize = 16.sp
+                                                                )
+                                                                if (statusEpoch > 0L) {
+                                                                        Text(
+                                                                                text =
+                                                                                        "atualizado ${formatHms(statusEpoch)}",
+                                                                                color =
+                                                                                        Color(
+                                                                                                0xFFB0B8C4
+                                                                                        ),
+                                                                                fontSize = 12.sp
+                                                                        )
+                                                                }
+                                                        }
+                                                }
+                                        } else null
+                        ),
+                        SettingItem(
                                 title = "Habilitar botões personalizados no volante",
                                 description =
                                         SharedPreferencesKeys.ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS
@@ -2772,4 +2870,8 @@ private fun SteeringWheelClimateCommandDropdown(
                         }
                 }
         }
+}
+
+private fun formatHms(epochSeconds: Long): String {
+        return SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(epochSeconds * 1000L))
 }
