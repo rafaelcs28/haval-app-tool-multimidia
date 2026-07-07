@@ -2111,6 +2111,30 @@ public class ServiceManager {
         backgroundHandler.postDelayed(hevSocMonitorRunnable, HEV_SOC_MONITOR_INTERVAL_MS);
     }
 
+    // Marcador de diagnóstico do card de A/C no cluster (botão na barra estendida). O usuário toca
+    // quando vê o A/C sumir sozinho do cluster; grava um marcador + snapshot do estado-chave no log
+    // persistente (cluster-events) pra correlacionar depois — principalmente: tinha CarPlay/AA
+    // projetando no cluster naquele momento? (hipótese nº1 da reversão). O histórico de troca de
+    // cards já está no log contínuo; este marcador crava a HORA + o estado pra achar a janela certa.
+    public void logAcClusterDiagMarker() {
+        try {
+            boolean carplay = DisplayAppLauncher.INSTANCE.isCarPlayOnDisplay(3);
+            boolean aa = DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3);
+            String hvacPanel = getUpdatedData(CarConstants.CAR_HVAC_PANEL_DISPLAY_NOTIFY.getValue());
+            String avm = getUpdatedData(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue());
+            logPersistentClusterEvent("user_ac_diag_marker", persistentEventDetails(
+                    "note", "usuario marcou: AC sumiu do cluster",
+                    "carplayOnCluster", carplay,
+                    "aaOnCluster", aa,
+                    "hvacPanelNotify", hvacPanel,
+                    "avmStatus", avm
+            ));
+            Log.w(TAG, "AC cluster diag marker logged carplay=" + carplay + " aa=" + aa);
+        } catch (Exception e) {
+            Log.e(TAG, "logAcClusterDiagMarker failed", e);
+        }
+    }
+
     public void applyHevSocTargetIfActive(String reason) {
         try {
             if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.getKey(), false)) {

@@ -2659,6 +2659,7 @@ private fun DashboardHeader(
         onShortcutButtonSelected: (Int) -> Unit,
         onShowNativeMenu: () -> Unit
 ) {
+        val markerContext = LocalContext.current
         Row(
                 modifier = Modifier.fillMaxWidth().height(62.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2729,6 +2730,22 @@ private fun DashboardHeader(
                                 text = if (layoutEditMode) "Pronto" else "Layout",
                                 active = layoutEditMode,
                                 onClick = onToggleLayoutEditMode
+                        )
+                        // Botão de diagnóstico: toque quando o A/C sumir sozinho do cluster —
+                        // crava um marcador + snapshot no log (cluster-events) pra achar a causa.
+                        DashboardHeaderControlButton(
+                                icon = Icons.Default.Flag,
+                                text = "Marcar",
+                                active = false,
+                                onClick = {
+                                        ServiceManager.getInstance().logAcClusterDiagMarker()
+                                        android.widget.Toast.makeText(
+                                                        markerContext,
+                                                        "Marcado ✓ (diagnóstico A/C)",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                }
                         )
                         DashboardShortcutSelectorButton(
                                 selectedButton = shortcutSelectedButton,
