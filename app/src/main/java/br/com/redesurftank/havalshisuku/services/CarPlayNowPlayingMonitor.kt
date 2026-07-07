@@ -38,6 +38,8 @@ class CarPlayNowPlayingMonitor(
     private var lastServiceBindAttemptAtMs = 0L
     private var lastSubscriptionAttemptAtMs = 0L
     private var lastUpdateAtMs = 0L
+    // Só tocado na Main (ver publishClear / caminho de update real) — sem sincronização extra.
+    private var pendingClearJob: Job? = null
 
     private val connection =
             object : ServiceConnection {
@@ -79,6 +81,8 @@ class CarPlayNowPlayingMonitor(
     fun stop() {
         subscriptionWatchdogJob?.cancel()
         subscriptionWatchdogJob = null
+        pendingClearJob?.cancel()
+        pendingClearJob = null
         stopNowPlayingUpdates()
         if (bound) {
             runCatching { appContext.unbindService(connection) }
@@ -389,15 +393,31 @@ class CarPlayNowPlayingMonitor(
                         "path=${update.artworkPath ?: "-"} playing=${update.isPlaying}"
             }
             withContext(Dispatchers.Main) {
+                // Chegou um update real: cancela qualquer clear agendado por um blip transitório
+                // anterior, pra ele não apagar este update.
+                pendingClearJob?.cancel()
+                pendingClearJob = null
                 onUpdate(update)
             }
         }
     }
 
+    /**
+     * A ponte nativa do CarPlay manda updates transitórios de "sem dados" no meio de metadados
+     * reais (ex.: troca de faixa). Por isso o clear é debounced: só apaga o now-playing se nada real
+     * chegar dentro de [NOW_PLAYING_CLEAR_DEBOUNCE_MS]. Sem isso, a capa do álbum pisca no dashboard
+     * a cada blip. Todo acesso ao pendingClearJob é feito na Main (cancel+assign aqui e no update
+     * real) pra não ter corrida — publishClear é chamado de threads diferentes (binder/IO/main).
+     */
     private fun publishClear(reason: String) {
-        debugLog { "Clearing CarPlay now playing metadata: $reason" }
         scope.launch(Dispatchers.Main) {
-            onUpdate(CarPlayNowPlayingUpdate(clear = true))
+            pendingClearJob?.cancel()
+            pendingClearJob = launch {
+                delay(NOW_PLAYING_CLEAR_DEBOUNCE_MS)
+                debugLog { "Clearing CarPlay now playing metadata: $reason" }
+                onUpdate(CarPlayNowPlayingUpdate(clear = true))
+                pendingClearJob = null
+            }
         }
     }
 
@@ -532,6 +552,7 @@ class CarPlayNowPlayingMonitor(
         private const val NOW_PLAYING_SERVICE_BIND_RETRY_MS = 5_000L
         private const val NOW_PLAYING_SUBSCRIPTION_RETRY_MS = 15_000L
         private const val NOW_PLAYING_UPDATE_STALE_MS = 20_000L
+        private const val NOW_PLAYING_CLEAR_DEBOUNCE_MS = 1_500L
 
         internal fun shouldRetryCarPlayServiceBindForTest(
                 nowMs: Long,
