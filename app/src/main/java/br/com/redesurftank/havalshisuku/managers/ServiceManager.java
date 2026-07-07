@@ -845,6 +845,14 @@ public class ServiceManager {
         backgroundHandler.postDelayed(() -> applyHevSocTargetIfActive("INIT+8s"), 8000);
         backgroundHandler.postDelayed(() -> applyHevSocTargetIfActive("INIT+18s"), 18000);
         startHevSocMonitor();
+        // Religar BT/hotspot no INIT (não só no evento de power-on): o app costuma subir TARDE no
+        // boot (bootstrap do Shizuku demora), então o evento de power-on que dispara o restore pode
+        // já ter passado -> BT/hotspot ficavam desligados (ex.: quebrava o pareamento do CarPlay sem
+        // fio). A intenção de religar é PERSISTIDA (BLUETOOTH_STATE_ON_POWER_OFF / HOTSPOT_STATE_ON_
+        // POWER_OFF), então religar no init funciona independente de quando o app acorda; é no-op se
+        // não havia nada a religar, e attemptRestore* já tem retry pro rádio não estar pronto ainda.
+        backgroundHandler.postDelayed(this::restoreBluetoothIfWasDisabled, 8000);
+        backgroundHandler.postDelayed(this::restoreWifiTetherIfWasDisabled, 8000);
         backgroundHandler.post(() -> {
             try {
                 ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "settings put global enable_freeform_support 1"});
