@@ -2731,17 +2731,35 @@ private fun DashboardHeader(
                                 active = layoutEditMode,
                                 onClick = onToggleLayoutEditMode
                         )
-                        // Botão de diagnóstico: toque quando o A/C sumir sozinho do cluster —
-                        // crava um marcador + snapshot no log (cluster-events) pra achar a causa.
+                        // Botões de diagnóstico: toque quando ver o bug intermitente — cravam um
+                        // marcador + snapshot no log (cluster-events), etiquetado por bug, pra achar
+                        // a causa depois. "A/C" = A/C some do cluster; "Tema" = velocímetro/tema errado
+                        // pisca durante a projeção.
                         DashboardHeaderControlButton(
                                 icon = Icons.Default.Flag,
-                                text = "Marcar",
+                                text = "A/C",
                                 active = false,
                                 onClick = {
-                                        ServiceManager.getInstance().logAcClusterDiagMarker()
+                                        ServiceManager.getInstance()
+                                                .logClusterDiagMarker("ac_sumiu_cluster")
                                         android.widget.Toast.makeText(
                                                         markerContext,
-                                                        "Marcado ✓ (diagnóstico A/C)",
+                                                        "Marcado ✓ (bug A/C)",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                }
+                        )
+                        DashboardHeaderControlButton(
+                                icon = Icons.Default.Palette,
+                                text = "Tema",
+                                active = false,
+                                onClick = {
+                                        ServiceManager.getInstance()
+                                                .logClusterDiagMarker("tema_velocimetro_errado")
+                                        android.widget.Toast.makeText(
+                                                        markerContext,
+                                                        "Marcado ✓ (bug tema)",
                                                         android.widget.Toast.LENGTH_SHORT
                                                 )
                                                 .show()

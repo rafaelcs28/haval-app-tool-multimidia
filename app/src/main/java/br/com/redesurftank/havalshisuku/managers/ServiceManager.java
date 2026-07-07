@@ -2111,27 +2111,28 @@ public class ServiceManager {
         backgroundHandler.postDelayed(hevSocMonitorRunnable, HEV_SOC_MONITOR_INTERVAL_MS);
     }
 
-    // Marcador de diagnóstico do card de A/C no cluster (botão na barra estendida). O usuário toca
-    // quando vê o A/C sumir sozinho do cluster; grava um marcador + snapshot do estado-chave no log
-    // persistente (cluster-events) pra correlacionar depois — principalmente: tinha CarPlay/AA
-    // projetando no cluster naquele momento? (hipótese nº1 da reversão). O histórico de troca de
-    // cards já está no log contínuo; este marcador crava a HORA + o estado pra achar a janela certa.
-    public void logAcClusterDiagMarker() {
+    // Marcador de diagnóstico do cluster (botões na barra estendida). O usuário toca quando vê um bug
+    // intermitente (bugTag identifica qual): grava um marcador + snapshot do estado-chave no log
+    // persistente (cluster-events) pra correlacionar depois. Chave pras 2 queixas atuais: tinha
+    // CarPlay/AA projetando no cluster naquele instante? (A/C some / tema pisca com velocímetro). O
+    // histórico de troca de cards/tema já está no log contínuo; este marcador crava a HORA + o estado
+    // pra achar a janela certa e etiquetar QUAL bug foi.
+    public void logClusterDiagMarker(String bugTag) {
         try {
             boolean carplay = DisplayAppLauncher.INSTANCE.isCarPlayOnDisplay(3);
             boolean aa = DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3);
             String hvacPanel = getUpdatedData(CarConstants.CAR_HVAC_PANEL_DISPLAY_NOTIFY.getValue());
             String avm = getUpdatedData(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue());
-            logPersistentClusterEvent("user_ac_diag_marker", persistentEventDetails(
-                    "note", "usuario marcou: AC sumiu do cluster",
+            logPersistentClusterEvent("user_diag_marker", persistentEventDetails(
+                    "bug", bugTag,
                     "carplayOnCluster", carplay,
                     "aaOnCluster", aa,
                     "hvacPanelNotify", hvacPanel,
                     "avmStatus", avm
             ));
-            Log.w(TAG, "AC cluster diag marker logged carplay=" + carplay + " aa=" + aa);
+            Log.w(TAG, "cluster diag marker logged bug=" + bugTag + " carplay=" + carplay + " aa=" + aa);
         } catch (Exception e) {
-            Log.e(TAG, "logAcClusterDiagMarker failed", e);
+            Log.e(TAG, "logClusterDiagMarker failed", e);
         }
     }
 
