@@ -1894,6 +1894,7 @@ private data class DashboardVehicleSnapshot(
         val insideTemp: String,
         val outsideTemp: String,
         val hotRouterMode: String,
+        val hotRouterWifiName: String?,
         val batteryPercent: String,
         val fuelPercent: String,
         val batteryRange: String,
@@ -2065,12 +2066,19 @@ private fun rememberDashboardVehicleSnapshot(
         // Status do HotRouter (roteamento Starlink) — não é um sinal CAN, então é lido via shell
         // (Shizuku) num poll periódico, fora da main thread. MODE_OFF = feature desligada -> chip some.
         var hotRouterMode by remember { mutableStateOf(HotRouterManager.MODE_OFF) }
+        var hotRouterWifiName by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(Unit) {
                 while (true) {
-                        hotRouterMode =
-                                withContext(Dispatchers.IO) {
-                                        HotRouterManager.getInstance().readStatusBlocking().mode
-                                }
+                        val mgr = HotRouterManager.getInstance()
+                        val mode = withContext(Dispatchers.IO) { mgr.readStatusBlocking().mode }
+                        hotRouterMode = mode
+                        // SSID só é relevante (e só custa shell) quando está roteando pela WLAN.
+                        hotRouterWifiName =
+                                if (mode == HotRouterManager.MODE_WLAN) {
+                                        withContext(Dispatchers.IO) {
+                                                mgr.readRoutedWifiNameBlocking()
+                                        }
+                                } else null
                         delay(4000)
                 }
         }
@@ -2288,6 +2296,7 @@ private fun rememberDashboardVehicleSnapshot(
                 insideTemp = insideTemp,
                 outsideTemp = outsideTemp,
                 hotRouterMode = hotRouterMode,
+                hotRouterWifiName = hotRouterWifiName,
                 batteryPercent = batteryPercent,
                 fuelPercent = fuelPercent,
                 batteryRange = batteryRange,
@@ -2685,6 +2694,27 @@ private fun DashboardHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                        // Indicador do HotRouter: PRIMEIRO chip (à esquerda dos demais). Só aparece
+                        // quando a feature está ligada (mode != OFF). Verde quando roteando por uma
+                        // WLAN externa (mostra o SSID); cinza no fallback 4G / iniciando / erro.
+                        if (snapshot.hotRouterMode != HotRouterManager.MODE_OFF) {
+                                val routingWlan =
+                                        snapshot.hotRouterMode == HotRouterManager.MODE_WLAN
+                                DashboardStatusChip(
+                                        icon = Icons.Default.SatelliteAlt,
+                                        text =
+                                                when {
+                                                        routingWlan ->
+                                                                snapshot.hotRouterWifiName
+                                                                        ?.takeIf { it.isNotBlank() }
+                                                                        ?: "Wi-Fi"
+                                                        snapshot.hotRouterMode ==
+                                                                HotRouterManager.MODE_4G -> "4G"
+                                                        else -> "…"
+                                                },
+                                        accent = if (routingWlan) Color(0xFF78E08F) else null
+                                )
+                        }
                         DashboardStatusChip(
                                 icon = Icons.Default.DeviceThermostat,
                                 text = "Cabine ${formatTemperature(snapshot.insideTemp)}"
@@ -2693,20 +2723,6 @@ private fun DashboardHeader(
                                 icon = Icons.Default.WbSunny,
                                 text = "Externa ${formatTemperature(snapshot.outsideTemp)}"
                         )
-                        // Indicador do HotRouter/Starlink: só aparece quando a feature está ligada
-                        // (mode != OFF). Verde quando o tráfego está roteando pela Starlink (WLAN);
-                        // neutro no fallback 4G / iniciando / erro.
-                        if (snapshot.hotRouterMode != HotRouterManager.MODE_OFF) {
-                                // Verde = roteando pela Starlink (WLAN). Cinza = ligado mas não pela
-                                // Starlink (fallback 4G / iniciando / erro) — sem implicar Starlink ativa.
-                                val routingStarlink =
-                                        snapshot.hotRouterMode == HotRouterManager.MODE_WLAN
-                                DashboardStatusChip(
-                                        icon = Icons.Default.SatelliteAlt,
-                                        text = "Starlink",
-                                        accent = if (routingStarlink) Color(0xFF78E08F) else null
-                                )
-                        }
                         DashboardStatusChip(icon = Icons.Default.AccessTime, text = time)
                         DashboardHeaderControlButton(
                                 icon = Icons.Default.Tune,
