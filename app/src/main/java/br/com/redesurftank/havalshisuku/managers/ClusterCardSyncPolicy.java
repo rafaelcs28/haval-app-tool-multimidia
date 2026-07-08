@@ -25,13 +25,16 @@ public final class ClusterCardSyncPolicy {
             return nextCard != lastSyntheticTarget;
         }
 
-        // O card de A/C (aircon) é uma seleção deliberada do usuário. Com CarPlay/AA projetando, o
-        // cluster do OEM fica empurrando reversão pro card default (ex.: from=3_to=1) a cada ~3s;
-        // sem esta trava, a A/C some sozinha depois de ~4s (passada a janela sintética de 1,5s), pois
-        // o ramo "nextCard != 0 -> honra" abaixo aceitava a volta pro menu. Mantém a A/C fixa,
-        // honrando a saída dela SÓ quando o usuário está de fato navegando (toque LEFT/RIGHT recente).
-        if (previousCard == AIRCON_CARD) {
-            return !isRecentClusterCardNavigationInput(lastInputKeyCode, sinceInputMs);
+        // O card de A/C (aircon) é uma seleção deliberada do usuário. O cluster do OEM reverte pro
+        // card default (menu) sozinho — em <2s sem projeção, ou repetidamente (~3s) com CarPlay
+        // projetando. O ramo "nextCard != 0 -> honra" abaixo aceitava essa volta pro menu (card 1)
+        // assim que a janela sintética de 1,5s expirava, fazendo a A/C sumir. Aqui: estando na A/C,
+        // IGNORA a reversão espúria pro menu (card 0/1) SEMPRE. Sair da A/C de propósito é via
+        // navegação (LEFT/RIGHT), que dispara nav sintética pro alvo -> honrada pelo bloco sintético
+        // acima (nextCard == lastSyntheticTarget). Mudança nativa pra OUTRO card (navegação real do
+        // OEM) segue honrada.
+        if (previousCard == AIRCON_CARD && (nextCard == 0 || nextCard == MAIN_MENU_CARD)) {
+            return true;
         }
 
         if (nextCard != 0) return false;

@@ -61,8 +61,8 @@ class ClusterCardSyncPolicyTest {
         )
     }
 
-    // Bug reportado (CarPlay no cluster): na A/C (card 3), o OEM empurra a volta pro menu (card 1)
-    // a cada ~3s; sem input recente do usuário, isso deve ser IGNORADO (A/C fica fixa).
+    // Bug reportado (nosso carro, CarPlay projetando): na A/C (card 3), o OEM empurra a volta pro
+    // menu (card 1) a cada ~3s; deve ser IGNORADO (A/C fica fixa) mesmo passada a janela.
     @Test
     fun aircronCardStickyAgainstNativeRevertToMenuWithoutRecentInput() {
         assertTrue(
@@ -77,17 +77,49 @@ class ClusterCardSyncPolicyTest {
         )
     }
 
-    // Mas se o usuário está navegando (toque LEFT/RIGHT recente), sair da A/C é HONRADO.
+    // Bug do usuário .73 (sem projeção): o OEM reverte a A/C pro menu em <2s — DENTRO da janela de
+    // input (2,5s) mas depois da sintética (1,5s). Antes o fix por input honrava e a A/C sumia.
+    // Agora tem que IGNORAR (A/C fica).
     @Test
-    fun aircronCardLeavesOnRecentNavigationInput() {
+    fun aircronCardStickyAgainstFastRevertToMenuWithinInputWindow() {
+        assertTrue(
+            ClusterCardSyncPolicy.shouldIgnoreNativeClusterCardChanged(
+                3,
+                1,
+                1600L,
+                1027,
+                1600L,
+                3
+            )
+        )
+    }
+
+    // Sair da A/C DE PROPÓSITO: nav sintética recente com alvo = menu -> HONRA (bloco sintético).
+    @Test
+    fun aircronLeavesToMenuOnDeliberateSyntheticNavigation() {
         assertFalse(
             ClusterCardSyncPolicy.shouldIgnoreNativeClusterCardChanged(
                 3,
                 1,
-                500L,
+                600L,
                 1027,
-                -1L,
-                -1
+                600L,
+                1
+            )
+        )
+    }
+
+    // Mudança nativa da A/C pra OUTRO card (não-menu) = navegação real -> HONRA.
+    @Test
+    fun aircronHonorsNativeChangeToAnotherCard() {
+        assertFalse(
+            ClusterCardSyncPolicy.shouldIgnoreNativeClusterCardChanged(
+                3,
+                4,
+                7408L,
+                1027,
+                7408L,
+                3
             )
         )
     }
