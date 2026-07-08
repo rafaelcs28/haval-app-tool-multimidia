@@ -1774,6 +1774,14 @@ public class ServiceManager {
         }
         try {
             if (key.equals(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue())) {
+                // Diag: registra abertura(1)/fechamento(0) da câmera/AVM no log persistente pra
+                // correlacionar com a perda de foco do CarPlay/AA no cluster (câmera abre no D0 ->
+                // projeção fica preta/some no cluster). Sem isso, o cluster-events não tinha a câmera.
+                logPersistentClusterEvent("avm_preview_status", persistentEventDetails(
+                        "value", value,
+                        "carplayOnCluster", DisplayAppLauncher.INSTANCE.isCarPlayOnDisplay(3),
+                        "aaOnCluster", DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3)
+                ));
                 if (DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3)) {
                     Log.w(TAG, "Skipping projection guard for AVM_PREVIEW_STATUS_" + value + " because Android Auto is active on D3");
                     if (value.equals("1")) {

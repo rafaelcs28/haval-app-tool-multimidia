@@ -2765,6 +2765,21 @@ private fun DashboardHeader(
                                                 .show()
                                 }
                         )
+                        DashboardHeaderControlButton(
+                                icon = Icons.Default.VideocamOff,
+                                text = "CP preto",
+                                active = false,
+                                onClick = {
+                                        ServiceManager.getInstance()
+                                                .logClusterDiagMarker("carplay_preto_cluster")
+                                        android.widget.Toast.makeText(
+                                                        markerContext,
+                                                        "Marcado ✓ (CarPlay preto)",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                }
+                        )
                         DashboardShortcutSelectorButton(
                                 selectedButton = shortcutSelectedButton,
                                 expanded = shortcutMenuExpanded,
