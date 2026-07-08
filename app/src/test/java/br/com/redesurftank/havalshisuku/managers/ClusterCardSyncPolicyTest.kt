@@ -60,4 +60,35 @@ class ClusterCardSyncPolicyTest {
             )
         )
     }
+
+    // Bug reportado (CarPlay no cluster): na A/C (card 3), o OEM empurra a volta pro menu (card 1)
+    // a cada ~3s; sem input recente do usuário, isso deve ser IGNORADO (A/C fica fixa).
+    @Test
+    fun aircronCardStickyAgainstNativeRevertToMenuWithoutRecentInput() {
+        assertTrue(
+            ClusterCardSyncPolicy.shouldIgnoreNativeClusterCardChanged(
+                3,
+                1,
+                7408L,
+                1027,
+                7408L,
+                3
+            )
+        )
+    }
+
+    // Mas se o usuário está navegando (toque LEFT/RIGHT recente), sair da A/C é HONRADO.
+    @Test
+    fun aircronCardLeavesOnRecentNavigationInput() {
+        assertFalse(
+            ClusterCardSyncPolicy.shouldIgnoreNativeClusterCardChanged(
+                3,
+                1,
+                500L,
+                1027,
+                -1L,
+                -1
+            )
+        )
+    }
 }

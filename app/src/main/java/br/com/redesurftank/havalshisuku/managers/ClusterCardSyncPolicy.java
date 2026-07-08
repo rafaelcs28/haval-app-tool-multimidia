@@ -25,8 +25,17 @@ public final class ClusterCardSyncPolicy {
             return nextCard != lastSyntheticTarget;
         }
 
+        // O card de A/C (aircon) é uma seleção deliberada do usuário. Com CarPlay/AA projetando, o
+        // cluster do OEM fica empurrando reversão pro card default (ex.: from=3_to=1) a cada ~3s;
+        // sem esta trava, a A/C some sozinha depois de ~4s (passada a janela sintética de 1,5s), pois
+        // o ramo "nextCard != 0 -> honra" abaixo aceitava a volta pro menu. Mantém a A/C fixa,
+        // honrando a saída dela SÓ quando o usuário está de fato navegando (toque LEFT/RIGHT recente).
+        if (previousCard == AIRCON_CARD) {
+            return !isRecentClusterCardNavigationInput(lastInputKeyCode, sinceInputMs);
+        }
+
         if (nextCard != 0) return false;
-        if (previousCard != MAIN_MENU_CARD && previousCard != AIRCON_CARD) return false;
+        if (previousCard != MAIN_MENU_CARD) return false;
         return !isRecentClusterCardNavigationInput(lastInputKeyCode, sinceInputMs);
     }
 
