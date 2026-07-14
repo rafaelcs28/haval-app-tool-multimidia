@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -282,6 +283,10 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
     var albumEffectSpeedDraft by remember { mutableStateOf(config.albumEffectSpeed.toFloat()) }
     var scanning by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var effectChannel by remember { mutableStateOf(1) }
+    var effectMode by remember { mutableStateOf(1) }
+    var effectSpeed by remember { mutableStateOf(50) }
+    var hexDraft by remember { mutableStateOf("7B0107FF000000FFBF") }
 
     fun refreshConfig() {
         config = AmbientLightSettings.load()
@@ -653,6 +658,52 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                         }
                     }
                 }
+
+                Text(
+                    "Avançado — testar efeito nativo (varredura)",
+                    color = AppColors.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Testa os modos nativos do controlador por canal (7B <canal> 07 <RGB> <modo> <vel> BF) — pra descobrir se existe um efeito de varredura endereçável por canal.",
+                    color = AppColors.TextSecondary,
+                    fontSize = 12.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    EffectStepper("Canal", effectChannel, 0, AmbientLightSettings.MAX_CHANNELS - 1) {
+                        effectChannel = it
+                    }
+                    EffectStepper("Modo", effectMode, 0, 255) { effectMode = it }
+                    EffectStepper("Vel", effectSpeed, 1, 100) { effectSpeed = it }
+                }
+                OutlinedButton(
+                    enabled = ledReady,
+                    onClick = {
+                        val hex =
+                            AmbientLightProtocol.dmxChannelCustomEffectHex(
+                                effectChannel, 255, 0, 0, effectMode, effectSpeed, config.colorOrder
+                            )
+                        context.startService(AmbientLightService.createSendHexIntent(context, hex))
+                        statusMessage = "Efeito canal $effectChannel modo $effectMode vel $effectSpeed"
+                    }
+                ) { Text("Testar efeito (vermelho)") }
+                OutlinedTextField(
+                    value = hexDraft,
+                    onValueChange = { hexDraft = it.uppercase() },
+                    label = { Text("Hex livre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(
+                    enabled = ledReady,
+                    onClick = {
+                        context.startService(
+                            AmbientLightService.createSendHexIntent(context, hexDraft.trim())
+                        )
+                        statusMessage = "Enviando hex: ${hexDraft.trim()}"
+                    }
+                ) { Text("Enviar hex") }
             }
         }
 
@@ -924,6 +975,31 @@ private fun SettingSwitchRow(
         }
         Spacer(Modifier.width(10.dp))
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun EffectStepper(label: String, value: Int, min: Int, max: Int, onChange: (Int) -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            "$label: $value",
+            color = AppColors.TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(
+                enabled = value > min,
+                onClick = { onChange((value - 1).coerceAtLeast(min)) }
+            ) { Text("−") }
+            OutlinedButton(
+                enabled = value < max,
+                onClick = { onChange((value + 1).coerceAtMost(max)) }
+            ) { Text("+") }
+        }
     }
 }
 

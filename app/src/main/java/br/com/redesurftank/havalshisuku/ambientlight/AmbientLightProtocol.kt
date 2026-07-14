@@ -100,6 +100,44 @@ object AmbientLightProtocol {
         colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
     ): String = bytesToHex(setDmxRgbPayloadForChannel(channel, r, g, b, colorOrder))
 
+    // Efeito nativo do controlador POR CANAL: `7B <canal> 07 R G B <modo> <velocidade> BF`. É o mesmo
+    // frame de custom-effect, mas com o canal no 2º byte. Serve pra testar se o controlador tem um modo
+    // de "varredura/flow" endereçável por canal (necessário pro efeito do cinto).
+    fun setDmxCustomEffectPayloadForChannel(
+        channel: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+        modeId: Int,
+        speed: Int,
+        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
+    ): ByteArray {
+        val color = colorOrder.apply(LedColor(r, g, b))
+        val mode = modeId.coerceIn(0, 255)
+        val safeSpeed = speed.coerceIn(1, 100)
+        return byteArrayOf(
+            0x7B.toByte(),
+            (channel and 0xFF).toByte(),
+            0x07.toByte(),
+            color.r.toByte(),
+            color.g.toByte(),
+            color.b.toByte(),
+            mode.toByte(),
+            safeSpeed.toByte(),
+            0xBF.toByte()
+        )
+    }
+
+    fun dmxChannelCustomEffectHex(
+        channel: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+        modeId: Int,
+        speed: Int,
+        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
+    ): String = bytesToHex(setDmxCustomEffectPayloadForChannel(channel, r, g, b, modeId, speed, colorOrder))
+
     fun setBrightnessPayload(percent: Int): ByteArray = setDmxBrightnessPayload(percent)
 
     fun setDmxBrightnessPayload(percent: Int): ByteArray {
