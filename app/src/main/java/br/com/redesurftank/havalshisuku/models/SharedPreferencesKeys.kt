@@ -352,6 +352,14 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "ambientLightAutoReconnect",
             "Reconectar automaticamente o Ambient Light"
     ),
+    AMBIENT_LIGHT_CHANNEL_COUNT(
+            "ambientLightChannelCount",
+            "Quantidade de canais/zonas DMX do Ambient Light"
+    ),
+    AMBIENT_LIGHT_ZONE_MAP(
+            "ambientLightZoneMap",
+            "Mapa canal->zona do Ambient Light (posições por canal, CSV)"
+    ),
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),

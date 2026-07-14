@@ -68,6 +68,38 @@ object AmbientLightProtocol {
         )
     }
 
+    // DMX endereçado por CANAL/zona: o 2º byte do frame (fixo em 0x00 no comando global) é a
+    // posição do canal. `7B <canal> 07 R G B 00 FF BF`. Canal 0 costuma ser broadcast/todos; 1..N
+    // = zonas físicas (portas, painel, console). Confirmado com o dev que fez a parte BLE.
+    fun setDmxRgbPayloadForChannel(
+        channel: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
+    ): ByteArray {
+        val color = colorOrder.apply(LedColor(r, g, b))
+        return byteArrayOf(
+            0x7B.toByte(),
+            (channel and 0xFF).toByte(),
+            0x07.toByte(),
+            color.r.toByte(),
+            color.g.toByte(),
+            color.b.toByte(),
+            0x00.toByte(),
+            0xFF.toByte(),
+            0xBF.toByte()
+        )
+    }
+
+    fun dmxChannelRgbHex(
+        channel: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
+    ): String = bytesToHex(setDmxRgbPayloadForChannel(channel, r, g, b, colorOrder))
+
     fun setBrightnessPayload(percent: Int): ByteArray = setDmxBrightnessPayload(percent)
 
     fun setDmxBrightnessPayload(percent: Int): ByteArray {
