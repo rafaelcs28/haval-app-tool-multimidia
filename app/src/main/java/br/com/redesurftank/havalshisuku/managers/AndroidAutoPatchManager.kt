@@ -3,6 +3,8 @@ package br.com.redesurftank.havalshisuku.managers
 import android.content.Context
 import android.util.Log
 import br.com.redesurftank.App
+import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
+import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.utils.ShizukuUtils
 import java.io.File
 import java.io.FileOutputStream
@@ -22,6 +24,13 @@ object AndroidAutoPatchManager {
     
     const val VENDOR_SERVICE_OAT = "/vendor/app/AndroidAutoService/oat"
     const val VENDOR_APP_OAT = "/vendor/app/AndroidAutoApp/oat"
+
+    // O patch está montado no arquivo, mas o app de AA ainda roda o código STOCK (o force-stop foi
+    // pulado no boot p/ não escurecer a multimídia). O CLUSTER precisa do app PATCHEADO (senão preto),
+    // então a projeção pro cluster chama ensureAppPatchLoadedForCluster() pra forçar o reload.
+    @Volatile
+    var mountedButNotForceStopped = false
+        private set
 
     private fun sh(command: String): String {
         val output = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", "$command 2>&1"))
@@ -215,7 +224,24 @@ object AndroidAutoPatchManager {
             sh("[ -d '$VENDOR_APP_OAT' ] && mount --bind '$PATCH_DIR/empty_oat' '$VENDOR_APP_OAT' || true")
 
             sh("rm -f /data/dalvik-cache/arm64/*AndroidAutoApp* 2>/dev/null || true")
-            sh("am force-stop $APP_PACKAGE || true")
+            // Se o AA já está projetando (ex.: ligar o carro com o celular cabeado — o host sobe antes
+            // do nosso app), um force-stop aqui MATA a sessão em andamento e a tela fica preta (o usuário
+            // tinha que tirar/plugar o cabo). O patch já está montado no arquivo; o processo em execução
+            // segue com o código stock em memória (funciona) e o patch entra no PRÓXIMO launch do AA.
+            // Então: só força o restart do host quando o AA NÃO está projetando.
+            val aaActive = DisplayAppLauncher.hasAndroidAutoVisualTaskAnywhere()
+            if (aaActive) {
+                // Pula o force-stop p/ não escurecer a multimídia (AA projetando agora). MAS o app fica
+                // STOCK (código antigo em memória); o CLUSTER precisa do patcheado, então marcamos que
+                // falta o reload — a projeção pro cluster faz o force-stop na hora.
+                mountedButNotForceStopped = true
+                Log.w(TAG, "Android Auto is projecting; skipping force-stop (app stays STOCK; cluster projection will reload patched)")
+                ClusterPersistentEventLogger.log("aa_patch_mount", mapOf("forceStop" to "skipped_aa_active"))
+            } else {
+                mountedButNotForceStopped = false
+                sh("am force-stop $APP_PACKAGE || true")
+                ClusterPersistentEventLogger.log("aa_patch_mount", mapOf("forceStop" to "done"))
+            }
 
             val success = isAppPatchMounted()
             if (success) {
@@ -238,6 +264,26 @@ object AndroidAutoPatchManager {
 
         Log.w(TAG, "Applying Android Auto visual mount only; service APK auto/manual UI mount is disabled")
         return applyAppMount()
+    }
+
+    /**
+     * O CLUSTER (display 3) só renderiza o AA com o app PATCHEADO. No boot o mount pula o force-stop
+     * (p/ não escurecer a multimídia), deixando o app STOCK -> cluster preto. Chamado ANTES de projetar
+     * no cluster: se o app está stock (mountedButNotForceStopped), força o restart pra carregar o
+     * patcheado (do arquivo montado). Retorna true se fez o reload (aí o chamador deve dar um tempo p/
+     * o app subir antes de projetar). Só age uma vez; depois o app fica patcheado na memória.
+     */
+    fun ensureAppPatchLoadedForCluster(): Boolean {
+        if (!mountedButNotForceStopped) return false
+        if (!isAppPatchMounted()) {
+            mountedButNotForceStopped = false
+            return false
+        }
+        Log.w(TAG, "Cluster projection needs the patched AA app; force-stopping to load the patch")
+        sh("am force-stop $APP_PACKAGE || true")
+        mountedButNotForceStopped = false
+        ClusterPersistentEventLogger.log("aa_patch_mount", mapOf("forceStop" to "cluster_reload"))
+        return true
     }
 
     fun removeMounts(): Boolean {
@@ -273,6 +319,20 @@ object AndroidAutoPatchManager {
     fun ensureMounted() {
         try {
             val context = App.getContext()
+            val prefs = App.getDeviceProtectedContext()
+                    .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.key, false)) {
+                // Toggle "montar patch do AA" DESLIGADO = usar o host de Android Auto DE FÁBRICA.
+                // O host patcheado é re-assinado com chave debug e quebra a conexão de alguns
+                // aparelhos (ex.: Samsung Z Fold 7 não conecta). Antes o ensureMounted ignorava a
+                // pref e remontava ao projetar o AA, então desligar o toggle não bastava. Agora, com
+                // a pref off, garante desmontado (stock). Só afeta quem desligar; default segue on.
+                if (isAppPatchMounted()) {
+                    Log.w(TAG, "AA patch disabled by pref; removing mounts to use stock AA host")
+                    removeMounts()
+                }
+                return
+            }
             val bundledAppMd5 = bundledPatchMd5(context, APP_APK)
             if (bundledAppMd5 == null) {
                 Log.e(TAG, "No bundled Android Auto visual patch available; skipping auto-mount")

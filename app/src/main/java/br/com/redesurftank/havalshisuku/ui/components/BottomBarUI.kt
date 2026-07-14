@@ -2731,25 +2731,10 @@ private fun DashboardHeader(
                                 active = layoutEditMode,
                                 onClick = onToggleLayoutEditMode
                         )
-                        // Botões de diagnóstico: toque quando ver o bug intermitente — cravam um
-                        // marcador + snapshot no log (cluster-events), etiquetado por bug, pra achar
-                        // a causa depois. "A/C" = A/C some do cluster; "Tema" = velocímetro/tema errado
-                        // pisca durante a projeção.
-                        DashboardHeaderControlButton(
-                                icon = Icons.Default.Flag,
-                                text = "A/C",
-                                active = false,
-                                onClick = {
-                                        ServiceManager.getInstance()
-                                                .logClusterDiagMarker("ac_sumiu_cluster")
-                                        android.widget.Toast.makeText(
-                                                        markerContext,
-                                                        "Marcado ✓ (bug A/C)",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                )
-                                                .show()
-                                }
-                        )
+                        // Botão de diagnóstico do TEMA: toque quando o velocímetro/tema errado piscar
+                        // durante a projeção no cluster — crava um marcador + snapshot no log
+                        // (cluster-events) pra confirmar a causa/o fix. (Os marcadores de A/C e
+                        // CarPlay-preto foram removidos — bugs resolvidos/OEM.)
                         DashboardHeaderControlButton(
                                 icon = Icons.Default.Palette,
                                 text = "Tema",
@@ -2760,21 +2745,6 @@ private fun DashboardHeader(
                                         android.widget.Toast.makeText(
                                                         markerContext,
                                                         "Marcado ✓ (bug tema)",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                )
-                                                .show()
-                                }
-                        )
-                        DashboardHeaderControlButton(
-                                icon = Icons.Default.VideocamOff,
-                                text = "CP preto",
-                                active = false,
-                                onClick = {
-                                        ServiceManager.getInstance()
-                                                .logClusterDiagMarker("carplay_preto_cluster")
-                                        android.widget.Toast.makeText(
-                                                        markerContext,
-                                                        "Marcado ✓ (CarPlay preto)",
                                                         android.widget.Toast.LENGTH_SHORT
                                                 )
                                                 .show()
@@ -5343,7 +5313,6 @@ private fun DashboardTempAdjuster(
         ) {
                 DashboardIconButton(Icons.Default.Remove, size = 62.dp) {
                         if (enabled) onDelta(-0.5f)
-                        else logDashboardTemperatureDisabled(label, temp, -0.5f)
                 }
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -5363,7 +5332,6 @@ private fun DashboardTempAdjuster(
                 }
                 DashboardIconButton(Icons.Default.Add, size = 62.dp) {
                         if (enabled) onDelta(0.5f)
-                        else logDashboardTemperatureDisabled(label, temp, 0.5f)
                 }
         }
 }
@@ -5645,28 +5613,7 @@ private fun updateTemperature(
         val current = currentValue.toFloatOrNull() ?: 22.0f
         val next = (current + delta).coerceIn(16.0f, 32.0f)
         val nextValue = String.format(java.util.Locale.US, "%.1f", next)
-        ClusterPersistentEventLogger.log(
-                "dashboard_hvac_temperature_command",
-                mapOf(
-                        "key" to key.getValue(),
-                        "current" to currentValue,
-                        "delta" to delta,
-                        "next" to nextValue
-                )
-        )
         serviceManager.updateData(key.getValue(), nextValue)
-}
-
-private fun logDashboardTemperatureDisabled(label: String, temp: String, delta: Float) {
-        ClusterPersistentEventLogger.log(
-                "dashboard_hvac_temperature_disabled",
-                mapOf(
-                        "label" to label,
-                        "temp" to temp,
-                        "delta" to delta,
-                        "reason" to "hvac_power_off"
-                )
-        )
 }
 
 internal fun resolveDashboardMediaVolumeAfterDelta(current: Int, delta: Int): Int {

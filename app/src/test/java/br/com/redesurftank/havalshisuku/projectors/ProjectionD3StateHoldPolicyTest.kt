@@ -31,9 +31,12 @@ class ProjectionD3StateHoldPolicyTest {
         )
     }
 
+    // Regressão do bug do tema/velocímetro (2026-07-09): o alvo de cluster foi limpo como "stale"
+    // com o CarPlay AINDA projetando (desiredCluster=false), e um gap de task transitório fez o tema
+    // piscar. Com prova de saúde recente no D3, tem que SEGURAR mesmo com desiredCluster=false.
     @Test
-    fun doesNotHoldWhenUserTargetIsNoLongerCluster() {
-        assertFalse(
+    fun holdsOnRecentHealthyD3EvenWhenDesiredClusterFalse() {
+        assertTrue(
                 ProjectionD3StateHoldPolicy.shouldHoldCarPlayInDash(
                         lastHealthyD3AtMs = 1_000L,
                         nowMs = 7_000L,

@@ -158,6 +158,16 @@ object DisplayAppLauncher {
     private const val ANDROID_AUTO_NATIVE_PANEL_ACTIVE_FOCUS_COOLDOWN_MS = 1_500L
     private const val ANDROID_AUTO_NATIVE_MEDIA_KEY_UP_DELAY_MS = 70L
     private const val ANDROID_AUTO_NATIVE_MEDIA_KEY_BIND_WAIT_MS = 180L
+    // Tentativas de espera do bind/link do AA na guarda de projeção pro cluster (toggle do volante).
+    // Pós-boot o binder do LinkCommand sobe assíncrono (onServiceConnected) e não fica pronto em 180ms;
+    // antes a guarda esperava 180ms UMA vez e desistia -> o 1º long-press do volante era perdido (só o
+    // 2º projetava). Com retry (8 x 180ms ≈ 1,4s) a 1ª projeção do AA vai de primeira, como o CarPlay.
+    private const val ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS = 8
+    // Settle p/ o VÍDEO do AA começar a renderizar antes de projetar no cluster, SÓ quando a sessão é
+    // fresca (o binder subiu agora, pós-boot/reconexão). Sem isso a 1ª projeção ia com o link ativo mas
+    // o vídeo ainda não pronto -> cluster preto por alguns segundos até estabilizar. Toggle com sessão
+    // já quente (binder vivo no início) NÃO espera.
+    private const val ANDROID_AUTO_FIRST_PROJECTION_VIDEO_SETTLE_MS = 2_000L
     private const val ANDROID_AUTO_LINK_COMMAND_BIND_STALE_MS = 2_500L
     private const val ANDROID_AUTO_LINK_COMMAND_RECONNECT_COOLDOWN_MS = 4_000L
     private const val ANDROID_AUTO_NATIVE_PLAYBACK_SETTLE_MS = 520L
@@ -833,6 +843,17 @@ object DisplayAppLauncher {
         } != null
     }
 
+    // AA tem uma task visual ativa em QUALQUER display (sem o guard de rádio nativo). Usado pelo mount
+    // do patch pra NÃO dar force-stop numa sessão de AA em andamento (que escureceria a tela — bug de
+    // ligar o carro com o celular já cabeado: o AA sobe, o app monta o patch e o force-stop mata a sessão).
+    fun hasAndroidAutoVisualTaskAnywhere(): Boolean {
+        return try {
+            findTaskMatching { packageName, _ -> isAndroidAutoLikePackage(packageName) } != null
+        } catch (t: Throwable) {
+            false
+        }
+    }
+
     fun isProjectionMirrorOnDisplay(displayId: Int): Boolean {
         if (isCarPlayOnDisplay(displayId)) return true
         if (isAndroidAutoOnDisplay(displayId)) return true
@@ -892,6 +913,18 @@ object DisplayAppLauncher {
 
         val topPackage = getTopPackageOnDisplay(displayId)
         return topPackage != null && isAndroidAutoLikePackage(topPackage)
+    }
+
+    // Presença da TASK visual do AA num display, SEM o gate de sessão-pronta (que flapa por 10-17s).
+    // Usado pelo tema do cluster (InstrumentProjector2.isProjectionMirrorInDash) pra detectar de forma
+    // robusta que o AA está no cluster — evita o falso-negativo que estourava o hold e fazia o tema
+    // piscar (velocímetro). Reverte corretamente quando a task sai do display (tirar o AA do cluster).
+    fun isAndroidAutoVisualTaskOnDisplay(displayId: Int): Boolean {
+        return try {
+            hasAndroidAutoVisualOnDisplay(displayId)
+        } catch (t: Throwable) {
+            false
+        }
     }
 
     private fun hasAndroidAutoTopPackageOnDisplay(displayId: Int): Boolean {
@@ -1148,20 +1181,35 @@ object DisplayAppLauncher {
     }
 
     private suspend fun isAndroidAutoVisualProjectionReadyForToggle(reason: String): Boolean {
+        // O binder do LinkCommand do AA sobe de forma ASSÍNCRONA (bindService -> onServiceConnected
+        // depois). Pós-boot ele não fica pronto na 1ª checagem, então RETENTAMOS esperando o bind
+        // completar + o link ativar (estilo CarPlay requestCarPlayUiIfLinkActivated). Antes esperava
+        // 180ms uma vez e desistia (return) -> o 1º long-press do volante pro cluster era perdido e só
+        // o 2º projetava; a 2ª chamada achava o bind (esquentado pela 1ª) já vivo.
         if (androidAutoLinkCommandBinder?.isBinderAlive != true) {
             ensureAndroidAutoLinkCommandBound("${reason}_BIND")
+        }
+        // Checa ANTES de esperar (toggle subsequente com binder já vivo retorna na hora, sem latência);
+        // se ainda não está pronto, retenta o bind + espera até ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS.
+        // (O settle p/ o cluster renderizar é feito na projeção — ensureAppPatchLoadedForCluster — não aqui.)
+        repeat(ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS) {
+            if (androidAutoLinkCommandBinder?.isBinderAlive == true) {
+                val linkStatus = readAndroidAutoLinkStatusIfAlreadyBound("${reason}_LINK")
+                if (shouldAllowAndroidAutoVisualProjectionToggleForState(
+                        linkStatus = linkStatus,
+                        dcmProjectionActive = false
+                    )
+                ) {
+                    return true
+                }
+            } else {
+                ensureAndroidAutoLinkCommandBound("${reason}_BIND_RETRY")
+            }
             delay(ANDROID_AUTO_NATIVE_MEDIA_KEY_BIND_WAIT_MS)
         }
 
+        // Fallback (uma vez, após as tentativas): o DCM já reporta projeção ativa?
         val linkStatus = readAndroidAutoLinkStatusIfAlreadyBound("${reason}_LINK")
-        if (shouldAllowAndroidAutoVisualProjectionToggleForState(
-                linkStatus = linkStatus,
-                dcmProjectionActive = false
-            )
-        ) {
-            return true
-        }
-
         val dcmDevices = AndroidAutoDcmRecovery.readDeviceSnapshots(App.getContext())
         val dcmProjectionActive = dcmDevices.any { it.hasActiveAndroidAutoProjection() }
         if (dcmProjectionActive) rememberAndroidAutoDcmProjectionActive()
@@ -1172,7 +1220,8 @@ object DisplayAppLauncher {
         if (!allowed) {
             Log.w(
                 TAG,
-                "[$reason] Android Auto projection is not ready for visual toggle " +
+                "[$reason] Android Auto projection is not ready for visual toggle after " +
+                        "$ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS attempts " +
                         "linkStatus=${describeAndroidAutoLinkStatus(linkStatus)} " +
                         "dcmDevices=${dcmDevices.joinToString(prefix = "[", postfix = "]")}"
             )
@@ -2339,6 +2388,12 @@ object DisplayAppLauncher {
 
         rememberAndroidAutoDisplayTarget(displayId, reason)
         AndroidAutoPatchManager.ensureMounted()
+        if (displayId == 3 && AndroidAutoPatchManager.ensureAppPatchLoadedForCluster()) {
+            // App estava STOCK (o boot pula o force-stop p/ não escurecer a multimídia) -> no cluster
+            // renderizava preto. Acabamos de force-stopar p/ recarregar o patcheado; espera encerrar
+            // antes de relançar patcheado no cluster logo abaixo.
+            delay(ANDROID_AUTO_FIRST_PROJECTION_VIDEO_SETTLE_MS)
+        }
         configureAndroidAutoProjection(reason)
 
         if (displayId != 0) {

@@ -241,6 +241,13 @@ public class ServiceManager {
     // 8 tentativas x 4s ≈ 28s: o tether (hotspot) pode demorar a subir no boot deste OEM.
     // O loop para assim que o rádio liga, então tentativas extras são de graça p/ o BT (rápido).
     private static final int RADIO_RESTORE_MAX_ATTEMPTS = 8;
+    // Neste OEM getWifiApState() lança/retorna -1, então o estado do hotspot vem do carrier (sysfs).
+    // Cada startTethering reinicia o AP; chamar a cada 4s faz ele piscar. Limitamos os enables e
+    // espaçamos (>=3 ciclos) — o loop só re-checa o carrier e para assim que sobe no ar.
+    private static final int WIFI_RESTORE_MAX_ENABLES = 3;
+    private int wifiRestoreEnableCount = 0;
+    private boolean wifiRestoreRecycled = false;
+    private int wifiRestoreLastEnableAttempt = -100;
     private CarInfo carInfo;
     private IIntelligentVehicleControlService controlService;
     private IVehicle vehicle;
@@ -852,7 +859,7 @@ public class ServiceManager {
         // POWER_OFF), então religar no init funciona independente de quando o app acorda; é no-op se
         // não havia nada a religar, e attemptRestore* já tem retry pro rádio não estar pronto ainda.
         backgroundHandler.postDelayed(this::restoreBluetoothIfWasDisabled, 8000);
-        backgroundHandler.postDelayed(this::restoreWifiTetherIfWasDisabled, 8000);
+        backgroundHandler.postDelayed(() -> restoreWifiTetherIfWasDisabled("init"), 8000);
         backgroundHandler.post(() -> {
             try {
                 ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "settings put global enable_freeform_support 1"});
@@ -1624,16 +1631,6 @@ public class ServiceManager {
         boolean isHvacCommand = hvacKeysToSuspend.contains(key);
         if (!isControlServiceAlive()) {
             Log.e(TAG, "ControlService not initialized");
-            if (isHvacCommand) {
-                logPersistentClusterEvent(
-                        "hvac_update_skipped",
-                        persistentEventDetails(
-                                "key", key,
-                                "value", value,
-                                "reason", "control_service_not_alive"
-                        )
-                );
-            }
             return;
         }
 
@@ -1643,32 +1640,12 @@ public class ServiceManager {
         }
 
         try {
-            if (isHvacCommand) {
-                logPersistentClusterEvent(
-                        "hvac_update_request",
-                        persistentEventDetails(
-                                "key", key,
-                                "value", value
-                        )
-                );
-            }
             controlService.request("cmd.common.request.set", key, value);
             if (isHvacCommand) {
                 publishOptimisticHvacValue(key, value);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error updating data", e);
-            if (isHvacCommand) {
-                logPersistentClusterEvent(
-                        "hvac_update_failed",
-                        persistentEventDetails(
-                                "key", key,
-                                "value", value,
-                                "error", e.getClass().getSimpleName(),
-                                "message", e.getMessage()
-                        )
-                );
-            }
         }
 
         if (shouldSuspend) {
@@ -1681,14 +1658,6 @@ public class ServiceManager {
         if (value != null && value.equals(previous)) {
             return;
         }
-        logPersistentClusterEvent(
-                "hvac_update_optimistic",
-                persistentEventDetails(
-                        "key", key,
-                        "previous", previous,
-                        "value", value
-                )
-        );
         for (IDataChanged listener : new ArrayList<>(dataChangedListeners)) {
             try {
                 listener.onDataChanged(key, value);
@@ -1774,14 +1743,6 @@ public class ServiceManager {
         }
         try {
             if (key.equals(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue())) {
-                // Diag: registra abertura(1)/fechamento(0) da câmera/AVM no log persistente pra
-                // correlacionar com a perda de foco do CarPlay/AA no cluster (câmera abre no D0 ->
-                // projeção fica preta/some no cluster). Sem isso, o cluster-events não tinha a câmera.
-                logPersistentClusterEvent("avm_preview_status", persistentEventDetails(
-                        "value", value,
-                        "carplayOnCluster", DisplayAppLauncher.INSTANCE.isCarPlayOnDisplay(3),
-                        "aaOnCluster", DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3)
-                ));
                 if (DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3)) {
                     Log.w(TAG, "Skipping projection guard for AVM_PREVIEW_STATUS_" + value + " because Android Auto is active on D3");
                     if (value.equals("1")) {
@@ -1903,7 +1864,7 @@ public class ServiceManager {
                     // Religa BT/hotspot que NÓS desligamos (por power-off OU ao recolher retrovisor),
                     // com delay+retry: no power-on o adapter/serviços podem não estar prontos ainda.
                     restoreBluetoothIfWasDisabled();
-                    restoreWifiTetherIfWasDisabled();
+                    restoreWifiTetherIfWasDisabled("power_on");
                     if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                         if (!isMaxAcActive) enableMaxAcOn();
                     }
@@ -2384,18 +2345,42 @@ public class ServiceManager {
     // ---- BT/Hotspot: estado, desligamento com tracking e restauração com retry ----
 
     private boolean currentWifiTetherState() {
+        int st = wifiApStateNumeric();
+        if (st >= 0) {
+            return st == 13; // 13 = WIFI_AP_STATE_ENABLED
+        }
+        return wifiTetherEnabled;
+    }
+
+    // getWifiApState numérico (11=DISABLED, 13=ENABLED, ...), -1 se indisponível.
+    private int wifiApStateNumeric() {
         try {
             WifiManager wifiManager = (WifiManager) App.getContext().getSystemService(Context.WIFI_SERVICE);
             if (wifiManager != null) {
                 Object r = wifiManager.getClass().getMethod("getWifiApState").invoke(wifiManager);
                 if (r instanceof Integer) {
-                    return ((Integer) r) == 13; // 13 = WIFI_AP_STATE_ENABLED
+                    return (Integer) r;
                 }
             }
         } catch (Throwable t) {
             Log.e(TAG, "Error reading Wi-Fi AP state", t);
         }
-        return wifiTetherEnabled;
+        return -1;
+    }
+
+    // Estado real "no ar" do SoftAP pelo sysfs (lido via Shizuku=shell, que consegue ler sysfs_net).
+    // "1"=no ar (beaconando), "0"=iface up mas sem BSS (quebrado/meio-ligado), ""=desconhecido/down.
+    private String softApCarrier() {
+        try {
+            String out = ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c",
+                    "i=$(getprop sys.wifi.softap_interface_name); [ -z \"$i\" ] && i=wlan2; cat /sys/class/net/$i/carrier 2>/dev/null"});
+            if (out != null) {
+                String v = out.trim();
+                if (v.equals("1") || v.equals("0")) return v;
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
     }
 
     // Desliga o BT salvando que estava ligado (p/ religar no próximo power-on). Não sobrescreve um
@@ -2408,7 +2393,10 @@ public class ServiceManager {
     }
 
     private void shutdownWifiTetherForRestore() {
-        if (currentWifiTetherState()) {
+        String carrier = softApCarrier();
+        // Preferir o carrier (real); getWifiApState=-1 neste OEM. Carrier ilegível -> cai no cache.
+        boolean on = "1".equals(carrier) || (carrier.isEmpty() && currentWifiTetherState());
+        if (on) {
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), true).apply();
             disableWifiTether();
         }
@@ -2440,25 +2428,57 @@ public class ServiceManager {
     }
 
     private void restoreWifiTetherIfWasDisabled() {
+        restoreWifiTetherIfWasDisabled("unknown");
+    }
+
+    private void restoreWifiTetherIfWasDisabled(String source) {
         if (sharedPreferences.getBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false)) {
-            attemptRestoreWifiTether(0);
+            wifiRestoreEnableCount = 0;
+            wifiRestoreRecycled = false;
+            wifiRestoreLastEnableAttempt = -100;
+            attemptRestoreWifiTether(0, source);
         }
     }
 
     private void attemptRestoreWifiTether(int attempt) {
+        attemptRestoreWifiTether(attempt, "unknown");
+    }
+
+    // Restauração baseada no CARRIER (getWifiApState=-1 neste OEM). Objetivo: NÃO piscar o AP.
+    // - carrier=1 (no ar): sucesso, para (isto encerra o pisca-pisca que o vc7130 causava).
+    // - carrier=0 (up sem BSS/quebrado): derruba UMA vez p/ religar limpo.
+    // - carrier vazio (desligado): liga, no MÁXIMO WIFI_RESTORE_MAX_ENABLES vezes e espaçado (>=3 ciclos);
+    //   entre um enable e outro só re-checa o carrier (poll barato), sem re-emitir startTethering.
+    private void attemptRestoreWifiTether(int attempt, String source) {
         if (!sharedPreferences.getBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false)) {
-            return;
+            return; // flag limpa por outra restauração / sucesso
         }
         if (carPoweredOff) {
-            return;
+            return; // carro desligou no meio: mantém a intenção p/ o próximo power-on
         }
-        if (currentWifiTetherState()) {
+        String carrier = softApCarrier();
+
+        if ("1".equals(carrier)) {
+            // No ar de verdade -> sucesso. Para de mexer (fim do pisca-pisca).
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false).apply();
             return;
         }
-        enableWifiTether();
+
+        if ("0".equals(carrier) && !wifiRestoreRecycled) {
+            // "Ligado" mas sem BSS no ar (falha de HAL) -> derruba UMA vez; o próximo ciclo religa limpo.
+            wifiRestoreRecycled = true;
+            disableWifiTether();
+        } else if (wifiRestoreEnableCount < WIFI_RESTORE_MAX_ENABLES
+                && attempt - wifiRestoreLastEnableAttempt >= 3) {
+            // Desligado -> liga (poucas vezes, espaçado, p/ não reiniciar o AP em loop).
+            wifiRestoreEnableCount++;
+            wifiRestoreLastEnableAttempt = attempt;
+            enableWifiTether();
+        }
+        // senão: só poll (espera o carrier subir), sem re-emitir comando.
+
         if (attempt + 1 < RADIO_RESTORE_MAX_ATTEMPTS) {
-            backgroundHandler.postDelayed(() -> attemptRestoreWifiTether(attempt + 1), RADIO_RESTORE_RETRY_MS);
+            backgroundHandler.postDelayed(() -> attemptRestoreWifiTether(attempt + 1, source), RADIO_RESTORE_RETRY_MS);
         } else {
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false).apply();
         }

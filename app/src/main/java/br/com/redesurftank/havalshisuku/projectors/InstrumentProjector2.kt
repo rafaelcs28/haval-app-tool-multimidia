@@ -113,6 +113,10 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private var lastProjectionPreparingD3: Boolean? = null
     private var lastHealthyCarPlayD3AtMs = 0L
     private var lastCarPlayD3HoldLogAtMs = 0L
+    // Recência própria do mirror de projeção (Android Auto aparece como projection mirror, NÃO como
+    // CarPlay). Antes o hold do mirror usava lastHealthyCarPlayD3AtMs, que só é setado p/ CarPlay —
+    // então o falso-negativo do watchdog no AA não era segurado e o tema piscava (velocímetro ~5s).
+    private var lastHealthyProjectionMirrorD3AtMs = 0L
     private var lastProjectionVisibilityLog = ""
     private var lastProjectionDomDiagnosticAt = 0L
     private var lastPerfHeartbeatLogAtMs = 0L
@@ -208,10 +212,21 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                         SharedPreferencesKeys.TRIP_CONSISTENCY_CLUSTER_SCORE.key,
                                         SharedPreferencesKeys
                                                 .ENABLE_INSTRUMENT_ODOMETER_AND_REVISION
+                                                .key,
+                                        SharedPreferencesKeys
+                                                .HIDE_CLUSTER_SPEED_DURING_PROJECTION
                                                 .key
                                 )
                 ) {
                     ensureUi {
+
+                        if (key ==
+                                        SharedPreferencesKeys
+                                                .HIDE_CLUSTER_SPEED_DURING_PROJECTION
+                                                .key
+                        ) {
+                            applyHideProjectionClusterSpeed(webView)
+                        }
 
                         if (key == SharedPreferencesKeys.ENABLE_INSTRUMENT_ODOMETER_AND_REVISION.key
                         ) {
@@ -311,30 +326,41 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             return true
         }
 
-        return shouldHoldCarPlayD3State(now)
+        return shouldHoldD3State(lastHealthyCarPlayD3AtMs, now, "CARPLAY")
     }
 
     private fun isProjectionMirrorInDash(): Boolean {
+        // isProjectionMirrorOnDisplay(3) inclui o gate de sessão-pronta do AA, que FLAPA por 10-17s
+        // (falso-negativo) mesmo com o AA renderizando no cluster -> estourava o hold de 12s e o tema
+        // piscava (velocímetro). Adicionamos a presença da TASK do AA no display 3 (sinal robusto, sem
+        // o gate de sessão): enquanto a task do AA está no cluster, o mirror é true; some quando ela sai.
         val rawProjectionOnD3 =
                 br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
-                        .isProjectionMirrorOnDisplay(3)
-        if (rawProjectionOnD3) return true
+                        .isProjectionMirrorOnDisplay(3) ||
+                        br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
+                                .isAndroidAutoVisualTaskOnDisplay(3)
+        val now = SystemClock.elapsedRealtime()
+        if (rawProjectionOnD3) {
+            lastHealthyProjectionMirrorD3AtMs = now
+            return true
+        }
 
-        return shouldHoldCarPlayD3State(SystemClock.elapsedRealtime())
+        // Segura pela recência do PRÓPRIO mirror (cobre transientes curtos; o principal já é a task acima).
+        return shouldHoldD3State(lastHealthyProjectionMirrorD3AtMs, now, "MIRROR")
     }
 
     private fun isProjectionPreparingD3(): Boolean {
         return br.com.redesurftank.havalshisuku.managers.CarPlayDisplayOrchestrator.isPreparingD3()
     }
 
-    private fun shouldHoldCarPlayD3State(now: Long): Boolean {
+    private fun shouldHoldD3State(healthyAtMs: Long, now: Long, tag: String): Boolean {
         val desiredCluster =
                 br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
                         .isCarPlayDesiredOnCluster()
         val preparingD3 = isProjectionPreparingD3()
         val shouldHold =
                 ProjectionD3StateHoldPolicy.shouldHoldCarPlayInDash(
-                        lastHealthyCarPlayD3AtMs,
+                        healthyAtMs,
                         now,
                         desiredCluster,
                         preparingD3,
@@ -343,9 +369,18 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         if (shouldHold && now - lastCarPlayD3HoldLogAtMs > 2_000L) {
             Log.w(
                     TAG,
-                    "[PROJECTION_D3_STATE_HOLD] Keeping Mapa active after transient D3 proof loss; " +
-                            "lastHealthyAgoMs=${now - lastHealthyCarPlayD3AtMs} " +
+                    "[PROJECTION_D3_STATE_HOLD:$tag] Keeping projection active after transient D3 proof loss; " +
+                            "lastHealthyAgoMs=${now - healthyAtMs} " +
                             "desiredCluster=$desiredCluster preparingD3=$preparingD3"
+            )
+            ClusterPersistentEventLogger.log(
+                    "projection_d3_hold",
+                    mapOf(
+                            "tag" to tag,
+                            "lastHealthyAgoMs" to (now - healthyAtMs),
+                            "desiredCluster" to desiredCluster,
+                            "preparingD3" to preparingD3
+                    )
             )
             lastCarPlayD3HoldLogAtMs = now
         }
@@ -584,7 +619,11 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
 
     private fun readProjectionSnapshotForCardChange(): ProjectionSnapshot {
         val projectionPreparingD3 = isProjectionPreparingD3()
-        val heldCarPlayD3 = shouldHoldCarPlayD3State(SystemClock.elapsedRealtime())
+        val heldProjectionD3 = shouldHoldD3State(
+                maxOf(lastHealthyCarPlayD3AtMs, lastHealthyProjectionMirrorD3AtMs),
+                SystemClock.elapsedRealtime(),
+                "SNAPSHOT"
+        )
         val cachedProjectionActive =
                 lastCarPlayInDash == true ||
                         lastProjectionMirrorInDash == true ||
@@ -592,7 +631,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
 
         if (!isAnyAppOnDisplay3 &&
                         !projectionPreparingD3 &&
-                        !heldCarPlayD3 &&
+                        !heldProjectionD3 &&
                         !cachedProjectionActive
         ) {
             return ProjectionSnapshot(
@@ -1323,6 +1362,10 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                             resetProjectionStateCache()
                                             updateVirtualClusterVisibility(reason = "WEBVIEW_PAGE_FINISHED")
 
+                                            // Re-aplica o toggle "ocultar velocidade na projeção"
+                                            // (o <style> é reinjetado após cada carga/recarga de tema).
+                                            applyHideProjectionClusterSpeed(wv)
+
                                             // Inject Heartbeat
                                             wv.evaluateJavascript(
                                                     "setInterval(() => { if (window.Android && window.Android.heartbeat) window.Android.heartbeat(); }, 2000);",
@@ -1891,6 +1934,30 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         } else {
             pendingJsQueues.getOrPut(webView) { mutableListOf() }.add(js)
         }
+    }
+
+    // Toggle "Ocultar velocidade na projeção": injeta/atualiza um <style> no <head> do tema.
+    // A regra esconde o .dashboard-speed-content, que carrega TANTO o número (dashboard-speed-value)
+    // QUANTO o card atrás dele (o background-image do próprio elemento no modo mapa) -> remove os dois
+    // de uma vez. Escopo em #app.theme-mirror-cluster (id+classe = especificidade maior que a regra
+    // display:flex do tema, e a mesma classe-guarda que o tema usa p/ toda a velocidade em projeção),
+    // então o velocímetro normal (fora de projeção) fica intacto. Fica no <head>, sobrevive aos
+    // re-renders do #app e às recargas de tema (é re-chamado no onPageFinished).
+    private fun applyHideProjectionClusterSpeed(view: WebView?) {
+        val hide =
+                preferences.getBoolean(
+                        SharedPreferencesKeys.HIDE_CLUSTER_SPEED_DURING_PROJECTION.key,
+                        false
+                )
+        val rules =
+                if (hide)
+                        "#app.theme-mirror-cluster .dashboard-speed-content{display:none!important}"
+                else ""
+        val js =
+                "(function(){var i='haval-hide-proj-speed';var e=document.getElementById(i);" +
+                        "if(!e){e=document.createElement('style');e.id=i;document.head.appendChild(e);}" +
+                        "e.textContent='" + rules + "';})()"
+        evaluateJsIfReady(view, js)
     }
 
     private fun markWebViewLoading(webView: WebView, reason: String, url: String? = null) {

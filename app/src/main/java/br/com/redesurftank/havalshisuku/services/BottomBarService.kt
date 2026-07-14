@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -788,7 +789,11 @@ class BottomBarService : LifecycleService() {
                         BottomBarState.mediaAlbum = null
                     }
 
-                    if (sourceChanged || trackChanged || update.artwork != null) {
+                    // Só troca a capa em mudança de fonte/faixa ou pra preencher quando está vazia.
+                    // Evita substituir a capa do MESMO track por uma instância nova a cada frame
+                    // (o CarPlay manda um bitmap novo todo update -> Compose recarregava = flicker capa<->ícone).
+                    val artworkWasNull = BottomBarState.mediaArtwork == null
+                    if (sourceChanged || trackChanged || artworkWasNull) {
                         BottomBarState.mediaArtwork = update.artwork
                     }
 
@@ -810,6 +815,11 @@ class BottomBarService : LifecycleService() {
         if (carPlayUsbDisconnectMonitorJob != null) return
         carPlayUsbDisconnectMonitorJob =
                 lifecycleScope.launch(Dispatchers.IO) {
+                    // O /sys/class/android_usb/android0/state OSCILA (CONFIGURED<->outro) com o CarPlay
+                    // conectado e tocando — não é sinal confiável de desconexão. Tratar cada blip como
+                    // "USB desconectou" fazia o card do CarPlay piscar (capa<->ícone) ~1x/s (=POLL_MS).
+                    // Só tratamos como desconexão REAL se o "não pronto" PERSISTIR além da graça.
+                    var lastUsbReadyAtMs = SystemClock.elapsedRealtime()
                     while (isActive) {
                         val rawState = readProjectionUsbState()
                         if (rawState != null) {
@@ -824,19 +834,23 @@ class BottomBarService : LifecycleService() {
                                 )
                                 lastCarPlayUsbReadyState = usbReady
                             }
-                            if (!usbReady) {
+                            if (usbReady) {
+                                lastUsbReadyAtMs = SystemClock.elapsedRealtime()
+                            } else if (SystemClock.elapsedRealtime() - lastUsbReadyAtMs >=
+                                            PROJECTION_USB_DISCONNECT_GRACE_MS
+                            ) {
                                 DisplayAppLauncher
                                         .cleanupStaleAndroidAutoVisualStacksIfDisconnected(
                                                 "projection USB disconnected"
                                         )
                                 withContext(Dispatchers.Main) {
-                                    if (shouldClearCarPlayMediaOnUsbState(
-                                                    BottomBarState.mediaPackageName,
-                                                    rawState
-                                            )
-                                    ) {
-                                        clearCarPlayMediaState("projection USB disconnected")
-                                    }
+                                    // NÃO limpar o CarPlay por este monitor: no CarPlay o carro é USB
+                                    // HOST (o celular é device), então android0/state fica sempre
+                                    // DISCONNECTED mesmo conectado -> isProjectionUsbReadyForMedia é
+                                    // sempre false -> limpava o card a cada poll = flicker capa<->ícone.
+                                    // A desconexão REAL do CarPlay é tratada pelo CarPlayNowPlayingMonitor
+                                    // (frames param -> publishClear debounced). O AA segue protegido pelo
+                                    // guard androidAutoSessionReady abaixo.
                                     if (shouldClearAndroidAutoMediaOnUsbState(
                                                     BottomBarState.mediaPackageName,
                                                     rawState,
@@ -2902,17 +2916,16 @@ class BottomBarService : LifecycleService() {
                 }
     }
 
-    private fun carPlayMediaSignature(title: String?, artist: String?, artworkPath: String?): String? {
+    private fun carPlayMediaSignature(title: String?, artist: String?, @Suppress("UNUSED_PARAMETER") artworkPath: String?): String? {
         val normalizedTitle = title?.trim().orEmpty()
         val normalizedArtist = artist?.trim().orEmpty()
-        val normalizedArtworkPath = artworkPath?.trim().orEmpty()
-        if (normalizedTitle.isBlank() &&
-                        normalizedArtist.isBlank() &&
-                        normalizedArtworkPath.isBlank()
-        ) {
+        // NÃO inclui artworkPath: o CarPlay varia o path da capa a cada frame na MESMA faixa, o que
+        // fazia trackChanged disparar espúrio e a capa ser recriada todo update = flicker capa<->ícone.
+        // Identidade da faixa = title+artist (troca de capa só em troca real de música/fonte).
+        if (normalizedTitle.isBlank() && normalizedArtist.isBlank()) {
             return null
         }
-        return "$normalizedTitle|$normalizedArtist|$normalizedArtworkPath"
+        return "$normalizedTitle|$normalizedArtist"
     }
 
     private fun isCarPlayMediaPackage(packageName: String?): Boolean {
@@ -3711,6 +3724,9 @@ class BottomBarService : LifecycleService() {
         private const val DASHBOARD_CONTROL_FOCUS_SUPPRESS_MS = 1_500L
         private const val PROJECTION_USB_STATE_PATH = "/sys/class/android_usb/android0/state"
         private const val CARPLAY_USB_MEDIA_STATE_POLL_MS = 1_500L
+        // Graça pra tratar "USB não pronto" como desconexão REAL: o android0/state oscila com o
+        // CarPlay conectado (cache de 3s), então precisa persistir bem além disso p/ não piscar o card.
+        private const val PROJECTION_USB_DISCONNECT_GRACE_MS = 6_000L
         private const val PROJECTION_USB_STATE_CACHE_MS = 3_000L
         private const val ANDROID_AUTO_MEDIA_SESSION_READY_CACHE_MS = 1_500L
         private const val NATIVE_AUDIO_MUTE_TOGGLE_ACTION = "2"

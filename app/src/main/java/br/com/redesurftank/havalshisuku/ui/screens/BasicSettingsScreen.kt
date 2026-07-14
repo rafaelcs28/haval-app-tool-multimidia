@@ -423,6 +423,14 @@ fun BasicSettingsTab() {
                         prefs.getFloat(SharedPreferencesKeys.SPEED_ADJUSTMENT_OFFSET.key, 0f)
                 )
         }
+        var hideClusterSpeedDuringProjection by remember {
+                mutableStateOf(
+                        prefs.getBoolean(
+                                SharedPreferencesKeys.HIDE_CLUSTER_SPEED_DURING_PROJECTION.key,
+                                false
+                        )
+                )
+        }
 
         var enableOpenSunroofCurtainOnStart by remember {
                 mutableStateOf(
@@ -2698,6 +2706,23 @@ fun BasicSettingsTab() {
                                 },
                                 sliderLabel =
                                         "Ajuste: ${if (speedAdjustmentOffset > 0) "+" else ""}${speedAdjustmentOffset.toInt()}%"
+                        ),
+                        SettingItem(
+                                title = "Ocultar velocidade na projeção",
+                                description =
+                                        "Remove o número da velocidade e o card atrás dele no cluster enquanto o mapa do CarPlay/Android Auto está projetado",
+                                checked = hideClusterSpeedDuringProjection,
+                                onCheckedChange = {
+                                        hideClusterSpeedDuringProjection = it
+                                        prefs.edit {
+                                                putBoolean(
+                                                        SharedPreferencesKeys
+                                                                .HIDE_CLUSTER_SPEED_DURING_PROJECTION
+                                                                .key,
+                                                        it
+                                                )
+                                        }
+                                }
                         )
                 )
         )
