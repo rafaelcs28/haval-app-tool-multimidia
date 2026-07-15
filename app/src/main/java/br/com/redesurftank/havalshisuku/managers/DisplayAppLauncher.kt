@@ -2479,9 +2479,12 @@ object DisplayAppLauncher {
                     delay(1_200)
                     val refreshedTask = findTaskForPackageOnDisplay(ANDROID_AUTO_PACKAGE, 3)
                     if (refreshedTask != null) {
+                        // 1ª projeção pro cluster (acabou de mover pra cá): força o re-establish, pois a
+                        // surface fica "preta com tamanho válido" e a detecção por dimensão não pega.
                         recoverAndroidAutoClusterSurfaceIfStale(
                             refreshedTask,
-                            "${reason}_POST_START_STALE_SURFACE_GUARD"
+                            "${reason}_POST_START_STALE_SURFACE_GUARD",
+                            force = true
                         )
                     } else {
                         logPersistentEvent(
@@ -2550,10 +2553,15 @@ object DisplayAppLauncher {
 
     private suspend fun recoverAndroidAutoClusterSurfaceIfStale(
         clusterTask: TaskInfo,
-        reason: String
+        reason: String,
+        // force=true: recupera mesmo com buffer de tamanho válido. A detecção por DIMENSÃO (<=1x1) não
+        // pega a surface "preta com tamanho certo" (1920x1088) que ocorre na 1ª projeção pro cluster — o
+        // conteúdo não flui até um re-establish. Só o restart visual (equivalente ao reconnect do usuário)
+        // resolve. O cooldown de 5s abaixo continua valendo, então não fica reiniciando à toa.
+        force: Boolean = false
     ): Boolean {
         val now = System.currentTimeMillis()
-        if (now - lastAndroidAutoSurfaceProbeAt < ANDROID_AUTO_SURFACE_PROBE_COOLDOWN_MS) {
+        if (!force && now - lastAndroidAutoSurfaceProbeAt < ANDROID_AUTO_SURFACE_PROBE_COOLDOWN_MS) {
             logPersistentEvent("aa_cluster_surface", mapOf("reason" to reason, "action" to "skip_probe_cooldown"))
             return false
         }
@@ -2561,18 +2569,17 @@ object DisplayAppLauncher {
 
         val before = inspectAndroidAutoClusterSurfaceBuffer("${reason}_SURFACE_CHECK")
         val stale = isAndroidAutoSurfaceBufferStaleForTest(before)
-        // DIAG (temporário): valor real do buffer da surface do AA no cluster + decisão. Serve pra saber
-        // por que a 1ª projeção fica preta (buffer null=sonda não achou / válido=preto-com-dimensão / ≤1x1=stale).
         logPersistentEvent(
             "aa_cluster_surface",
             mapOf(
                 "reason" to reason,
                 "w" to (before?.first ?: -1),
                 "h" to (before?.second ?: -1),
-                "stale" to stale
+                "stale" to stale,
+                "force" to force
             )
         )
-        if (!stale) {
+        if (!force && !stale) {
             return false
         }
 
@@ -2581,7 +2588,10 @@ object DisplayAppLauncher {
             return false
         }
         lastAndroidAutoSurfaceVisualRestartAt = now
-        logPersistentEvent("aa_cluster_surface", mapOf("reason" to reason, "action" to "visual_restart"))
+        logPersistentEvent(
+            "aa_cluster_surface",
+            mapOf("reason" to reason, "action" to "visual_restart", "force" to force)
+        )
 
         Log.w(
             TAG,
