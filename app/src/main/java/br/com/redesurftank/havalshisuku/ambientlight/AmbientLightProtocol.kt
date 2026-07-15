@@ -68,9 +68,10 @@ object AmbientLightProtocol {
         )
     }
 
-    // DMX endereçado por CANAL/zona: o 2º byte do frame (fixo em 0x00 no comando global) é a
-    // posição do canal. `7B <canal> 07 R G B 00 FF BF`. Canal 0 costuma ser broadcast/todos; 1..N
-    // = zonas físicas (portas, painel, console). Confirmado com o dev que fez a parte BLE.
+    // DMX endereçado por CANAL/zona: o 3º byte do frame (0x07 no comando global = TODOS) é a posição
+    // do canal. `7B 00 <canal> R G B 00 FF BF`. 0x07 = broadcast/todos; 1..6 = zonas físicas (portas,
+    // painel, console). (A tentativa anterior de usar o 2º byte falhou — tudo acendia junto, pois o 3º
+    // byte ficava em 07=todos; o dev disse "muda o número e mais à frente vai a cor" = o byte antes da cor.)
     fun setDmxRgbPayloadForChannel(
         channel: Int,
         r: Int,
@@ -81,8 +82,8 @@ object AmbientLightProtocol {
         val color = colorOrder.apply(LedColor(r, g, b))
         return byteArrayOf(
             0x7B.toByte(),
+            0x00.toByte(),
             (channel and 0xFF).toByte(),
-            0x07.toByte(),
             color.r.toByte(),
             color.g.toByte(),
             color.b.toByte(),
@@ -100,9 +101,9 @@ object AmbientLightProtocol {
         colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
     ): String = bytesToHex(setDmxRgbPayloadForChannel(channel, r, g, b, colorOrder))
 
-    // Efeito nativo do controlador POR CANAL: `7B <canal> 07 R G B <modo> <velocidade> BF`. É o mesmo
-    // frame de custom-effect, mas com o canal no 2º byte. Serve pra testar se o controlador tem um modo
-    // de "varredura/flow" endereçável por canal (necessário pro efeito do cinto).
+    // Efeito nativo do controlador POR CANAL: `7B 00 <canal> R G B <modo> <velocidade> BF`. O canal fica
+    // no 3º byte (07 = todos), igual ao frame de cor. Serve pra testar se o controlador tem um modo de
+    // "varredura/flow" endereçável por canal (necessário pro efeito do cinto).
     fun setDmxCustomEffectPayloadForChannel(
         channel: Int,
         r: Int,
@@ -117,8 +118,8 @@ object AmbientLightProtocol {
         val safeSpeed = speed.coerceIn(1, 100)
         return byteArrayOf(
             0x7B.toByte(),
+            0x00.toByte(),
             (channel and 0xFF).toByte(),
-            0x07.toByte(),
             color.r.toByte(),
             color.g.toByte(),
             color.b.toByte(),

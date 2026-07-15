@@ -286,7 +286,7 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
     var effectChannel by remember { mutableStateOf(1) }
     var effectMode by remember { mutableStateOf(1) }
     var effectSpeed by remember { mutableStateOf(50) }
-    var hexDraft by remember { mutableStateOf("7B0107FF000000FFBF") }
+    var hexDraft by remember { mutableStateOf("7B0001FF000000FFBF") }
 
     fun refreshConfig() {
         config = AmbientLightSettings.load()
@@ -621,20 +621,21 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                 OutlinedButton(
                     enabled = ledReady,
                     onClick = {
-                        for (ch in 0 until config.channelCount) {
+                        for (ch in 1..config.channelCount) {
                             sendChannelTest(context, ch, LedColor(0, 0, 0), config)
                         }
                         statusMessage = "Apagando todos os canais"
                     }
                 ) { Text("Apagar todos") }
-                (0 until config.channelCount).forEach { ch ->
+                (0 until config.channelCount).forEach { i ->
+                    val ch = i + 1 // canal DMX é 1-based (1..6 = zonas; 7 = todos)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                "Canal $ch — ${config.zoneMap.getOrElse(ch) { ZonePosition.UNASSIGNED }.label}",
+                                "Canal $ch — ${config.zoneMap.getOrElse(i) { ZonePosition.UNASSIGNED }.label}",
                                 color = AppColors.TextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -650,10 +651,10 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                         }
                         OptionButtonWrap(
                             options = ZonePosition.values().map { it.label to it },
-                            selected = config.zoneMap.getOrElse(ch) { ZonePosition.UNASSIGNED },
+                            selected = config.zoneMap.getOrElse(i) { ZonePosition.UNASSIGNED },
                             enabled = true
                         ) { pos ->
-                            AmbientLightSettings.setZonePosition(ch, pos)
+                            AmbientLightSettings.setZonePosition(i, pos)
                             refreshConfig()
                         }
                     }
@@ -671,7 +672,7 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                     fontSize = 12.sp
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EffectStepper("Canal", effectChannel, 0, AmbientLightSettings.MAX_CHANNELS - 1) {
+                    EffectStepper("Canal", effectChannel, 1, AmbientLightSettings.MAX_CHANNELS) {
                         effectChannel = it
                     }
                     EffectStepper("Modo", effectMode, 0, 255) { effectMode = it }
