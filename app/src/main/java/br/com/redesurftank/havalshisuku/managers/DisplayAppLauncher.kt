@@ -2479,12 +2479,13 @@ object DisplayAppLauncher {
                     delay(1_200)
                     val refreshedTask = findTaskForPackageOnDisplay(ANDROID_AUTO_PACKAGE, 3)
                     if (refreshedTask != null) {
-                        // 1ª projeção pro cluster (acabou de mover pra cá): força o re-establish, pois a
-                        // surface fica "preta com tamanho válido" e a detecção por dimensão não pega.
+                        // NÃO forçar restart aqui: force-stopar o app do AA depois que ele pousou no
+                        // cluster DESTRÓI a surface que o serviço de projeção já vinculou -> surface
+                        // válida mas sem frames = preto (comprovado pelo workflow vs pr-93). Só recupera
+                        // se a surface estiver realmente stale (<=1x1).
                         recoverAndroidAutoClusterSurfaceIfStale(
                             refreshedTask,
-                            "${reason}_POST_START_STALE_SURFACE_GUARD",
-                            force = true
+                            "${reason}_POST_START_STALE_SURFACE_GUARD"
                         )
                     } else {
                         logPersistentEvent(
