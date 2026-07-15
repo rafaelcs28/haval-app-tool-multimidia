@@ -17,6 +17,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 class AmbientLightService : Service() {
@@ -31,10 +33,26 @@ class AmbientLightService : Service() {
     // durante a janela de boot, pra não competir com o Android Auto subindo (ver connectSavedDevice).
     private val serviceStartElapsedMs = SystemClock.elapsedRealtime()
 
+    private var alertListenerRegistered = false
+    private var currentAlertCondition: AutomationCondition? = null
+    private var enabledAlertKeys: Set<String> = emptySet()
+    // Serializa a avaliação de alertas: o listener dispara um coroutine por evento (Dispatchers.IO,
+    // multi-thread) e o evaluateAlerts atravessa suspensões (connectAndWait). Sem isto, dois eventos
+    // (ex.: abrir+fechar porta, ou BSD esq+dir no mesmo burst) corriam e podiam deixar o alerta travado.
+    private val alertMutex = Mutex()
+
     private val driveModeListener =
         IDataChanged { key, value ->
             if (key == CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value) {
                 handleDriveModeChanged(value)
+            }
+        }
+
+    // Motor de automação: uma condição do carro (cinto/ponto cego/porta/ré) -> pisca a fita inteira.
+    private val alertListener =
+        IDataChanged { key, _ ->
+            if (key in enabledAlertKeys) {
+                serviceScope.launch { evaluateAlerts() }
             }
         }
 
@@ -82,6 +100,7 @@ class AmbientLightService : Service() {
             ACTION_APPLY_DRIVE_MODE -> handleDriveModeChanged(intent?.getStringExtra(EXTRA_DRIVE_MODE))
             else -> {
                 updateDriveModeListener(settings)
+                updateAlertListener(settings)
                 cacheCurrentDriveMode(settings)
                 connectSavedDevice(settings, applyModeAfterConnect = true)
             }
@@ -92,6 +111,7 @@ class AmbientLightService : Service() {
 
     override fun onDestroy() {
         unregisterDriveModeListener()
+        unregisterAlertListener()
         stopMusicEffects()
         animationController.cancel()
         controller.disconnect()
@@ -130,14 +150,15 @@ class AmbientLightService : Service() {
             val wasConnected = controller.isConnectedTo(address)
             if (connectAndWait(address, settings.autoReconnect)) {
                 controller.setBrightness(settings.brightnessPercent, settings.output)
-                if (settings.musicAnimationEnabled) {
-                    return@launch
+                if (!settings.musicAnimationEnabled) {
+                    if (!wasConnected && settings.animationsEnabled) {
+                        animationController.welcomeAnimation(currentDriveMode)
+                    } else if (applyModeAfterConnect && settings.syncDriveMode) {
+                        animationController.applyDriveMode(currentDriveMode)
+                    }
                 }
-                if (!wasConnected && settings.animationsEnabled) {
-                    animationController.welcomeAnimation(currentDriveMode)
-                } else if (applyModeAfterConnect && settings.syncDriveMode) {
-                    animationController.applyDriveMode(currentDriveMode)
-                }
+                // Se uma condição de alerta já está ativa ao conectar, o alerta assume a fita.
+                evaluateAlerts()
             }
         }
     }
@@ -259,6 +280,8 @@ class AmbientLightService : Service() {
         val mode = AmbientLightDriveModeMapper.fromRaw(rawValue)
         if (mode == currentDriveMode) return
         currentDriveMode = mode
+        // Um alerta ativo tem prioridade sobre o modo de condução: só guarda o modo p/ restaurar depois.
+        if (currentAlertCondition != null) return
         if (settings.musicAnimationEnabled) {
             Log.i(TAG, "drive mode changed: ${mode.name} music_effect_active")
             return
@@ -268,10 +291,112 @@ class AmbientLightService : Service() {
 
     private fun stopAmbientLight() {
         unregisterDriveModeListener()
+        unregisterAlertListener()
         stopMusicEffects()
         animationController.cancel()
         controller.disconnect()
         stopSelf()
+    }
+
+    private fun updateAlertListener(settings: AmbientLightConfig) {
+        enabledAlertKeys =
+            settings.automationRules
+                .filter { it.enabled }
+                .flatMap { conditionKeys(it.condition) }
+                .toSet()
+        if (enabledAlertKeys.isNotEmpty() && !alertListenerRegistered) {
+            ServiceManager.getInstance().addDataChangedListener(alertListener)
+            alertListenerRegistered = true
+        } else if (enabledAlertKeys.isEmpty()) {
+            unregisterAlertListener()
+        }
+    }
+
+    private fun unregisterAlertListener() {
+        if (!alertListenerRegistered) return
+        ServiceManager.getInstance().removeDataChangedListener(alertListener)
+        alertListenerRegistered = false
+        if (currentAlertCondition != null) {
+            currentAlertCondition = null
+            animationController.cancel()
+        }
+    }
+
+    private fun conditionKeys(cond: AutomationCondition): List<String> =
+        when (cond) {
+            AutomationCondition.NO_SEATBELT -> listOf(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value)
+            AutomationCondition.BLIND_SPOT ->
+                listOf(
+                    CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQLEFT.value,
+                    CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQRIGHT.value
+                )
+            AutomationCondition.DOOR_OPEN -> listOf(CarConstants.CAR_BASIC_DOOR_STATUS.value)
+            AutomationCondition.REVERSE_GEAR -> listOf(CarConstants.CAR_BASIC_GEAR_STATUS.value)
+        }
+
+    private fun isConditionActive(cond: AutomationCondition): Boolean {
+        val sm = ServiceManager.getInstance()
+        return when (cond) {
+            AutomationCondition.NO_SEATBELT ->
+                arrayHasActive(sm.getData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value))
+            AutomationCondition.BLIND_SPOT ->
+                isWarnActive(sm.getData(CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQLEFT.value)) ||
+                    isWarnActive(sm.getData(CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQRIGHT.value))
+            AutomationCondition.DOOR_OPEN ->
+                arrayHasActive(sm.getData(CarConstants.CAR_BASIC_DOOR_STATUS.value))
+            AutomationCondition.REVERSE_GEAR ->
+                sm.getData(CarConstants.CAR_BASIC_GEAR_STATUS.value)?.trim() == "4"
+        }
+    }
+
+    private fun arrayHasActive(value: String?): Boolean =
+        value?.replace("{", "")?.replace("}", "")?.split(",")?.any { it.trim() == "1" } == true
+
+    private fun isWarnActive(value: String?): Boolean {
+        val v = value?.trim() ?: return false
+        return v.isNotEmpty() && v != "0" && !v.equals("false", true) && !v.equals("null", true)
+    }
+
+    private suspend fun evaluateAlerts() {
+        alertMutex.withLock {
+            val settings = AmbientLightSettings.load()
+            val address = settings.deviceAddress
+            if (!settings.enabled || address.isNullOrBlank()) return@withLock
+            val active =
+                settings.automationRules
+                    .filter { it.enabled && isConditionActive(it.condition) }
+                    .maxByOrNull { it.priority }
+            if (active != null) {
+                if (currentAlertCondition != active.condition) {
+                    // Conecta ANTES de comitar o estado: se a conexão falhar, currentAlertCondition
+                    // fica intacto e o próximo evento re-tenta (não suprime o alerta permanentemente).
+                    if (connectAndWait(address, settings.autoReconnect)) {
+                        stopMusicEffects()
+                        animationController.startAlert(active)
+                        currentAlertCondition = active.condition
+                        Log.i(TAG, "alert ON: ${active.condition.name} (${active.effect.name})")
+                    }
+                }
+            } else if (currentAlertCondition != null) {
+                Log.i(TAG, "alert OFF: ${currentAlertCondition?.name}")
+                currentAlertCondition = null
+                animationController.cancel()
+                restoreBaseAmbient(settings)
+            }
+        }
+    }
+
+    private fun restoreBaseAmbient(settings: AmbientLightConfig) {
+        when {
+            settings.musicAnimationEnabled -> startSelectedMusicEffect(settings)
+            settings.syncDriveMode -> animationController.applyDriveMode(currentDriveMode)
+            else -> {
+                val base = musicBaseColor()
+                controller.setRgbAsync(
+                    base.r, base.g, base.b, settings.colorOrder, settings.bleColorOrder, settings.output
+                )
+            }
+        }
     }
 
     private fun startSelectedMusicEffect(settings: AmbientLightConfig) {

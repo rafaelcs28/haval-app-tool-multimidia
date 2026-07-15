@@ -360,6 +360,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "ambientLightZoneMap",
             "Mapa canal->zona do Ambient Light (posições por canal, CSV)"
     ),
+    AMBIENT_LIGHT_AUTOMATION_RULES(
+            "ambientLightAutomationRules",
+            "Regras de automação do Ambient Light (condição->cor/efeito, JSON)"
+    ),
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),

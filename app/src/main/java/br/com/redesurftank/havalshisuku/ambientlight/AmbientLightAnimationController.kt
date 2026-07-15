@@ -70,8 +70,39 @@ class AmbientLightAnimationController(
             }
     }
 
-    fun triggerAlertAnimation() {
-        Log.i(TAG, "animation: ALERT_PLACEHOLDER")
+    // Alerta de automação (condição do carro -> cor/efeito na fita INTEIRA). Roda até cancel() (quando
+    // a condição sai). O hardware só faz a fita toda junto, então o alerta é global (07=todos).
+    fun startAlert(rule: AmbientLightAutomationRule) {
+        animationJob?.cancel()
+        val color = rule.color()
+        animationJob =
+            scope.launch {
+                Log.i(TAG, "animation: ALERT ${rule.condition.name} ${rule.effect.name} ${rule.periodMs}ms")
+                when (rule.effect) {
+                    AlertEffect.SOLID -> {
+                        sendColor(color)
+                        currentColor = color
+                    }
+                    AlertEffect.BLINK -> {
+                        val half = (rule.periodMs / 2).coerceAtLeast(100).toLong()
+                        // isActive = do PRÓPRIO job (não do scope do serviço) -> cancel() encerra na hora.
+                        while (isActive) {
+                            sendColor(color)
+                            delay(half)
+                            sendColor(OFF)
+                            delay(half)
+                        }
+                    }
+                    AlertEffect.PULSE -> {
+                        val low = LedColor(color.r / 5, color.g / 5, color.b / 5)
+                        while (isActive) {
+                            fadeToColor(low, color)
+                            fadeToColor(color, low)
+                        }
+                    }
+                }
+                currentColor = color
+            }
     }
 
     fun cancel() {
@@ -134,6 +165,7 @@ class AmbientLightAnimationController(
 
     companion object {
         private const val TAG = "AmbientLight"
+        private val OFF = LedColor(0, 0, 0)
         private const val FADE_STEPS = 20
         private const val FADE_DELAY_MS = 30L
         private const val SPORT_PULSE_MS = 3_000L

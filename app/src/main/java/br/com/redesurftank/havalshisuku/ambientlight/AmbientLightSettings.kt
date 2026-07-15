@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import br.com.redesurftank.havalshisuku.ui.components.AppColors
 import br.com.redesurftank.havalshisuku.ui.components.StyledCard
 import kotlin.math.roundToInt
@@ -72,7 +74,8 @@ data class AmbientLightConfig(
     val output: AmbientLightOutput,
     val autoReconnect: Boolean,
     val channelCount: Int,
-    val zoneMap: List<ZonePosition>
+    val zoneMap: List<ZonePosition>,
+    val automationRules: List<AmbientLightAutomationRule>
 )
 
 object AmbientLightSettings {
@@ -140,8 +143,41 @@ object AmbientLightSettings {
                 parseZoneMap(
                     prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_ZONE_MAP.key, null),
                     channelCount
-                )
+                ),
+            automationRules = loadAutomationRules(prefs)
         )
+    }
+
+    private val gson = Gson()
+
+    private fun loadAutomationRules(
+        prefs: android.content.SharedPreferences
+    ): List<AmbientLightAutomationRule> {
+        val json = prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key, null)
+            ?: return AmbientLightAutomationRule.defaults()
+        return runCatching {
+            val type = object : TypeToken<List<AmbientLightAutomationRule>>() {}.type
+            // Gson pode desserializar um enum Kotlin não-nulo como null (valor desconhecido no JSON
+            // antigo/corrompido). Descarta regras sem condition/effect pra não dar NPE na UI/motor.
+            gson.fromJson<List<AmbientLightAutomationRule>>(json, type)
+                ?.filter { it.condition != null && it.effect != null }
+                ?.takeIf { it.isNotEmpty() }
+                ?: AmbientLightAutomationRule.defaults()
+        }.getOrElse { AmbientLightAutomationRule.defaults() }
+    }
+
+    fun saveAutomationRules(rules: List<AmbientLightAutomationRule>) {
+        prefs()
+            .edit()
+            .putString(SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key, gson.toJson(rules))
+            .apply()
+    }
+
+    fun updateAutomationRule(rule: AmbientLightAutomationRule) {
+        val current = load().automationRules.toMutableList()
+        val idx = current.indexOfFirst { it.condition == rule.condition }
+        if (idx >= 0) current[idx] = rule else current.add(rule)
+        saveAutomationRules(current)
     }
 
     private fun parseZoneMap(csv: String?, count: Int): List<ZonePosition> {
@@ -290,6 +326,12 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
 
     fun refreshConfig() {
         config = AmbientLightSettings.load()
+    }
+
+    fun saveRule(rule: AmbientLightAutomationRule) {
+        AmbientLightSettings.updateAutomationRule(rule)
+        refreshConfig()
+        AmbientLightService.startIfEnabled(context)
     }
 
     fun startBleScan() {
@@ -705,6 +747,90 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                         statusMessage = "Enviando hex: ${hexDraft.trim()}"
                     }
                 ) { Text("Enviar hex") }
+            }
+        }
+
+        StyledCard {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    "Alertas por condição",
+                    color = AppColors.TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Quando a condição do carro acontece, a fita INTEIRA pisca a cor/efeito escolhido " +
+                        "(o hardware não separa por porta). Sai do alerta e volta ao normal quando a condição passa.",
+                    color = AppColors.TextSecondary,
+                    fontSize = 13.sp
+                )
+                config.automationRules.forEach { rule ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingSwitchRow(
+                            title = rule.condition.label,
+                            description =
+                                if (rule.enabled)
+                                    "Ligado — ${rule.effect.label.lowercase()}" +
+                                        (if (rule.effect != AlertEffect.SOLID) " (${rule.periodMs}ms)" else "")
+                                else "Desligado",
+                            checked = rule.enabled,
+                            onCheckedChange = { on -> saveRule(rule.copy(enabled = on)) }
+                        )
+                        if (rule.enabled) {
+                            ColorButtonRow(
+                                listOf(
+                                    "Vermelho" to AmbientLightProtocol.RED,
+                                    "Âmbar" to AmbientLightProtocol.ORANGE,
+                                    "Branco" to AmbientLightProtocol.WHITE,
+                                    "Azul" to AmbientLightProtocol.ICE_BLUE
+                                ),
+                                enabled = true
+                            ) { c -> saveRule(rule.copy(r = c.r, g = c.g, b = c.b)) }
+                            OptionButtonWrap(
+                                options = AlertEffect.values().map { it.label to it },
+                                selected = rule.effect,
+                                enabled = true
+                            ) { e -> saveRule(rule.copy(effect = e)) }
+                            if (rule.effect != AlertEffect.SOLID) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        "Velocidade: ${rule.periodMs}ms",
+                                        color = AppColors.TextPrimary,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedButton(
+                                        enabled = rule.periodMs > AmbientLightAutomationRule.MIN_PERIOD_MS,
+                                        onClick = {
+                                            saveRule(
+                                                rule.copy(
+                                                    periodMs =
+                                                        (rule.periodMs - 100)
+                                                            .coerceAtLeast(AmbientLightAutomationRule.MIN_PERIOD_MS)
+                                                )
+                                            )
+                                        }
+                                    ) { Text("−") }
+                                    OutlinedButton(
+                                        enabled = rule.periodMs < AmbientLightAutomationRule.MAX_PERIOD_MS,
+                                        onClick = {
+                                            saveRule(
+                                                rule.copy(
+                                                    periodMs =
+                                                        (rule.periodMs + 100)
+                                                            .coerceAtMost(AmbientLightAutomationRule.MAX_PERIOD_MS)
+                                                )
+                                            )
+                                        }
+                                    ) { Text("+") }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
