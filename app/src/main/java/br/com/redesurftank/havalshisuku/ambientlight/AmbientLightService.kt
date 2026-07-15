@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import br.com.redesurftank.havalshisuku.listeners.IDataChanged
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
@@ -12,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -25,6 +27,9 @@ class AmbientLightService : Service() {
     private lateinit var albumWaveMusicController: AlbumWaveMusicController
     private var driveModeListenerRegistered = false
     private var currentDriveMode = DriveMode.UNKNOWN
+    // Marca ~o boot: o serviço sobe cedo (ForegroundService). Usado pra adiar a conexão BLE do LED
+    // durante a janela de boot, pra não competir com o Android Auto subindo (ver connectSavedDevice).
+    private val serviceStartElapsedMs = SystemClock.elapsedRealtime()
 
     private val driveModeListener =
         IDataChanged { key, value ->
@@ -108,6 +113,13 @@ class AmbientLightService : Service() {
             return
         }
         serviceScope.launch {
+            // No auto-start do boot, ESPERA o Android Auto assentar antes de mexer no BLE. Conectar o
+            // LED cedo (junto com o boot do AA) satura o rádio BT compartilhado e deixa o AA lento / com
+            // tela preta no cluster. Ações explícitas do usuário (CONNECT/TEST) não passam por aqui.
+            if (applyModeAfterConnect) {
+                awaitAndroidAutoBootSettle()
+            }
+
             if (settings.musicAnimationEnabled) {
                 animationController.cancel()
                 startSelectedMusicEffect(settings)
@@ -127,6 +139,27 @@ class AmbientLightService : Service() {
                     animationController.applyDriveMode(currentDriveMode)
                 }
             }
+        }
+    }
+
+    private suspend fun awaitAndroidAutoBootSettle() {
+        // 1) Janela mínima de assentamento do boot — deixa o Android Auto subir e projetar primeiro.
+        val bootRemaining = AMBIENT_BOOT_SETTLE_MS - (SystemClock.elapsedRealtime() - serviceStartElapsedMs)
+        if (bootRemaining > 0) {
+            Log.i(TAG, "ambient BLE connect deferred ${bootRemaining}ms (boot settle)")
+            delay(bootRemaining)
+        }
+        // 2) Se o AA ainda está projetando/subindo, espera sair da janela crítica (com teto de segurança).
+        val deferStart = SystemClock.elapsedRealtime()
+        while (SystemClock.elapsedRealtime() - deferStart < AMBIENT_AA_BUSY_DEFER_CAP_MS) {
+            val aaBusy =
+                runCatching {
+                    br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
+                        .hasAndroidAutoVisualTaskAnywhere()
+                }.getOrDefault(false)
+            if (!aaBusy) break
+            Log.i(TAG, "ambient BLE connect deferred (Android Auto projecting)")
+            delay(AMBIENT_AA_BUSY_POLL_MS)
         }
     }
 
@@ -277,6 +310,10 @@ class AmbientLightService : Service() {
     companion object {
         private const val TAG = "AmbientLight"
         private const val CONNECT_TIMEOUT_MS = 7_000L
+        // Adia a conexão BLE do LED no boot pra não competir com o Android Auto subindo.
+        private const val AMBIENT_BOOT_SETTLE_MS = 40_000L
+        private const val AMBIENT_AA_BUSY_DEFER_CAP_MS = 60_000L
+        private const val AMBIENT_AA_BUSY_POLL_MS = 5_000L
         private const val ACTION_START = "br.com.redesurftank.havalshisuku.ambientlight.START"
         private const val ACTION_STOP = "br.com.redesurftank.havalshisuku.ambientlight.STOP"
         private const val ACTION_CONNECT = "br.com.redesurftank.havalshisuku.ambientlight.CONNECT"

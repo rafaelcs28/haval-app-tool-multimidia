@@ -372,11 +372,14 @@ class AmbientLightBleController private constructor(context: Context) {
         if (reconnectJob?.isActive == true) return
 
         reconnectAttempt += 1
+        // Backoff que ESTABILIZA num intervalo longo: se o LED some (comum no boot / fora de alcance),
+        // não pode ficar martelando connectGatt no rádio BT compartilhado (atrapalha o Android Auto).
         val delayMs = when {
             reconnectAttempt <= 1 -> 1_000L
             reconnectAttempt == 2 -> 2_000L
             reconnectAttempt == 3 -> 5_000L
-            else -> 10_000L
+            reconnectAttempt <= 6 -> 15_000L
+            else -> 60_000L
         }
         _state.value = AmbientLightConnectionState.Reconnecting(reconnectAttempt, delayMs)
         reconnectJob =
