@@ -2483,6 +2483,11 @@ object DisplayAppLauncher {
                             refreshedTask,
                             "${reason}_POST_START_STALE_SURFACE_GUARD"
                         )
+                    } else {
+                        logPersistentEvent(
+                            "aa_cluster_surface",
+                            mapOf("reason" to "${reason}_POST_START", "action" to "no_d3_task")
+                        )
                     }
                 }
             }
@@ -2549,25 +2554,34 @@ object DisplayAppLauncher {
     ): Boolean {
         val now = System.currentTimeMillis()
         if (now - lastAndroidAutoSurfaceProbeAt < ANDROID_AUTO_SURFACE_PROBE_COOLDOWN_MS) {
-            Log.w(TAG, "[$reason] Skipping Android Auto D3 Surface probe because cooldown is active")
+            logPersistentEvent("aa_cluster_surface", mapOf("reason" to reason, "action" to "skip_probe_cooldown"))
             return false
         }
         lastAndroidAutoSurfaceProbeAt = now
 
         val before = inspectAndroidAutoClusterSurfaceBuffer("${reason}_SURFACE_CHECK")
-        if (!isAndroidAutoSurfaceBufferStaleForTest(before)) {
-            Log.w(
-                TAG,
-                "[$reason] Android Auto live on D3 stack ${clusterTask.stackId}; Surface buffer is not stale"
+        val stale = isAndroidAutoSurfaceBufferStaleForTest(before)
+        // DIAG (temporário): valor real do buffer da surface do AA no cluster + decisão. Serve pra saber
+        // por que a 1ª projeção fica preta (buffer null=sonda não achou / válido=preto-com-dimensão / ≤1x1=stale).
+        logPersistentEvent(
+            "aa_cluster_surface",
+            mapOf(
+                "reason" to reason,
+                "w" to (before?.first ?: -1),
+                "h" to (before?.second ?: -1),
+                "stale" to stale
             )
+        )
+        if (!stale) {
             return false
         }
 
         if (now - lastAndroidAutoSurfaceVisualRestartAt < ANDROID_AUTO_SURFACE_VISUAL_RESTART_COOLDOWN_MS) {
-            Log.w(TAG, "[$reason] Skipping Android Auto visual restart because cooldown is active")
+            logPersistentEvent("aa_cluster_surface", mapOf("reason" to reason, "action" to "skip_restart_cooldown"))
             return false
         }
         lastAndroidAutoSurfaceVisualRestartAt = now
+        logPersistentEvent("aa_cluster_surface", mapOf("reason" to reason, "action" to "visual_restart"))
 
         Log.w(
             TAG,
