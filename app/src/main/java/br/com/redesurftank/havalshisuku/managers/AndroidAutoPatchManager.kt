@@ -224,6 +224,14 @@ object AndroidAutoPatchManager {
             sh("[ -d '$VENDOR_APP_OAT' ] && mount --bind '$PATCH_DIR/empty_oat' '$VENDOR_APP_OAT' || true")
 
             sh("rm -f /data/dalvik-cache/arm64/*AndroidAutoApp* 2>/dev/null || true")
+            // Recompila o host patcheado em AOT (speed) ANTES de qualquer force-stop. CRÍTICO: como o
+            // oat de fábrica está sombreado (mount vazio) e o dalvik-cache foi limpo, sem isto o
+            // relançamento do host roda 100% INTERPRETADO/JIT — o que prende o SoC fraco e deixa a
+            // projeção (cluster+multimídia) e o sistema inteiro LENTOS a sessão inteira (cliques/GPS/
+            // render). Compilar aqui (escreve no dalvik-cache) garante que o relançamento — no boot OU no
+            // reload do cluster — use o oat compilado (rápido). Best-effort (|| true) e 1x por boot.
+            Log.w(TAG, "Compiling patched Android Auto host to AOT (speed) to avoid interpreted/slow relaunch")
+            sh("cmd package compile -f -m speed $APP_PACKAGE || true")
             // Se o AA já está projetando (ex.: ligar o carro com o celular cabeado — o host sobe antes
             // do nosso app), um force-stop aqui MATA a sessão em andamento e a tela fica preta (o usuário
             // tinha que tirar/plugar o cabo). O patch já está montado no arquivo; o processo em execução
