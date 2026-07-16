@@ -160,6 +160,8 @@ dependencies {
     annotationProcessor(libs.annotation.processor)
     compileOnly(libs.annotation)
     testImplementation(libs.junit)
+    // org.json real p/ testes JVM (o android.jar de unit test é stub e retornaria null/throw).
+    testImplementation("org.json:json:20240303")
     debugImplementation(libs.ui.tooling)
     debugImplementation(libs.ui.test.manifest)
 }

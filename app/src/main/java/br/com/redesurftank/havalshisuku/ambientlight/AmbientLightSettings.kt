@@ -49,8 +49,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import br.com.redesurftank.havalshisuku.ui.components.AppColors
 import br.com.redesurftank.havalshisuku.ui.components.StyledCard
 import kotlin.math.roundToInt
@@ -75,7 +73,11 @@ data class AmbientLightConfig(
     val autoReconnect: Boolean,
     val channelCount: Int,
     val zoneMap: List<ZonePosition>,
-    val automationRules: List<AmbientLightAutomationRule>
+    val automationRules: List<AmbientLightAutomationRule>,
+    // Cor padrão de repouso: pra onde a fita volta quando nada mais está ativo
+    // (fim de alerta, efeito de música desligado, conexão sem modo). Escolhida pelo usuário.
+    val idleColorEnabled: Boolean,
+    val idleColor: LedColor
 )
 
 object AmbientLightSettings {
@@ -144,32 +146,61 @@ object AmbientLightSettings {
                     prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_ZONE_MAP.key, null),
                     channelCount
                 ),
-            automationRules = loadAutomationRules(prefs)
+            automationRules = loadAutomationRules(prefs),
+            idleColorEnabled =
+                prefs.getBoolean(SharedPreferencesKeys.AMBIENT_LIGHT_IDLE_ENABLED.key, false),
+            idleColor =
+                parseIdleColor(prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_IDLE_COLOR.key, null))
         )
     }
 
-    private val gson = Gson()
+    // "r,g,b" -> LedColor; qualquer coisa ilegível cai no azul suave (nunca lança).
+    private fun parseIdleColor(csv: String?): LedColor {
+        val parts = csv?.split(",")?.mapNotNull { it.trim().toIntOrNull() }
+        return if (parts != null && parts.size == 3) {
+            LedColor(parts[0], parts[1], parts[2]).coerce()
+        } else {
+            AmbientLightProtocol.SOFT_BLUE
+        }
+    }
+
+    fun setIdleColorEnabled(enabled: Boolean) {
+        prefs().edit().putBoolean(SharedPreferencesKeys.AMBIENT_LIGHT_IDLE_ENABLED.key, enabled).apply()
+    }
+
+    fun setIdleColor(color: LedColor) {
+        val c = color.coerce()
+        prefs()
+            .edit()
+            .putString(SharedPreferencesKeys.AMBIENT_LIGHT_IDLE_COLOR.key, "${c.r},${c.g},${c.b}")
+            .apply()
+    }
 
     private fun loadAutomationRules(
         prefs: android.content.SharedPreferences
     ): List<AmbientLightAutomationRule> {
-        val json = prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key, null)
-            ?: return AmbientLightAutomationRule.defaults()
-        return runCatching {
-            val type = object : TypeToken<List<AmbientLightAutomationRule>>() {}.type
-            // Gson pode desserializar um enum Kotlin não-nulo como null (valor desconhecido no JSON
-            // antigo/corrompido). Descarta regras sem condition/effect pra não dar NPE na UI/motor.
-            gson.fromJson<List<AmbientLightAutomationRule>>(json, type)
-                ?.filter { it.condition != null && it.effect != null }
-                ?.takeIf { it.isNotEmpty() }
-                ?: AmbientLightAutomationRule.defaults()
-        }.getOrElse { AmbientLightAutomationRule.defaults() }
+        // Parse MANUAL e tolerante (nunca lança; regra ilegível é descartada). O Gson reflexivo
+        // quebrava entre builds: o R8 renomeia campos/constantes de enum a cada build e o JSON
+        // salvo pelo build anterior desserializava com enum NULO em campo não-nulo -> crash na
+        // página (rule.condition.label) e no motor (coroutine do cinto derrubava o app).
+        val stored =
+            AmbientLightAutomationRule.fromJsonArray(
+                prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key, null)
+            ) ?: return AmbientLightAutomationRule.defaults()
+        // Condições novas (que não existiam quando o usuário salvou) entram com o default de fábrica.
+        val missing =
+            AmbientLightAutomationRule.defaults()
+                .filter { d -> stored.none { it.condition == d.condition } }
+        return stored + missing
     }
 
     fun saveAutomationRules(rules: List<AmbientLightAutomationRule>) {
         prefs()
             .edit()
-            .putString(SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key, gson.toJson(rules))
+            .putString(
+                SharedPreferencesKeys.AMBIENT_LIGHT_AUTOMATION_RULES.key,
+                AmbientLightAutomationRule.toJsonArray(rules)
+            )
             .apply()
     }
 
@@ -791,6 +822,12 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                                 selected = rule.effect,
                                 enabled = true
                             ) { e -> saveRule(rule.copy(effect = e)) }
+                            SettingSwitchRow(
+                                title = "Só com o carro parado",
+                                description = "Dispara apenas com velocidade 0 — ex.: aviso antes de abrir a porta.",
+                                checked = rule.onlyWhenStopped,
+                                onCheckedChange = { on -> saveRule(rule.copy(onlyWhenStopped = on)) }
+                            )
                             if (rule.effect != AlertEffect.SOLID) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -828,6 +865,69 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                                     ) { Text("+") }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        StyledCard {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    "Cor padrão (repouso)",
+                    color = AppColors.TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Pra onde a fita volta quando nada está ativo: ao terminar um alerta, ao desligar " +
+                        "o efeito de música/álbum ou ao conectar sem outro modo. Fixa (estática).",
+                    color = AppColors.TextSecondary,
+                    fontSize = 13.sp
+                )
+                SettingSwitchRow(
+                    title = "Usar cor padrão",
+                    description =
+                        if (config.idleColorEnabled)
+                            "Ligado — RGB ${config.idleColor.r}, ${config.idleColor.g}, ${config.idleColor.b}"
+                        else "Desligado — volta pro azul suave ou cor do modo de condução",
+                    checked = config.idleColorEnabled,
+                    onCheckedChange = { on ->
+                        AmbientLightSettings.setIdleColorEnabled(on)
+                        refreshConfig()
+                        // Aplica na hora (se não tem música rodando, senão só fica salvo).
+                        if (on && !config.musicAnimationEnabled) {
+                            sendTestColor(context, AmbientLightSettings.load().idleColor)
+                        }
+                        AmbientLightService.startIfEnabled(context)
+                    }
+                )
+                if (config.idleColorEnabled) {
+                    listOf(
+                        listOf(
+                            "Azul suave" to AmbientLightProtocol.SOFT_BLUE,
+                            "Azul gelo" to AmbientLightProtocol.ICE_BLUE,
+                            "Azul" to AmbientLightProtocol.BLUE
+                        ),
+                        listOf(
+                            "Branco" to AmbientLightProtocol.WHITE,
+                            "Âmbar" to AmbientLightProtocol.ORANGE,
+                            "Roxo" to AmbientLightProtocol.PURPLE
+                        ),
+                        listOf(
+                            "Vermelho" to AmbientLightProtocol.RED,
+                            "Verde" to AmbientLightProtocol.GREEN,
+                            "Amarelo" to AmbientLightProtocol.YELLOW
+                        )
+                    ).forEach { row ->
+                        ColorButtonRow(row, enabled = true) { c ->
+                            AmbientLightSettings.setIdleColor(c)
+                            refreshConfig()
+                            // Preview imediato na fita (não interrompe música se estiver ativa).
+                            if (!config.musicAnimationEnabled) {
+                                sendTestColor(context, c)
+                            }
+                            statusMessage = "Cor padrão: RGB ${c.r}, ${c.g}, ${c.b}"
                         }
                     }
                 }

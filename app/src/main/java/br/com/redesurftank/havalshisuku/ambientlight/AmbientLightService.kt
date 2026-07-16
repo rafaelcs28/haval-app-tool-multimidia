@@ -9,6 +9,8 @@ import android.util.Log
 import br.com.redesurftank.havalshisuku.listeners.IDataChanged
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
 import br.com.redesurftank.havalshisuku.models.CarConstants
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,7 +24,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 class AmbientLightService : Service() {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Handler global: o LED é acessório — exceção não capturada em coroutine (BLE, parse, listener
+    // de dados) derrubaria o APP INTEIRO (cluster, barra, tudo). Aqui ela vira só um log.
+    private val serviceScope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.IO +
+                CoroutineExceptionHandler { _, e -> Log.e(TAG, "coroutine do ambient falhou", e) }
+        )
     private lateinit var controller: AmbientLightBleController
     private lateinit var animationController: AmbientLightAnimationController
     private lateinit var musicVisualizerController: MusicVisualizerController
@@ -49,9 +57,20 @@ class AmbientLightService : Service() {
         }
 
     // Motor de automação: uma condição do carro (cinto/ponto cego/porta/ré) -> pisca a fita inteira.
+    @Volatile
+    private var lastVehicleStopped: Boolean? = null
+
     private val alertListener =
-        IDataChanged { key, _ ->
+        IDataChanged { key, value ->
             if (key in enabledAlertKeys) {
+                if (key == CarConstants.CAR_BASIC_VEHICLE_SPEED.value) {
+                    // Velocidade muda o tempo todo andando: só reavalia quando o estado
+                    // parado/andando FLIPA, ou quando há alerta ativo (pra poder desligá-lo).
+                    val stopped = isVehicleStopped(value)
+                    val flipped = stopped != lastVehicleStopped
+                    lastVehicleStopped = stopped
+                    if (!flipped && currentAlertCondition == null) return@IDataChanged
+                }
                 serviceScope.launch { evaluateAlerts() }
             }
         }
@@ -155,6 +174,15 @@ class AmbientLightService : Service() {
                         animationController.welcomeAnimation(currentDriveMode)
                     } else if (applyModeAfterConnect && settings.syncDriveMode) {
                         animationController.applyDriveMode(currentDriveMode)
+                    } else if (settings.idleColorEnabled && currentAlertCondition == null) {
+                        // Sem música/modo/alerta -> aplica a cor padrão de repouso. Cobre o caso
+                        // "desliguei o efeito do álbum": a fita não fica presa no último frame.
+                        animationController.cancel()
+                        val idle = settings.idleColor
+                        controller.setRgb(
+                            idle.r, idle.g, idle.b,
+                            settings.colorOrder, settings.bleColorOrder, settings.output
+                        )
                     }
                 }
                 // Se uma condição de alerta já está ativa ao conectar, o alerta assume a fita.
@@ -299,11 +327,22 @@ class AmbientLightService : Service() {
     }
 
     private fun updateAlertListener(settings: AmbientLightConfig) {
+        val speedKey = CarConstants.CAR_BASIC_VEHICLE_SPEED.value
+        val hadSpeed = speedKey in enabledAlertKeys
+        val enabledRules = settings.automationRules.filter { it.enabled }
         enabledAlertKeys =
-            settings.automationRules
-                .filter { it.enabled }
-                .flatMap { conditionKeys(it.condition) }
-                .toSet()
+            buildSet {
+                enabledRules.forEach { addAll(conditionKeys(it.condition)) }
+                // Regras "só parado" precisam reavaliar quando o carro anda/para.
+                if (enabledRules.any { it.onlyWhenStopped }) {
+                    add(speedKey)
+                }
+            }
+        // Se a observação de velocidade ligou/desligou, o estado derivado do último evento
+        // não é mais confiável — zera pra cair no fallback (cache) até o próximo evento.
+        if (hadSpeed != (speedKey in enabledAlertKeys)) {
+            lastVehicleStopped = null
+        }
         if (enabledAlertKeys.isNotEmpty() && !alertListenerRegistered) {
             ServiceManager.getInstance().addDataChangedListener(alertListener)
             alertListenerRegistered = true
@@ -316,9 +355,17 @@ class AmbientLightService : Service() {
         if (!alertListenerRegistered) return
         ServiceManager.getInstance().removeDataChangedListener(alertListener)
         alertListenerRegistered = false
-        if (currentAlertCondition != null) {
-            currentAlertCondition = null
-            animationController.cancel()
+        // Limpa o alerta DENTRO do mutex: um evaluateAlerts em voo (suspenso até 7s no connect BLE)
+        // não pode comitar um alerta DEPOIS deste teardown — a fita ficaria piscando pra sempre sem
+        // listener pra desligar. Com o mutex + a re-validação pós-connect do evaluateAlerts, em
+        // qualquer ordem o estado final fica limpo.
+        serviceScope.launch {
+            alertMutex.withLock {
+                if (currentAlertCondition != null) {
+                    currentAlertCondition = null
+                    animationController.cancel()
+                }
+            }
         }
     }
 
@@ -357,32 +404,79 @@ class AmbientLightService : Service() {
         return v.isNotEmpty() && v != "0" && !v.equals("false", true) && !v.equals("null", true)
     }
 
+    // "Parado" = velocidade ~0 (tolerância pra ruído do sensor). Sem leitura confiável -> trata
+    // como ANDANDO (fail-closed: melhor deixar de piscar do que piscar a fita dirigindo).
+    private fun isVehicleStopped(raw: String?): Boolean {
+        val speed = raw?.trim()?.toFloatOrNull() ?: return false
+        return speed <= 0.5f
+    }
+
+    // FONTE FRESCA primeiro: o dataCache do ServiceManager só é atualizado DEPOIS do dispatch dos
+    // listeners, então reler getData aqui devolvia a velocidade ANTIGA na própria avaliação que o
+    // flip disparou (e o filtro de flip engole os eventos seguintes -> decisão errada ficava presa).
+    // lastVehicleStopped é derivado do VALOR DO EVENTO no listener; cache é só fallback (boot/connect).
+    private fun isVehicleStoppedNow(): Boolean =
+        lastVehicleStopped
+            ?: isVehicleStopped(
+                ServiceManager.getInstance().getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
+            )
+
     private suspend fun evaluateAlerts() {
-        alertMutex.withLock {
-            val settings = AmbientLightSettings.load()
-            val address = settings.deviceAddress
-            if (!settings.enabled || address.isNullOrBlank()) return@withLock
-            val active =
-                settings.automationRules
-                    .filter { it.enabled && isConditionActive(it.condition) }
-                    .maxByOrNull { it.priority }
-            if (active != null) {
-                if (currentAlertCondition != active.condition) {
-                    // Conecta ANTES de comitar o estado: se a conexão falhar, currentAlertCondition
-                    // fica intacto e o próximo evento re-tenta (não suprime o alerta permanentemente).
-                    if (connectAndWait(address, settings.autoReconnect)) {
-                        stopMusicEffects()
-                        animationController.startAlert(active)
-                        currentAlertCondition = active.condition
-                        Log.i(TAG, "alert ON: ${active.condition.name} (${active.effect.name})")
+        try {
+            alertMutex.withLock {
+                val settings = AmbientLightSettings.load()
+                val address = settings.deviceAddress
+                if (!settings.enabled || address.isNullOrBlank()) return@withLock
+                val active =
+                    settings.automationRules
+                        .filter {
+                            it.enabled &&
+                                (!it.onlyWhenStopped || isVehicleStoppedNow()) &&
+                                isConditionActive(it.condition)
+                        }
+                        .maxByOrNull { it.priority }
+                if (active != null) {
+                    if (currentAlertCondition != active.condition) {
+                        // Conecta ANTES de comitar o estado: se a conexão falhar, currentAlertCondition
+                        // fica intacto e o próximo evento re-tenta (não suprime o alerta permanentemente).
+                        if (connectAndWait(address, settings.autoReconnect)) {
+                            // RE-VALIDA depois da suspensão (o connect pode levar 7s): o usuário pode
+                            // ter desligado a regra/módulo nesse meio-tempo pela UI (o unregister não
+                            // espera este mutex pra remover o listener). Usa a regra FRESCA (cor/período
+                            // também podem ter mudado).
+                            val fresh = AmbientLightSettings.load()
+                            val freshRule =
+                                if (fresh.enabled && !fresh.deviceAddress.isNullOrBlank()) {
+                                    fresh.automationRules.firstOrNull {
+                                        it.condition == active.condition && it.enabled &&
+                                            (!it.onlyWhenStopped || isVehicleStoppedNow()) &&
+                                            isConditionActive(it.condition)
+                                    }
+                                } else {
+                                    null
+                                }
+                            if (freshRule != null) {
+                                stopMusicEffects()
+                                animationController.startAlert(freshRule)
+                                currentAlertCondition = freshRule.condition
+                                Log.i(TAG, "alert ON: ${freshRule.condition.name} (${freshRule.effect.name})")
+                            } else {
+                                Log.i(TAG, "alert ABORTED: ${active.condition.name} (regra mudou durante o connect)")
+                            }
+                        }
                     }
+                } else if (currentAlertCondition != null) {
+                    Log.i(TAG, "alert OFF: ${currentAlertCondition?.name}")
+                    currentAlertCondition = null
+                    animationController.cancel()
+                    restoreBaseAmbient(settings)
                 }
-            } else if (currentAlertCondition != null) {
-                Log.i(TAG, "alert OFF: ${currentAlertCondition?.name}")
-                currentAlertCondition = null
-                animationController.cancel()
-                restoreBaseAmbient(settings)
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Nunca deixa o motor de alerta derrubar o app (ver handler do serviceScope).
+            Log.e(TAG, "evaluateAlerts falhou", e)
         }
     }
 
@@ -390,6 +484,13 @@ class AmbientLightService : Service() {
         when {
             settings.musicAnimationEnabled -> startSelectedMusicEffect(settings)
             settings.syncDriveMode -> animationController.applyDriveMode(currentDriveMode)
+            // Cor padrão de repouso escolhida pelo usuário (fixa) — prioridade sobre o fallback.
+            settings.idleColorEnabled -> {
+                val idle = settings.idleColor
+                controller.setRgbAsync(
+                    idle.r, idle.g, idle.b, settings.colorOrder, settings.bleColorOrder, settings.output
+                )
+            }
             else -> {
                 val base = musicBaseColor()
                 controller.setRgbAsync(

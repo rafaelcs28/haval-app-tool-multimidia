@@ -364,6 +364,14 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "ambientLightAutomationRules",
             "Regras de automação do Ambient Light (condição->cor/efeito, JSON)"
     ),
+    AMBIENT_LIGHT_IDLE_ENABLED(
+            "ambientLightIdleEnabled",
+            "Usar cor padrão de repouso no Ambient Light"
+    ),
+    AMBIENT_LIGHT_IDLE_COLOR(
+            "ambientLightIdleColor",
+            "Cor padrão de repouso do Ambient Light (r,g,b)"
+    ),
     ENABLE_PERSIST_HEV_SOC_TARGET("enablePersistHevSocTarget", "Manter o % de bateria escolhido no HEV Prioritário"),
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),
