@@ -252,26 +252,22 @@ object SeatbeltVoiceReminder {
                             schedule(extraDelayMs = FOCUS_RETRY_MS)
                         } else {
                             state = decision.newState
-                            // 2+ soltos ao mesmo tempo -> uma frase genérica (se o arquivo existir),
-                            // em vez de enfileirar N sermões. 1 só -> frase do assento.
-                            val multi =
-                                if (decision.announceSeats.size >= 2) resolveExternal("seatbelt_voice_multi")
-                                else null
+                            // 2+ soltos ao mesmo tempo -> uma frase genérica (multi); 1 só -> frase
+                            // do assento. Ambas preferem o arquivo externo, senão a versão embutida.
+                            val multi = decision.announceSeats.size >= 2
                             ClusterPersistentEventLogger.log(
                                 DIAG_EVENT,
                                 mapOf(
                                     "announce" to decision.announceSeats.toString(),
                                     "moving" to moving,
-                                    "mode" to if (multi != null) "multi" else "por_assento"
+                                    "mode" to if (multi) "multi" else "por_assento"
                                 )
                             )
                             try {
-                                if (multi != null) {
-                                    playAwait { it.setDataSource(multi.absolutePath) }
+                                if (multi) {
+                                    playAwait { setMultiSource(it) }
                                 } else {
-                                    for (seat in decision.announceSeats) {
-                                        playAwait { setSeatSource(it, seat) }
-                                    }
+                                    playAwait { setSeatSource(it, decision.announceSeats.first()) }
                                 }
                             } finally {
                                 releaseFocus(focusHold)
@@ -333,6 +329,17 @@ object SeatbeltVoiceReminder {
             player.setDataSource(custom.absolutePath)
         } else {
             App.getContext().resources.openRawResourceFd(rawResForSeat(seat)).use { afd ->
+                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+            }
+        }
+    }
+
+    private fun setMultiSource(player: MediaPlayer) {
+        val custom = resolveExternal("seatbelt_voice_multi")
+        if (custom != null) {
+            player.setDataSource(custom.absolutePath)
+        } else {
+            App.getContext().resources.openRawResourceFd(R.raw.seatbelt_voice_multi).use { afd ->
                 player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             }
         }
