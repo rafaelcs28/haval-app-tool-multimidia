@@ -252,13 +252,26 @@ object SeatbeltVoiceReminder {
                             schedule(extraDelayMs = FOCUS_RETRY_MS)
                         } else {
                             state = decision.newState
+                            // 2+ soltos ao mesmo tempo -> uma frase genérica (se o arquivo existir),
+                            // em vez de enfileirar N sermões. 1 só -> frase do assento.
+                            val multi =
+                                if (decision.announceSeats.size >= 2) resolveExternal("seatbelt_voice_multi")
+                                else null
                             ClusterPersistentEventLogger.log(
                                 DIAG_EVENT,
-                                mapOf("announce" to decision.announceSeats.toString(), "moving" to moving)
+                                mapOf(
+                                    "announce" to decision.announceSeats.toString(),
+                                    "moving" to moving,
+                                    "mode" to if (multi != null) "multi" else "por_assento"
+                                )
                             )
                             try {
-                                for (seat in decision.announceSeats) {
-                                    playSeatAwait(seat)
+                                if (multi != null) {
+                                    playAwait { it.setDataSource(multi.absolutePath) }
+                                } else {
+                                    for (seat in decision.announceSeats) {
+                                        playAwait { setSeatSource(it, seat) }
+                                    }
                                 }
                             } finally {
                                 releaseFocus(focusHold)
@@ -308,25 +321,31 @@ object SeatbeltVoiceReminder {
             else -> R.raw.seatbelt_voice_seat3 // 3 = meio; também fallback
         }
 
-    // Toca a frase do assento e ESPERA terminar (fila sequencial quando há vários). Player e foco
-    // nunca vazam: release no finally (a revisão pegou vazamento de foco em exceção do prepare —
-    // mídia do carro ficava duckada pra sempre).
-    private suspend fun playSeatAwait(seat: Int) {
-        val context = App.getContext()
+    // Override externo (troca de voz sem rebuild): <base>.mp3 ou .m4a na pasta de arquivos do app.
+    private fun resolveExternal(base: String): File? =
+        listOf("$base.mp3", "$base.m4a")
+            .map { File(App.getContext().getExternalFilesDir(null), it) }
+            .firstOrNull { it.isFile && it.length() > 0 }
+
+    private fun setSeatSource(player: MediaPlayer, seat: Int) {
+        val custom = resolveExternal("seatbelt_voice_seat$seat")
+        if (custom != null) {
+            player.setDataSource(custom.absolutePath)
+        } else {
+            App.getContext().resources.openRawResourceFd(rawResForSeat(seat)).use { afd ->
+                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+            }
+        }
+    }
+
+    // Toca UM áudio e ESPERA terminar (fila sequencial quando há vários). Player e foco nunca vazam:
+    // release no finally (a revisão pegou vazamento de foco em exceção do prepare — mídia do carro
+    // ficava duckada pra sempre). setSource pode lançar (arquivo ruim) — está dentro do try.
+    private suspend fun playAwait(setSource: (MediaPlayer) -> Unit) {
         val player = MediaPlayer()
         try {
             player.setAudioAttributes(audioAttrs)
-            val custom =
-                listOf("seatbelt_voice_seat$seat.mp3", "seatbelt_voice_seat$seat.m4a")
-                    .map { File(context.getExternalFilesDir(null), it) }
-                    .firstOrNull { it.isFile && it.length() > 0 }
-            if (custom != null) {
-                player.setDataSource(custom.absolutePath)
-            } else {
-                context.resources.openRawResourceFd(rawResForSeat(seat)).use { afd ->
-                    player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                }
-            }
+            setSource(player)
             player.prepare()
             val done = CompletableDeferred<Unit>()
             player.setOnCompletionListener { done.complete(Unit) }
@@ -341,7 +360,7 @@ object SeatbeltVoiceReminder {
             // pra reavaliação rodar — engolir cancelamento quebraria o cancel-replace do debounce.
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "falha ao tocar aviso do assento $seat", e)
+            Log.e(TAG, "falha ao tocar aviso de cinto", e)
         } finally {
             runCatching { player.release() }
         }

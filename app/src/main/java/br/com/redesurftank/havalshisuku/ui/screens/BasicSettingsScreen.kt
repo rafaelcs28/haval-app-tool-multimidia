@@ -1578,7 +1578,8 @@ fun BasicSettingsTab() {
                                 title = "Aviso de voz: cinto de segurança",
                                 description =
                                         "Em movimento, fala QUAL assento está sem cinto (1x; repete só se prender " +
-                                                "e soltar por 30s). Vozes trocáveis: seatbelt_voice_seat0..4.mp3 na pasta do app.",
+                                                "e soltar por 30s). 2+ juntos = frase única. Vozes trocáveis na pasta do " +
+                                                "app: seatbelt_voice_seat0..4 e seatbelt_voice_multi (.mp3/.m4a).",
                                 checked = enableSeatbeltVoice,
                                 onCheckedChange = {
                                         enableSeatbeltVoice = it
