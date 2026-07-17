@@ -356,6 +356,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "ambientLightAutomationRules",
             "Regras de automação do Ambient Light (condição->cor/efeito, JSON)"
     ),
+    ENABLE_SEATBELT_VOICE(
+            "enableSeatbeltVoice",
+            "Aviso de voz quando alguém está sem cinto com o carro em movimento"
+    ),
     AMBIENT_LIGHT_IDLE_ENABLED(
             "ambientLightIdleEnabled",
             "Usar cor padrão de repouso no Ambient Light"

@@ -827,6 +827,7 @@ public class ServiceManager {
             ensureSteeringWheelButtonIntegration();
             ensureSystemApps();
             TripConsistencyManager.Companion.getInstance().initialize();
+            SeatbeltVoiceReminder.initialize();
         } catch (RemoteException e) {
             Log.e(TAG, "Error during initialization", e);
             return false;

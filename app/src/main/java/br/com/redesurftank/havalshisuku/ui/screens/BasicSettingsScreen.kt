@@ -79,6 +79,11 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.DISABLE_AVM_CAR_STOPPED.key, false)
                 )
         }
+        var enableSeatbeltVoice by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.ENABLE_SEATBELT_VOICE.key, true)
+                )
+        }
         var closeWindowOnPowerOff by remember {
                 mutableStateOf(
                         prefs.getBoolean(SharedPreferencesKeys.CLOSE_WINDOW_ON_POWER_OFF.key, false)
@@ -1563,6 +1568,24 @@ fun BasicSettingsTab() {
                                                 putBoolean(
                                                         SharedPreferencesKeys
                                                                 .DISABLE_AVM_CAR_STOPPED
+                                                                .key,
+                                                        it
+                                                )
+                                        }
+                                }
+                        ),
+                        SettingItem(
+                                title = "Aviso de voz: cinto de segurança",
+                                description =
+                                        "Em movimento, fala QUAL assento está sem cinto (1x; repete só se prender " +
+                                                "e soltar por 30s). Vozes trocáveis: seatbelt_voice_seat0..4.mp3 na pasta do app.",
+                                checked = enableSeatbeltVoice,
+                                onCheckedChange = {
+                                        enableSeatbeltVoice = it
+                                        prefs.edit {
+                                                putBoolean(
+                                                        SharedPreferencesKeys
+                                                                .ENABLE_SEATBELT_VOICE
                                                                 .key,
                                                         it
                                                 )
