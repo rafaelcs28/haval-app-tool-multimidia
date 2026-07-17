@@ -68,76 +68,8 @@ object AmbientLightProtocol {
         )
     }
 
-    // DMX endereçado por CANAL/zona: o 3º byte do frame (0x07 no comando global = TODOS) é a posição
-    // do canal. `7B 00 <canal> R G B 00 FF BF`. 0x07 = broadcast/todos; 1..6 = zonas físicas (portas,
-    // painel, console). (A tentativa anterior de usar o 2º byte falhou — tudo acendia junto, pois o 3º
-    // byte ficava em 07=todos; o dev disse "muda o número e mais à frente vai a cor" = o byte antes da cor.)
-    fun setDmxRgbPayloadForChannel(
-        channel: Int,
-        r: Int,
-        g: Int,
-        b: Int,
-        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
-    ): ByteArray {
-        val color = colorOrder.apply(LedColor(r, g, b))
-        return byteArrayOf(
-            0x7B.toByte(),
-            0x00.toByte(),
-            (channel and 0xFF).toByte(),
-            color.r.toByte(),
-            color.g.toByte(),
-            color.b.toByte(),
-            0x00.toByte(),
-            0xFF.toByte(),
-            0xBF.toByte()
-        )
-    }
-
-    fun dmxChannelRgbHex(
-        channel: Int,
-        r: Int,
-        g: Int,
-        b: Int,
-        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
-    ): String = bytesToHex(setDmxRgbPayloadForChannel(channel, r, g, b, colorOrder))
-
-    // Efeito nativo do controlador POR CANAL: `7B 00 <canal> R G B <modo> <velocidade> BF`. O canal fica
-    // no 3º byte (07 = todos), igual ao frame de cor. Serve pra testar se o controlador tem um modo de
-    // "varredura/flow" endereçável por canal (necessário pro efeito do cinto).
-    fun setDmxCustomEffectPayloadForChannel(
-        channel: Int,
-        r: Int,
-        g: Int,
-        b: Int,
-        modeId: Int,
-        speed: Int,
-        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
-    ): ByteArray {
-        val color = colorOrder.apply(LedColor(r, g, b))
-        val mode = modeId.coerceIn(0, 255)
-        val safeSpeed = speed.coerceIn(1, 100)
-        return byteArrayOf(
-            0x7B.toByte(),
-            0x00.toByte(),
-            (channel and 0xFF).toByte(),
-            color.r.toByte(),
-            color.g.toByte(),
-            color.b.toByte(),
-            mode.toByte(),
-            safeSpeed.toByte(),
-            0xBF.toByte()
-        )
-    }
-
-    fun dmxChannelCustomEffectHex(
-        channel: Int,
-        r: Int,
-        g: Int,
-        b: Int,
-        modeId: Int,
-        speed: Int,
-        colorOrder: ColorOrderMapper = ColorOrderMapper.DEFAULT_DMX
-    ): String = bytesToHex(setDmxCustomEffectPayloadForChannel(channel, r, g, b, modeId, speed, colorOrder))
+    // NOTA: endereçamento por canal/zona foi REMOVIDO — o hardware (kit VOETTAG master+escravos
+    // sincronizados) não separa zonas; qualquer byte de "canal" era broadcast. Só existe cor global.
 
     fun setBrightnessPayload(percent: Int): ByteArray = setDmxBrightnessPayload(percent)
 

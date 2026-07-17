@@ -352,14 +352,6 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "ambientLightAutoReconnect",
             "Reconectar automaticamente o Ambient Light"
     ),
-    AMBIENT_LIGHT_CHANNEL_COUNT(
-            "ambientLightChannelCount",
-            "Quantidade de canais/zonas DMX do Ambient Light"
-    ),
-    AMBIENT_LIGHT_ZONE_MAP(
-            "ambientLightZoneMap",
-            "Mapa canal->zona do Ambient Light (posições por canal, CSV)"
-    ),
     AMBIENT_LIGHT_AUTOMATION_RULES(
             "ambientLightAutomationRules",
             "Regras de automação do Ambient Light (condição->cor/efeito, JSON)"

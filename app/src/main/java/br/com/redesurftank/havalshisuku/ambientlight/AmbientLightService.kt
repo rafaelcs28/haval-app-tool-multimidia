@@ -60,9 +60,17 @@ class AmbientLightService : Service() {
     @Volatile
     private var lastVehicleStopped: Boolean? = null
 
+    // Marcha FRESCA do evento (mesmo padrão do lastVehicleStopped): o dataCache só atualiza depois
+    // do dispatch, então quem lê getData na avaliação disparada pelo próprio evento vê o valor velho.
+    @Volatile
+    private var lastGearRaw: String? = null
+
     private val alertListener =
         IDataChanged { key, value ->
             if (key in enabledAlertKeys) {
+                if (key == CarConstants.CAR_BASIC_GEAR_STATUS.value) {
+                    lastGearRaw = value
+                }
                 if (key == CarConstants.CAR_BASIC_VEHICLE_SPEED.value) {
                     // Velocidade muda o tempo todo andando: só reavalia quando o estado
                     // parado/andando FLIPA, ou quando há alerta ativo (pra poder desligá-lo).
@@ -328,7 +336,9 @@ class AmbientLightService : Service() {
 
     private fun updateAlertListener(settings: AmbientLightConfig) {
         val speedKey = CarConstants.CAR_BASIC_VEHICLE_SPEED.value
+        val gearKey = CarConstants.CAR_BASIC_GEAR_STATUS.value
         val hadSpeed = speedKey in enabledAlertKeys
+        val hadGear = gearKey in enabledAlertKeys
         val enabledRules = settings.automationRules.filter { it.enabled }
         enabledAlertKeys =
             buildSet {
@@ -338,10 +348,13 @@ class AmbientLightService : Service() {
                     add(speedKey)
                 }
             }
-        // Se a observação de velocidade ligou/desligou, o estado derivado do último evento
+        // Se a observação de velocidade/marcha ligou/desligou, o estado derivado do último evento
         // não é mais confiável — zera pra cair no fallback (cache) até o próximo evento.
         if (hadSpeed != (speedKey in enabledAlertKeys)) {
             lastVehicleStopped = null
+        }
+        if (hadGear != (gearKey in enabledAlertKeys)) {
+            lastGearRaw = null
         }
         if (enabledAlertKeys.isNotEmpty() && !alertListenerRegistered) {
             ServiceManager.getInstance().addDataChangedListener(alertListener)
@@ -371,7 +384,13 @@ class AmbientLightService : Service() {
 
     private fun conditionKeys(cond: AutomationCondition): List<String> =
         when (cond) {
-            AutomationCondition.NO_SEATBELT -> listOf(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value)
+            // Cinto também observa a MARCHA: em P não alerta (não justifica — pedido do usuário),
+            // e o engate P->D/R com cinto solto precisa disparar a reavaliação.
+            AutomationCondition.NO_SEATBELT ->
+                listOf(
+                    CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value,
+                    CarConstants.CAR_BASIC_GEAR_STATUS.value
+                )
             AutomationCondition.BLIND_SPOT ->
                 listOf(
                     CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQLEFT.value,
@@ -385,16 +404,28 @@ class AmbientLightService : Service() {
         val sm = ServiceManager.getInstance()
         return when (cond) {
             AutomationCondition.NO_SEATBELT ->
-                arrayHasActive(sm.getData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value))
+                arrayHasActive(sm.getData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value)) &&
+                    isGearOutOfPark()
             AutomationCondition.BLIND_SPOT ->
                 isWarnActive(sm.getData(CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQLEFT.value)) ||
                     isWarnActive(sm.getData(CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQRIGHT.value))
             AutomationCondition.DOOR_OPEN ->
                 arrayHasActive(sm.getData(CarConstants.CAR_BASIC_DOOR_STATUS.value))
-            AutomationCondition.REVERSE_GEAR ->
-                sm.getData(CarConstants.CAR_BASIC_GEAR_STATUS.value)?.trim() == "4"
+            AutomationCondition.REVERSE_GEAR -> currentGearRaw()?.trim() == "4"
         }
     }
+
+    private fun currentGearRaw(): String? =
+        lastGearRaw ?: ServiceManager.getInstance().getData(CarConstants.CAR_BASIC_GEAR_STATUS.value)
+
+    // Marcha: 2=D, 3=P, 4=R (mesmo mapa do cluster/getGearLabel). Whitelist: só alerta com marcha
+    // de CONDUÇÃO confirmada (D/R). P, N, sentinelas de boot (-1/0/255) e ilegível = NÃO alerta —
+    // um "!= 3" deixaria sentinela passar e dispararia alarme falso parado na garagem (fail-open).
+    private fun isGearOutOfPark(): Boolean =
+        when (currentGearRaw()?.trim()?.toIntOrNull()) {
+            2, 4 -> true
+            else -> false
+        }
 
     private fun arrayHasActive(value: String?): Boolean =
         value?.replace("{", "")?.replace("}", "")?.split(",")?.any { it.trim() == "1" } == true

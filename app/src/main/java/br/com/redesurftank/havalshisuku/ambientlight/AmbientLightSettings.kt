@@ -26,7 +26,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -71,8 +70,6 @@ data class AmbientLightConfig(
     val brightnessPercent: Int,
     val output: AmbientLightOutput,
     val autoReconnect: Boolean,
-    val channelCount: Int,
-    val zoneMap: List<ZonePosition>,
     val automationRules: List<AmbientLightAutomationRule>,
     // Cor padrão de repouso: pra onde a fita volta quando nada mais está ativo
     // (fim de alerta, efeito de música desligado, conexão sem modo). Escolhida pelo usuário.
@@ -86,9 +83,6 @@ object AmbientLightSettings {
 
     fun load(): AmbientLightConfig {
         val prefs = prefs()
-        val channelCount =
-            prefs.getInt(SharedPreferencesKeys.AMBIENT_LIGHT_CHANNEL_COUNT.key, DEFAULT_CHANNEL_COUNT)
-                .coerceIn(1, MAX_CHANNELS)
         return AmbientLightConfig(
             enabled = prefs.getBoolean(SharedPreferencesKeys.AMBIENT_LIGHT_BLE_ENABLED.key, false),
             deviceAddress = prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_BLE_DEVICE_MAC.key, null),
@@ -140,12 +134,6 @@ object AmbientLightSettings {
                     prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_OUTPUT.key, null)
                 ),
             autoReconnect = prefs.getBoolean(SharedPreferencesKeys.AMBIENT_LIGHT_AUTO_RECONNECT.key, true),
-            channelCount = channelCount,
-            zoneMap =
-                parseZoneMap(
-                    prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_ZONE_MAP.key, null),
-                    channelCount
-                ),
             automationRules = loadAutomationRules(prefs),
             idleColorEnabled =
                 prefs.getBoolean(SharedPreferencesKeys.AMBIENT_LIGHT_IDLE_ENABLED.key, false),
@@ -209,35 +197,6 @@ object AmbientLightSettings {
         val idx = current.indexOfFirst { it.condition == rule.condition }
         if (idx >= 0) current[idx] = rule else current.add(rule)
         saveAutomationRules(current)
-    }
-
-    private fun parseZoneMap(csv: String?, count: Int): List<ZonePosition> {
-        val parts = csv?.split(",")?.map { ZonePosition.fromStored(it.trim()) } ?: emptyList()
-        return (0 until count).map { parts.getOrElse(it) { ZonePosition.UNASSIGNED } }
-    }
-
-    fun setChannelCount(count: Int) {
-        prefs()
-            .edit()
-            .putInt(SharedPreferencesKeys.AMBIENT_LIGHT_CHANNEL_COUNT.key, count.coerceIn(1, MAX_CHANNELS))
-            .apply()
-    }
-
-    fun setZonePosition(channel: Int, position: ZonePosition) {
-        if (channel < 0) return
-        val prefs = prefs()
-        val storedCsv = prefs.getString(SharedPreferencesKeys.AMBIENT_LIGHT_ZONE_MAP.key, null)
-        val storedSize = storedCsv?.split(",")?.count { it.isNotBlank() } ?: 0
-        val count = prefs.getInt(SharedPreferencesKeys.AMBIENT_LIGHT_CHANNEL_COUNT.key, DEFAULT_CHANNEL_COUNT)
-            .coerceIn(1, MAX_CHANNELS)
-        // Preserva TODAS as entradas já salvas (mesmo além do channelCount atual, caso o usuário tenha
-        // reduzido a contagem antes) — só cresce o suficiente pra caber o canal editado. Evita perda de mapa.
-        val current =
-            parseZoneMap(storedCsv, maxOf(count, storedSize, channel + 1)).toMutableList()
-        current[channel] = position
-        prefs.edit()
-            .putString(SharedPreferencesKeys.AMBIENT_LIGHT_ZONE_MAP.key, current.joinToString(",") { it.name })
-            .apply()
     }
 
     fun isEnabled(): Boolean =
@@ -333,8 +292,6 @@ object AmbientLightSettings {
     const val DEFAULT_ALBUM_EFFECT_SPEED = 50
     const val MIN_ALBUM_EFFECT_SPEED = 1
     const val MAX_ALBUM_EFFECT_SPEED = 100
-    const val DEFAULT_CHANNEL_COUNT = 6
-    const val MAX_CHANNELS = 16
 }
 
 @Composable
@@ -350,10 +307,6 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
     var albumEffectSpeedDraft by remember { mutableStateOf(config.albumEffectSpeed.toFloat()) }
     var scanning by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
-    var effectChannel by remember { mutableStateOf(1) }
-    var effectMode by remember { mutableStateOf(1) }
-    var effectSpeed by remember { mutableStateOf(50) }
-    var hexDraft by remember { mutableStateOf("7B0001FF000000FFBF") }
 
     fun refreshConfig() {
         config = AmbientLightSettings.load()
@@ -648,136 +601,6 @@ fun AmbientLightSettingsScreen(onBackToFeatures: () -> Unit) {
                 ) {
                     Text("Enviar HEX validado")
                 }
-            }
-        }
-
-        StyledCard {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Zonas / Canais DMX",
-                    color = AppColors.TextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "Cada canal DMX é uma zona física. Toque \"Testar\" e veja qual zona acende (branco), depois atribua a posição. Esse mapa será usado pelas automações.",
-                    color = AppColors.TextSecondary,
-                    fontSize = 13.sp
-                )
-                val ledReady = !config.deviceAddress.isNullOrBlank()
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "Canais: ${config.channelCount}",
-                        color = AppColors.TextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedButton(
-                        enabled = config.channelCount > 1,
-                        onClick = {
-                            AmbientLightSettings.setChannelCount(config.channelCount - 1)
-                            refreshConfig()
-                        }
-                    ) { Text("−") }
-                    OutlinedButton(
-                        enabled = config.channelCount < AmbientLightSettings.MAX_CHANNELS,
-                        onClick = {
-                            AmbientLightSettings.setChannelCount(config.channelCount + 1)
-                            refreshConfig()
-                        }
-                    ) { Text("+") }
-                }
-                OutlinedButton(
-                    enabled = ledReady,
-                    onClick = {
-                        for (ch in 1..config.channelCount) {
-                            sendChannelTest(context, ch, LedColor(0, 0, 0), config)
-                        }
-                        statusMessage = "Apagando todos os canais"
-                    }
-                ) { Text("Apagar todos") }
-                (0 until config.channelCount).forEach { i ->
-                    val ch = i + 1 // canal DMX é 1-based (1..6 = zonas; 7 = todos)
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                "Canal $ch — ${config.zoneMap.getOrElse(i) { ZonePosition.UNASSIGNED }.label}",
-                                color = AppColors.TextPrimary,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedButton(
-                                enabled = ledReady,
-                                onClick = {
-                                    sendChannelTest(context, ch, AmbientLightProtocol.WHITE, config)
-                                    statusMessage = "Testando canal $ch (branco)"
-                                }
-                            ) { Text("Testar") }
-                        }
-                        OptionButtonWrap(
-                            options = ZonePosition.values().map { it.label to it },
-                            selected = config.zoneMap.getOrElse(i) { ZonePosition.UNASSIGNED },
-                            enabled = true
-                        ) { pos ->
-                            AmbientLightSettings.setZonePosition(i, pos)
-                            refreshConfig()
-                        }
-                    }
-                }
-
-                Text(
-                    "Avançado — testar efeito nativo (varredura)",
-                    color = AppColors.TextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "Testa os modos nativos do controlador por canal (7B <canal> 07 <RGB> <modo> <vel> BF) — pra descobrir se existe um efeito de varredura endereçável por canal.",
-                    color = AppColors.TextSecondary,
-                    fontSize = 12.sp
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EffectStepper("Canal", effectChannel, 1, AmbientLightSettings.MAX_CHANNELS) {
-                        effectChannel = it
-                    }
-                    EffectStepper("Modo", effectMode, 0, 255) { effectMode = it }
-                    EffectStepper("Vel", effectSpeed, 1, 100) { effectSpeed = it }
-                }
-                OutlinedButton(
-                    enabled = ledReady,
-                    onClick = {
-                        val hex =
-                            AmbientLightProtocol.dmxChannelCustomEffectHex(
-                                effectChannel, 255, 0, 0, effectMode, effectSpeed, config.colorOrder
-                            )
-                        context.startService(AmbientLightService.createSendHexIntent(context, hex))
-                        statusMessage = "Efeito canal $effectChannel modo $effectMode vel $effectSpeed"
-                    }
-                ) { Text("Testar efeito (vermelho)") }
-                OutlinedTextField(
-                    value = hexDraft,
-                    onValueChange = { hexDraft = it.uppercase() },
-                    label = { Text("Hex livre") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedButton(
-                    enabled = ledReady,
-                    onClick = {
-                        context.startService(
-                            AmbientLightService.createSendHexIntent(context, hexDraft.trim())
-                        )
-                        statusMessage = "Enviando hex: ${hexDraft.trim()}"
-                    }
-                ) { Text("Enviar hex") }
             }
         }
 
@@ -1205,38 +1028,8 @@ private fun SettingSwitchRow(
     }
 }
 
-@Composable
-private fun EffectStepper(label: String, value: Int, min: Int, max: Int, onChange: (Int) -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            "$label: $value",
-            color = AppColors.TextPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(
-                enabled = value > min,
-                onClick = { onChange((value - 1).coerceAtLeast(min)) }
-            ) { Text("−") }
-            OutlinedButton(
-                enabled = value < max,
-                onClick = { onChange((value + 1).coerceAtMost(max)) }
-            ) { Text("+") }
-        }
-    }
-}
-
 private fun sendTestColor(context: Context, color: LedColor) {
     context.startService(AmbientLightService.createTestColorIntent(context, color))
-}
-
-private fun sendChannelTest(context: Context, channel: Int, color: LedColor, config: AmbientLightConfig) {
-    val hex = AmbientLightProtocol.dmxChannelRgbHex(channel, color.r, color.g, color.b, config.colorOrder)
-    context.startService(AmbientLightService.createSendHexIntent(context, hex))
 }
 
 private fun hasAudioCapturePermission(context: Context): Boolean =

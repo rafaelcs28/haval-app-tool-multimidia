@@ -10,7 +10,7 @@ import org.json.JSONObject
  * fita. Por isso não há campo de zona aqui — só condição, cor e efeito.
  */
 enum class AutomationCondition(val label: String) {
-    NO_SEATBELT("Sem cinto (qualquer assento)"),
+    NO_SEATBELT("Sem cinto (qualquer assento, fora do P)"),
     BLIND_SPOT("Ponto cego (qualquer lado)"),
     DOOR_OPEN("Porta aberta (qualquer)"),
     REVERSE_GEAR("Marcha ré engatada");
