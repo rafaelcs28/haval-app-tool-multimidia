@@ -25,6 +25,7 @@ import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.ambientlight.AmbientLightService
 import br.com.redesurftank.havalshisuku.managers.AutoBrightnessManager
 import br.com.redesurftank.havalshisuku.managers.HotRouterManager
+import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceReminder
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1590,6 +1591,11 @@ fun BasicSettingsTab() {
                                                                 .key,
                                                         it
                                                 )
+                                        }
+                                },
+                                customContent = {
+                                        Button(onClick = { SeatbeltVoiceReminder.playTest() }) {
+                                                Text("Testar voz (toca agora)")
                                         }
                                 }
                         ),

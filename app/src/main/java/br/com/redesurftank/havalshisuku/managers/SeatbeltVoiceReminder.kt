@@ -234,44 +234,44 @@ object SeatbeltVoiceReminder {
                         SeatbeltVoiceLogic.evaluate(before, unbelted, moving, System.currentTimeMillis())
                     if (decision.announceSeats.isEmpty()) {
                         state = decision.newState
+                    } else if (isInCall()) {
+                        // Não fala por cima de uma ligação REAL. NÃO gasta o aviso: reverte os
+                        // assentos anunciáveis e tenta de novo em 15s.
+                        val reverted = decision.newState.toMutableMap()
+                        for (seat in decision.announceSeats) {
+                            val old = before[seat]
+                            if (old == null) reverted.remove(seat) else reverted[seat] = old
+                        }
+                        state = reverted
+                        ClusterPersistentEventLogger.log(
+                            DIAG_EVENT,
+                            mapOf("skip" to "in_call", "seats" to decision.announceSeats.toString())
+                        )
+                        schedule(extraDelayMs = FOCUS_RETRY_MS)
                     } else {
-                        val focusHold = acquireFocus()
-                        if (focusHold == null) {
-                            // Sem foco (ex.: ligação em andamento): NÃO fala por cima e NÃO gasta o
-                            // aviso — reverte os assentos anunciáveis e tenta de novo em 15s.
-                            val reverted = decision.newState.toMutableMap()
-                            for (seat in decision.announceSeats) {
-                                val old = before[seat]
-                                if (old == null) reverted.remove(seat) else reverted[seat] = old
-                            }
-                            state = reverted
-                            ClusterPersistentEventLogger.log(
-                                DIAG_EVENT,
-                                mapOf("focus" to "denied", "seats" to decision.announceSeats.toString())
+                        state = decision.newState
+                        // 2+ soltos ao mesmo tempo -> uma frase genérica (multi); 1 só -> frase
+                        // do assento. Ambas preferem o arquivo externo, senão a versão embutida.
+                        val multi = decision.announceSeats.size >= 2
+                        ClusterPersistentEventLogger.log(
+                            DIAG_EVENT,
+                            mapOf(
+                                "announce" to decision.announceSeats.toString(),
+                                "moving" to moving,
+                                "mode" to if (multi) "multi" else "por_assento"
                             )
-                            schedule(extraDelayMs = FOCUS_RETRY_MS)
-                        } else {
-                            state = decision.newState
-                            // 2+ soltos ao mesmo tempo -> uma frase genérica (multi); 1 só -> frase
-                            // do assento. Ambas preferem o arquivo externo, senão a versão embutida.
-                            val multi = decision.announceSeats.size >= 2
-                            ClusterPersistentEventLogger.log(
-                                DIAG_EVENT,
-                                mapOf(
-                                    "announce" to decision.announceSeats.toString(),
-                                    "moving" to moving,
-                                    "mode" to if (multi) "multi" else "por_assento"
-                                )
-                            )
-                            try {
-                                if (multi) {
-                                    playAwait { setMultiSource(it) }
-                                } else {
-                                    playAwait { setSeatSource(it, decision.announceSeats.first()) }
-                                }
-                            } finally {
-                                releaseFocus(focusHold)
+                        )
+                        // Best-effort: toca mesmo se o foco não for concedido (um alerta de
+                        // segurança não pode ficar mudo por um focus manager avarento do OEM).
+                        val focus = requestFocusBestEffort()
+                        try {
+                            if (multi) {
+                                playAwait { setMultiSource(it) }
+                            } else {
+                                playAwait { setSeatSource(it, decision.announceSeats.first()) }
                             }
+                        } finally {
+                            releaseFocus(focus)
                         }
                     }
                     decision.recheckInMs?.let { schedule(extraDelayMs = it) }
@@ -281,31 +281,58 @@ object SeatbeltVoiceReminder {
 
     private data class FocusHold(val manager: AudioManager, val request: AudioFocusRequest)
 
+    // USAGE_MEDIA = canal de mídia (os alto-falantes principais, no volume de mídia). O
+    // NAVIGATION_GUIDANCE anterior pode sair mudo neste head unit OEM (canal de TTS separado).
     private val audioAttrs =
         AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 
-    private fun acquireFocus(): FocusHold? =
+    private fun audioManager(): AudioManager =
+        App.getContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    // Só ligação REAL bloqueia (não deixamos um focus manager avarento do OEM silenciar o alerta).
+    private fun isInCall(): Boolean =
         try {
-            val manager = App.getContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val m = audioManager().mode
+            m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_IN_COMMUNICATION
+        } catch (e: Exception) {
+            false
+        }
+
+    private fun requestFocusBestEffort(): FocusHold? =
+        try {
+            val manager = audioManager()
             val request =
                 AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                     .setAudioAttributes(audioAttrs)
                     .build()
-            if (manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                FocusHold(manager, request)
-            } else {
-                null
-            }
+            runCatching { manager.requestAudioFocus(request) } // toca mesmo se não conceder
+            FocusHold(manager, request)
         } catch (e: Exception) {
             Log.e(TAG, "falha ao pedir audio focus", e)
             null
         }
 
-    private fun releaseFocus(hold: FocusHold) {
+    private fun releaseFocus(hold: FocusHold?) {
+        if (hold == null) return
         runCatching { hold.manager.abandonAudioFocusRequest(hold.request) }
+    }
+
+    // Botão de teste (parado): toca a frase do motorista pelo MESMO caminho de áudio, ignorando
+    // toda a lógica de cinto/velocidade/estado. Valida rota + volume sem precisar dirigir.
+    @JvmStatic
+    fun playTest() {
+        scope.launch {
+            ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("test" to "play", "inCall" to isInCall()))
+            val focus = requestFocusBestEffort()
+            try {
+                playAwait { setSeatSource(it, 0) }
+            } finally {
+                releaseFocus(focus)
+            }
+        }
     }
 
     private fun rawResForSeat(seat: Int): Int =
