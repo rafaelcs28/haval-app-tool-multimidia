@@ -53,14 +53,19 @@ object ReleaseUpdateChecker {
 
                     if (downloadUrl != null) {
                         val info = ReleaseInfo(tag, downloadUrl, isPrerelease)
-                        if (isPrerelease && latestPreview == null) {
-                            latestPreview = info
-                        } else if (!isPrerelease && latestRelease == null) {
-                            latestRelease = info
+                        // Escolhe pela MAIOR versão, não pela ordem da API: as releases do fork
+                        // (criadas por mirror) têm created_at idêntico, então o GitHub não devolve
+                        // a mais nova primeiro — pegar a [0] ofereceria uma versão ANTIGA.
+                        if (isPrerelease) {
+                            if (latestPreview == null || compareVersions(tag, latestPreview.tag) > 0) {
+                                latestPreview = info
+                            }
+                        } else {
+                            if (latestRelease == null || compareVersions(tag, latestRelease.tag) > 0) {
+                                latestRelease = info
+                            }
                         }
                     }
-
-                    if (latestRelease != null && latestPreview != null) break
                 }
 
                 UpdateCheckResult(latestRelease, latestPreview)
