@@ -141,6 +141,7 @@ object SeatbeltVoiceReminder {
     private const val PLAY_TIMEOUT_MS = 15_000L
     private const val FOCUS_RETRY_MS = 15_000L
     private const val DIAG_EVENT = "seatbelt_voice"
+    const val DEFAULT_MIN_VOLUME_PCT = 60
 
     private val scope =
         CoroutineScope(
@@ -262,13 +263,16 @@ object SeatbeltVoiceReminder {
                             )
                         )
                         // Best-effort: toca mesmo se o foco não for concedido (um alerta de
-                        // segurança não pode ficar mudo por um focus manager avarento do OEM).
+                        // segurança não pode ficar mudo por um focus manager avarento do OEM) e
+                        // com volume mínimo garantido (toca mesmo no mudo).
                         val focus = requestFocusBestEffort()
                         try {
-                            if (multi) {
-                                playAwait { setMultiSource(it) }
-                            } else {
-                                playAwait { setSeatSource(it, decision.announceSeats.first()) }
+                            withBoostedVolume {
+                                if (multi) {
+                                    playAwait { setMultiSource(it) }
+                                } else {
+                                    playAwait { setSeatSource(it, decision.announceSeats.first()) }
+                                }
                             }
                         } finally {
                             releaseFocus(focus)
@@ -320,6 +324,45 @@ object SeatbeltVoiceReminder {
         runCatching { hold.manager.abandonAudioFocusRequest(hold.request) }
     }
 
+    private fun minVolumePct(): Int =
+        App.getDeviceProtectedContext()
+            .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+            .getInt(SharedPreferencesKeys.SEATBELT_VOICE_MIN_VOLUME_PCT.key, DEFAULT_MIN_VOLUME_PCT)
+            .coerceIn(0, 100)
+
+    // Garante um volume MÍNIMO no canal de mídia durante a fala (mesmo no mudo) e RESTAURA depois.
+    // pct=0 desliga o boost (respeita o volume atual, inclusive mudo). Restaura no finally, então
+    // um cancelamento no meio da fala também devolve o volume original.
+    private suspend fun withBoostedVolume(block: suspend () -> Unit) {
+        val am = runCatching { audioManager() }.getOrNull()
+        var restoreTo = -1
+        if (am != null) {
+            runCatching {
+                val pct = minVolumePct()
+                if (pct > 0) {
+                    val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val cur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    val target = Math.ceil(pct / 100.0 * max).toInt().coerceIn(1, max)
+                    if (cur < target) {
+                        am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+                        restoreTo = cur
+                        ClusterPersistentEventLogger.log(
+                            DIAG_EVENT,
+                            mapOf("volBoost" to "$cur->$target", "max" to max, "pct" to pct)
+                        )
+                    }
+                }
+            }.onFailure { Log.e(TAG, "boost de volume falhou", it) }
+        }
+        try {
+            block()
+        } finally {
+            if (am != null && restoreTo >= 0) {
+                runCatching { am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0) }
+            }
+        }
+    }
+
     // Botão de teste (parado): toca a frase do motorista pelo MESMO caminho de áudio, ignorando
     // toda a lógica de cinto/velocidade/estado. Valida rota + volume sem precisar dirigir.
     @JvmStatic
@@ -328,7 +371,7 @@ object SeatbeltVoiceReminder {
             ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("test" to "play", "inCall" to isInCall()))
             val focus = requestFocusBestEffort()
             try {
-                playAwait { setSeatSource(it, 0) }
+                withBoostedVolume { playAwait { setSeatSource(it, 0) } }
             } finally {
                 releaseFocus(focus)
             }

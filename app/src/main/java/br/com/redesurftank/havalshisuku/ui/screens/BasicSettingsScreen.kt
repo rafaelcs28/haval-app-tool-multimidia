@@ -85,6 +85,14 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.ENABLE_SEATBELT_VOICE.key, true)
                 )
         }
+        var seatbeltMinVol by remember {
+                mutableStateOf(
+                        prefs.getInt(
+                                SharedPreferencesKeys.SEATBELT_VOICE_MIN_VOLUME_PCT.key,
+                                SeatbeltVoiceReminder.DEFAULT_MIN_VOLUME_PCT
+                        ).toFloat()
+                )
+        }
         var closeWindowOnPowerOff by remember {
                 mutableStateOf(
                         prefs.getBoolean(SharedPreferencesKeys.CLOSE_WINDOW_ON_POWER_OFF.key, false)
@@ -1594,8 +1602,37 @@ fun BasicSettingsTab() {
                                         }
                                 },
                                 customContent = {
-                                        Button(onClick = { SeatbeltVoiceReminder.playTest() }) {
-                                                Text("Testar voz (toca agora)")
+                                        Column {
+                                                Text(
+                                                        "Volume mínimo do aviso: ${seatbeltMinVol.toInt()}%",
+                                                        color = AppColors.TextPrimary,
+                                                        fontSize = 14.sp
+                                                )
+                                                Text(
+                                                        "Força o volume de mídia pra esse mínimo enquanto o aviso toca (mesmo no mudo) e volta ao normal depois. 0% = respeita o volume atual.",
+                                                        color = AppColors.TextSecondary,
+                                                        fontSize = 11.sp
+                                                )
+                                                Slider(
+                                                        value = seatbeltMinVol,
+                                                        onValueChange = { seatbeltMinVol = it },
+                                                        onValueChangeFinished = {
+                                                                prefs.edit {
+                                                                        putInt(
+                                                                                SharedPreferencesKeys
+                                                                                        .SEATBELT_VOICE_MIN_VOLUME_PCT
+                                                                                        .key,
+                                                                                seatbeltMinVol.toInt()
+                                                                        )
+                                                                }
+                                                        },
+                                                        valueRange = 0f..100f,
+                                                        steps = 19
+                                                )
+                                                Spacer(Modifier.height(8.dp))
+                                                Button(onClick = { SeatbeltVoiceReminder.playTest() }) {
+                                                        Text("Testar voz (toca agora)")
+                                                }
                                         }
                                 }
                         ),

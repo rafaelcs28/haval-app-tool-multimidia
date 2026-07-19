@@ -360,6 +360,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableSeatbeltVoice",
             "Aviso de voz quando alguém está sem cinto com o carro em movimento"
     ),
+    SEATBELT_VOICE_MIN_VOLUME_PCT(
+            "seatbeltVoiceMinVolumePct",
+            "Volume mínimo (% do volume de mídia) forçado enquanto o aviso de cinto toca"
+    ),
     AMBIENT_LIGHT_IDLE_ENABLED(
             "ambientLightIdleEnabled",
             "Usar cor padrão de repouso no Ambient Light"
