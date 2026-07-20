@@ -1004,13 +1004,23 @@ public class ServiceManager {
     }
 
     private void handleSteeringWheelCustomButton(String string, int button, String tapType) {
+        // Blindagem: ação de botão do volante NUNCA pode derrubar o app. Viagem de 4h teve 3 crashes
+        // aqui — dado do carro nulo em Integer.parseInt (CHANGE_POWER_MODE/REGENERATION_LEVEL) e o
+        // binder do Shizuku não pronto em dvr.setAVM (IllegalStateException, que o catch RemoteException
+        // interno NÃO pega). Roda num HandlerThread de fundo, então a exceção matava o app inteiro.
+        try {
         SteeringWheelCustomActionType action = SteeringWheelCustomActionType.Companion.fromKey(string);
         if (action == null || action == SteeringWheelCustomActionType.DEFAULT) {
             return;
         }
         switch (action) {
             case CHANGE_POWER_MODE:
-                int carEvPowerMode = Integer.parseInt(getUpdatedData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.getValue()));
+                Integer powerModeRaw = parseIntOrNull(getUpdatedData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.getValue()));
+                if (powerModeRaw == null) {
+                    Log.w(TAG, "CHANGE_POWER_MODE ignorado: valor do carro indisponível");
+                    break;
+                }
+                int carEvPowerMode = powerModeRaw;
                 Log.w(TAG, "Current EV Power Mode: " + carEvPowerMode);
                 if (carEvPowerMode == 0) {
                     carEvPowerMode = 1;
@@ -1023,7 +1033,12 @@ public class ServiceManager {
                 Log.w(TAG, "New EV Power Mode: " + carEvPowerMode);
                 break;
             case CHANGE_REGENERATION_LEVEL:
-                int regenLevel = Integer.parseInt(getUpdatedData(CarConstants.CAR_EV_SETTING_ENERGY_RECOVERY_LEVEL.getValue()));
+                Integer regenRaw = parseIntOrNull(getUpdatedData(CarConstants.CAR_EV_SETTING_ENERGY_RECOVERY_LEVEL.getValue()));
+                if (regenRaw == null) {
+                    Log.w(TAG, "CHANGE_REGENERATION_LEVEL ignorado: valor do carro indisponível");
+                    break;
+                }
+                int regenLevel = regenRaw;
                 Log.w(TAG, "Current Regeneration Level: " + regenLevel);
                 //low 2
                 //normal 0
@@ -1101,7 +1116,7 @@ public class ServiceManager {
                 break;
             case OPEN_AVM_ONCE:
                 try {
-                    if (getData(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue()).equals("0")) {
+                    if ("0".equals(getData(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue()))) {
                         delayNextAVM = true;
                         dvr.setAVM(1);
                         Log.w(TAG, "Camera AVM temporarily triggered");
@@ -1124,10 +1139,25 @@ public class ServiceManager {
                             DisplayAppLauncher.INSTANCE.preserveAndroidAutoNativePanelContract("OPEN_AVM_ONCE_CLOSE");
                         }
                     }
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Error to launch AVM camera");
+                } catch (Exception e) {
+                    // Exception (não só RemoteException): dvr.setAVM lança IllegalStateException
+                    // "binder haven't been received" quando o Shizuku ainda não subiu.
+                    Log.w(TAG, "Error to launch AVM camera", e);
                 }
                 break;
+        }
+        } catch (Exception e) {
+            Log.e(TAG, "handleSteeringWheelCustomButton falhou (acao=" + string + " botao=" + button + " tap=" + tapType + ")", e);
+        }
+    }
+
+    /** parseInt tolerante: null/vazio/não-numérico (ex.: "--") -> null, sem lançar. */
+    private static Integer parseIntOrNull(String s) {
+        if (s == null) return null;
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
