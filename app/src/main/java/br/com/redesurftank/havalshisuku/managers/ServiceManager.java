@@ -1756,9 +1756,11 @@ public class ServiceManager {
     private void OnDataChanged(String key, String value) {
         // REMOVIDO: 2 broadcasts por mudança de dado (android.intent.haval.<key> e .<key>_<value>).
         // Ninguém os consumia — nenhum receiver dinâmico nem no manifest escuta essas actions, e o
-        // setPackage(nosso app) impede apps externos de receber. Pior: o .<key>_<value> gerava actions
-        // ÚNICAS sem limite (ex.: velocidade muda ~10x/s numa viagem), inchando o AMS no system_server
-        // ao longo de horas -> OutOfMemoryError na thread do Shizuku (rikka.shizuku.Jj) na viagem de 4h.
+        // setPackage(nosso app) impede apps externos de receber. Era código morto que só gerava
+        // round-trips de binder inúteis (limpeza). NOTA: NÃO é o fix do OutOfMemoryError da viagem —
+        // a revisão adversarial mostrou que sendBroadcast não-sticky é transiente (não acumula no AMS
+        // por action). A causa real do OOM é vazamento de threads do Shizuku (rikka.shizuku.Jj) por
+        // ciclo de ForegroundService (ver IPTablesUtils); investigação separada em andamento.
         // Os listeners internos usam a lista dataChangedListeners abaixo, não os broadcasts.
         for (IDataChanged listener : new ArrayList<>(dataChangedListeners)) {
             try {

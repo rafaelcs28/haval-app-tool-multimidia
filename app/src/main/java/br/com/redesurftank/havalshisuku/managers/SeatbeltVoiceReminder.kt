@@ -2,7 +2,6 @@ package br.com.redesurftank.havalshisuku.managers
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.util.Log
@@ -222,18 +221,33 @@ object SeatbeltVoiceReminder {
     // sobra job órfão furando o debounce.
     @Synchronized
     private fun schedule(extraDelayMs: Long = 0L) {
-        if (!isEnabled()) return
+        if (!isEnabled()) {
+            ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("skip" to "disabled"))
+            return
+        }
         pendingJob?.cancel()
         pendingJob =
             scope.launch {
                 delay(SeatbeltVoiceLogic.DEBOUNCE_MS + extraDelayMs)
                 mutex.withLock {
                     val before = state
+                    val rawSpeed = speedRaw()
                     val unbelted = SeatbeltVoiceLogic.parseUnbelted(beltRaw())
-                    val moving = SeatbeltVoiceLogic.isMoving(speedRaw())
+                    val moving = SeatbeltVoiceLogic.isMoving(rawSpeed)
                     val decision =
                         SeatbeltVoiceLogic.evaluate(before, unbelted, moving, System.currentTimeMillis())
                     if (decision.announceSeats.isEmpty()) {
+                        // Diag do "não anunciou": mostra POR QUÊ (parado? sem cinto? já avisado?).
+                        ClusterPersistentEventLogger.log(
+                            DIAG_EVENT,
+                            mapOf(
+                                "eval" to "no_announce",
+                                "moving" to moving,
+                                "speed" to (rawSpeed ?: "null"),
+                                "unbelted" to unbelted.toString(),
+                                "state" to before.mapValues { it.value.phase.name }.toString()
+                            )
+                        )
                         state = decision.newState
                     } else if (isInCall()) {
                         // Não fala por cima de uma ligação REAL. NÃO gasta o aviso: reverte os
@@ -262,20 +276,15 @@ object SeatbeltVoiceReminder {
                                 "mode" to if (multi) "multi" else "por_assento"
                             )
                         )
-                        // Best-effort: toca mesmo se o foco não for concedido (um alerta de
-                        // segurança não pode ficar mudo por um focus manager avarento do OEM) e
-                        // com volume mínimo garantido (toca mesmo no mudo).
-                        val focus = requestFocusBestEffort()
-                        try {
-                            withBoostedVolume {
-                                if (multi) {
-                                    playAwait { setMultiSource(it) }
-                                } else {
-                                    playAwait { setSeatSource(it, decision.announceSeats.first()) }
-                                }
+                        // NÃO pega audio focus: a rádio/mídia do OEM PAUSA no focus-loss e NÃO volta
+                        // sozinha depois (o app da rádio não trata o refoco). Tocamos MIXADO por cima
+                        // (o volume mínimo garante que dá pra ouvir), então a rádio nunca para.
+                        withBoostedVolume {
+                            if (multi) {
+                                playAwait { setMultiSource(it) }
+                            } else {
+                                playAwait { setSeatSource(it, decision.announceSeats.first()) }
                             }
-                        } finally {
-                            releaseFocus(focus)
                         }
                     }
                     decision.recheckInMs?.let { schedule(extraDelayMs = it) }
@@ -283,10 +292,10 @@ object SeatbeltVoiceReminder {
             }
     }
 
-    private data class FocusHold(val manager: AudioManager, val request: AudioFocusRequest)
-
     // USAGE_MEDIA = canal de mídia (os alto-falantes principais, no volume de mídia). O
     // NAVIGATION_GUIDANCE anterior pode sair mudo neste head unit OEM (canal de TTS separado).
+    // NÃO pedimos audio focus (mixa por cima da rádio/mídia sem pausá-la — a rádio do OEM não
+    // volta sozinha após o focus-loss); o volume mínimo garante a audibilidade.
     private val audioAttrs =
         AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -296,7 +305,7 @@ object SeatbeltVoiceReminder {
     private fun audioManager(): AudioManager =
         App.getContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    // Só ligação REAL bloqueia (não deixamos um focus manager avarento do OEM silenciar o alerta).
+    // Só ligação REAL bloqueia o aviso (não queremos falar por cima de uma chamada).
     private fun isInCall(): Boolean =
         try {
             val m = audioManager().mode
@@ -304,25 +313,6 @@ object SeatbeltVoiceReminder {
         } catch (e: Exception) {
             false
         }
-
-    private fun requestFocusBestEffort(): FocusHold? =
-        try {
-            val manager = audioManager()
-            val request =
-                AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                    .setAudioAttributes(audioAttrs)
-                    .build()
-            runCatching { manager.requestAudioFocus(request) } // toca mesmo se não conceder
-            FocusHold(manager, request)
-        } catch (e: Exception) {
-            Log.e(TAG, "falha ao pedir audio focus", e)
-            null
-        }
-
-    private fun releaseFocus(hold: FocusHold?) {
-        if (hold == null) return
-        runCatching { hold.manager.abandonAudioFocusRequest(hold.request) }
-    }
 
     private fun minVolumePct(): Int =
         App.getDeviceProtectedContext()
@@ -369,12 +359,8 @@ object SeatbeltVoiceReminder {
     fun playTest() {
         scope.launch {
             ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("test" to "play", "inCall" to isInCall()))
-            val focus = requestFocusBestEffort()
-            try {
-                withBoostedVolume { playAwait { setSeatSource(it, 0) } }
-            } finally {
-                releaseFocus(focus)
-            }
+            // Sem audio focus (mixa por cima; não pausa a rádio) + volume mínimo garantido.
+            withBoostedVolume { playAwait { setSeatSource(it, 0) } }
         }
     }
 
