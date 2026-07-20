@@ -1754,13 +1754,12 @@ public class ServiceManager {
     }
 
     private void OnDataChanged(String key, String value) {
-        Intent broadcastIntent = new Intent("android.intent.haval." + key);
-        broadcastIntent.putExtra("value", value);
-        broadcastIntent.setPackage(App.getContext().getPackageName());
-        App.getContext().sendBroadcast(broadcastIntent);
-        broadcastIntent = new Intent("android.intent.haval." + key + "_" + value);
-        broadcastIntent.setPackage(App.getContext().getPackageName());
-        App.getContext().sendBroadcast(broadcastIntent);
+        // REMOVIDO: 2 broadcasts por mudança de dado (android.intent.haval.<key> e .<key>_<value>).
+        // Ninguém os consumia — nenhum receiver dinâmico nem no manifest escuta essas actions, e o
+        // setPackage(nosso app) impede apps externos de receber. Pior: o .<key>_<value> gerava actions
+        // ÚNICAS sem limite (ex.: velocidade muda ~10x/s numa viagem), inchando o AMS no system_server
+        // ao longo de horas -> OutOfMemoryError na thread do Shizuku (rikka.shizuku.Jj) na viagem de 4h.
+        // Os listeners internos usam a lista dataChangedListeners abaixo, não os broadcasts.
         for (IDataChanged listener : new ArrayList<>(dataChangedListeners)) {
             try {
                 listener.onDataChanged(key, value);
