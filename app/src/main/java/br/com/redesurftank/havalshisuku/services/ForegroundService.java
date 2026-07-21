@@ -717,9 +717,15 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             @Override
             public void onReceive(Context context, Intent intent) {
                 if (isServiceRunning) {
-                    // service already running bug intelligentvehiclecontrol restarted
-                    // restart self
-                    Log.w(TAG, "Received com.beantechs.intelligentvehiclecontrol.INIT_COMPLETED after service started, restarting service...");
+                    // O app OEM re-inicializou. Só damos restart() completo (que recria o serviço e
+                    // pisca o tema no cluster) se o binder OEM que já temos MORREU. Se continua vivo,
+                    // o re-init foi benigno -> nada a fazer. Isso corta os ~26 restarts/dia (e o flash
+                    // do velocímetro sobre o AA) que vinham de re-inits benignos do app OEM.
+                    if (ServiceManager.getInstance().isControlBinderAlive()) {
+                        Log.w(TAG, "INIT_COMPLETED recebido mas o binder OEM segue vivo; ignorando restart (evita flash do tema)");
+                        return;
+                    }
+                    Log.w(TAG, "Received com.beantechs.intelligentvehiclecontrol.INIT_COMPLETED after service started and control binder is DEAD, restarting service...");
                     restart();
                     return;
                 }

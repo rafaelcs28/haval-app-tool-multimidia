@@ -1753,6 +1753,17 @@ public class ServiceManager {
         return new HashMap<>(dataCache);
     }
 
+    /** Binder do serviço de controle OEM (intelligentvehiclecontrol) ainda vivo?
+     *  Usado no INIT_COMPLETED: se o binder que já temos continua vivo, o re-init do app OEM foi
+     *  benigno e NÃO precisamos de um restart() completo (que recria o serviço e pisca o tema). */
+    public boolean isControlBinderAlive() {
+        try {
+            return controlService != null && controlService.asBinder().pingBinder();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private void OnDataChanged(String key, String value) {
         // REMOVIDO: 2 broadcasts por mudança de dado (android.intent.haval.<key> e .<key>_<value>).
         // Ninguém os consumia — nenhum receiver dinâmico nem no manifest escuta essas actions, e o

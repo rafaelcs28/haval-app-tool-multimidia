@@ -341,7 +341,11 @@ object DisplayAppLauncher {
     private const val CARPLAY_RESTORE_REQUIRED_DISPLAY0_MS = 800L
     private const val CARPLAY_RESTORE_MAX_WAIT_MS = 3_000L
     private const val CARPLAY_CLUSTER_WATCHDOG_START_DELAY_MS = 4_000L
-    private const val CARPLAY_CLUSTER_WATCHDOG_INTERVAL_MS = 1_000L
+    // 5s (era 1s): o watchdog roda `am stack list` via Shizuku a cada tick, e esse Shizuku está
+    // injetado no system_server -> cada newProcess cria threads rikka.shizuku.Jj + aloca no heap de
+    // 96MB do system_server. A 1s eram ~86k+ newProcess/dia = fonte DOMINANTE do OOM na viagem de 4h.
+    // A 5s corta 80% sem impacto perceptível (religar CarPlay no cluster em até 5s vs 1s).
+    private const val CARPLAY_CLUSTER_WATCHDOG_INTERVAL_MS = 5_000L
     private const val CARPLAY_BOOT_AUTOSTART_ATTEMPTS = 30
     private const val CARPLAY_BOOT_AUTOSTART_INTERVAL_MS = 2_000L
     private const val CARPLAY_CLUSTER_TARGET_BOOT_GRACE_MS = 65_000L
