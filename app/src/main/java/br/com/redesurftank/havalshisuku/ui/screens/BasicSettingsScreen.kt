@@ -2505,7 +2505,18 @@ fun BasicSettingsTab() {
                                                                                 initialValue = null,
                                                                                 autoBrightnessUseSun
                                                                         ) {
-                                                                                value = AutoBrightnessManager.getInstance().getSunInfoForDisplay()
+                                                                                // Fora da main; tenta de novo enquanto o GPS não tem fix
+                                                                                // ou a cidade ainda é coordenada (geocode em background).
+                                                                                var tries = 0
+                                                                                while (tries < 15) {
+                                                                                        val info = withContext(Dispatchers.IO) {
+                                                                                                AutoBrightnessManager.getInstance().getSunInfoForDisplay()
+                                                                                        }
+                                                                                        value = info
+                                                                                        if (info != null && info.cityResolved) break
+                                                                                        tries++
+                                                                                        delay(2000)
+                                                                                }
                                                                         }
                                                                         Column {
                                                                                 Text(
