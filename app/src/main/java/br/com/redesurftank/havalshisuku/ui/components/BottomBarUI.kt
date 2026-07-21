@@ -3365,7 +3365,7 @@ private fun DashboardSettingsPanel(
                                                 accent = Color(0xFF66E3FF),
                                                 modifier = Modifier.weight(1f)
                                         ) {
-                                                serviceManager.updateData(
+                                                serviceManager.updateDataOptimistic(
                                                         CarConstants
                                                                 .CAR_DRIVE_SETTING_DRIVE_MODE
                                                                 .getValue(),
@@ -3394,7 +3394,7 @@ private fun DashboardSettingsPanel(
                                                         }
                                                 }
                                         ) {
-                                                serviceManager.updateData(
+                                                serviceManager.updateDataOptimistic(
                                                         CarConstants
                                                                 .CAR_EV_SETTING_POWER_MODEL_CONFIG
                                                                 .getValue(),
@@ -3443,7 +3443,7 @@ private fun DashboardSettingsPanel(
                                                                 )
                                                                         ?: snapshot.onePedalEnabled
                                                         val turningOn = current.trim() != "1"
-                                                        serviceManager.updateData(
+                                                        serviceManager.updateDataOptimistic(
                                                                 CarConstants
                                                                         .CAR_CONFIGURE_PEDAL_CONTROL_ENABLE
                                                                         .getValue(),
@@ -3462,7 +3462,7 @@ private fun DashboardSettingsPanel(
                                                 // Tap cicla a regeneração só com o One Pedal
                                                 // desligado (ligado, o nível é indiferente).
                                                 if (!onePedalOn) {
-                                                        serviceManager.updateData(
+                                                        serviceManager.updateDataOptimistic(
                                                                 CarConstants
                                                                         .CAR_EV_SETTING_ENERGY_RECOVERY_LEVEL
                                                                         .getValue(),
@@ -3485,7 +3485,7 @@ private fun DashboardSettingsPanel(
                                                 accent = Color(0xFFB7A6FF),
                                                 modifier = Modifier.weight(1f)
                                         ) {
-                                                serviceManager.updateData(
+                                                serviceManager.updateDataOptimistic(
                                                         CarConstants
                                                                 .CAR_DRIVE_SETTING_STEERING_WHEEL_ASSIST_MODE
                                                                 .getValue(),
@@ -5620,7 +5620,7 @@ private fun updateTemperature(
         val current = currentValue.toFloatOrNull() ?: 22.0f
         val next = (current + delta).coerceIn(16.0f, 32.0f)
         val nextValue = String.format(java.util.Locale.US, "%.1f", next)
-        serviceManager.updateData(key.getValue(), nextValue)
+        serviceManager.updateDataOptimistic(key.getValue(), nextValue)
 }
 
 internal fun resolveDashboardMediaVolumeAfterDelta(current: Int, delta: Int): Int {
@@ -5647,7 +5647,7 @@ private fun updateSeatVentilationLevel(
         key: CarConstants,
         nextLevel: String
 ) {
-        serviceManager.updateData(key.getValue(), nextLevel)
+        serviceManager.updateDataOptimistic(key.getValue(), nextLevel)
 }
 
 private fun nextSeatVentilationLevel(currentLevel: String, maxLevel: String): String {
