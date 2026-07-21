@@ -4976,7 +4976,11 @@ private fun HevModeDialog(
         serviceManager: ServiceManager,
         onDismiss: () -> Unit
 ) {
-        val reserve = snapshot.powerReserve
+        // Estado LOCAL do sub-modo p/ refletir o toque NA HORA (updateData não empurra de volta em
+        // tempo real; antes só aparecia ao reabrir a barra). LaunchedEffect re-sincroniza se o valor
+        // real do carro mudar por fora.
+        var reserve by remember { mutableStateOf(snapshot.powerReserve) }
+        LaunchedEffect(snapshot.powerReserve) { reserve = snapshot.powerReserve }
         val pct = snapshot.socTarget.trim().toIntOrNull()?.coerceIn(20, 80) ?: 50
         var dragging by remember { mutableStateOf(false) }
         var sliderPos by remember { mutableFloatStateOf(pct.toFloat()) }
@@ -4999,6 +5003,7 @@ private fun HevModeDialog(
                                         reserve,
                                         listOf("1" to "Inteligente", "2" to "Prioritário")
                                 ) { newVal ->
+                                        reserve = newVal // otimista: popup reflete o toque na hora
                                         serviceManager.updateData(
                                                 CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG
                                                         .getValue(),
