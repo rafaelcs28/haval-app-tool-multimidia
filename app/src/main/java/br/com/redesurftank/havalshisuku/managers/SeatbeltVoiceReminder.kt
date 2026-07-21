@@ -36,17 +36,21 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal object SeatbeltVoiceLogic {
     const val DEBOUNCE_MS = 3_000L
-    const val REARM_GRACE_MS = 30_000L
+    // Tempo que o cinto precisa ficar PRESO pra "re-armar" (voltar a poder avisar). Evita que um
+    // flicker do sensor ou um reajuste rápido (solta->prende->solta em <3s) conte como novo evento.
+    const val REARM_FASTENED_MS = 3_000L
     val KNOWN_SEATS = 0..4
 
-    enum class SeatPhase { FRESH, ANNOUNCED, ARMED, REARM_PENDING }
-
-    data class SeatState(val phase: SeatPhase, val sinceMs: Long = 0L)
+    // Regra (escolha do usuário): avisa UMA vez a cada transição PRESO->SOLTO com o carro andando;
+    // enquanto seguir solto, não repete; re-arma depois de ficar PRESO por REARM_FASTENED_MS.
+    // warned = já avisamos neste episódio de "solto". fastenedSinceMs = desde quando está PRESO
+    // (0 = solto). Ausente do mapa = default = armado e solto/desconhecido.
+    data class SeatState(val warned: Boolean = false, val fastenedSinceMs: Long = 0L)
 
     data class Decision(
         val announceSeats: List<Int>,
         val newState: Map<Int, SeatState>,
-        // Menor prazo pendente (janela de 30s correndo) — o gerente agenda re-checagem.
+        // Prazo pra re-checar e completar o re-arm (cinto preso mas ainda dentro do debounce).
         val recheckInMs: Long? = null
     )
 
@@ -81,47 +85,28 @@ internal object SeatbeltVoiceLogic {
         }
 
         for (seat in (state.keys + unbelted).sorted()) {
-            val cur = state[seat] ?: SeatState(SeatPhase.FRESH)
-            val next: SeatState =
-                if (seat !in unbelted) {
-                    when (cur.phase) {
-                        // Afivelou depois de avisado (ou dentro da janela de 30s) -> re-elegível.
-                        SeatPhase.ANNOUNCED, SeatPhase.REARM_PENDING -> SeatState(SeatPhase.ARMED, nowMs)
-                        else -> cur
-                    }
-                } else {
-                    when (cur.phase) {
-                        SeatPhase.FRESH ->
-                            if (moving) {
-                                announce += seat
-                                SeatState(SeatPhase.ANNOUNCED, nowMs)
-                            } else {
-                                cur // parado não fala; flip de velocidade reavalia
-                            }
-                        SeatPhase.ARMED -> {
-                            // Soltou de novo: 30s de tolerância pra re-afivelar antes de falar.
-                            wantRecheck(REARM_GRACE_MS)
-                            SeatState(SeatPhase.REARM_PENDING, nowMs)
-                        }
-                        SeatPhase.REARM_PENDING -> {
-                            val elapsed = nowMs - cur.sinceMs
-                            if (elapsed >= REARM_GRACE_MS) {
-                                if (moving) {
-                                    announce += seat
-                                    SeatState(SeatPhase.ANNOUNCED, nowMs)
-                                } else {
-                                    cur // janela vencida mas parado; fala quando andar
-                                }
-                            } else {
-                                wantRecheck(REARM_GRACE_MS - elapsed)
-                                cur
-                            }
-                        }
-                        // Regra do usuário: quem ignorou o aviso não é mais incomodado.
-                        SeatPhase.ANNOUNCED -> cur
-                    }
+            val cur = state[seat] ?: SeatState()
+            if (seat in unbelted) {
+                // Cinto SOLTO.
+                if (!cur.warned && moving) {
+                    announce += seat
+                    newState[seat] = SeatState(warned = true, fastenedSinceMs = 0L)
+                } else if (cur.warned) {
+                    // Já avisado neste episódio -> não repete enquanto seguir solto.
+                    newState[seat] = SeatState(warned = true, fastenedSinceMs = 0L)
                 }
-            if (next.phase != SeatPhase.FRESH) newState[seat] = next
+                // else (!warned && parado): default (armado) -> avisa quando começar a andar.
+            } else {
+                // Cinto PRESO. Re-arma (warned=false) após REARM_FASTENED_MS preso continuamente.
+                val since = if (cur.fastenedSinceMs == 0L) nowMs else cur.fastenedSinceMs
+                val elapsed = nowMs - since
+                if (cur.warned && elapsed < REARM_FASTENED_MS) {
+                    // Ainda no debounce: mantém "avisado" e re-checa pra completar o re-arm.
+                    newState[seat] = SeatState(warned = true, fastenedSinceMs = since)
+                    wantRecheck(REARM_FASTENED_MS - elapsed)
+                }
+                // else: re-armado (ou nunca avisado) -> default, não guarda.
+            }
         }
         return Decision(announce, newState, recheck)
     }
@@ -245,7 +230,7 @@ object SeatbeltVoiceReminder {
                                 "moving" to moving,
                                 "speed" to (rawSpeed ?: "null"),
                                 "unbelted" to unbelted.toString(),
-                                "state" to before.mapValues { it.value.phase.name }.toString()
+                                "state" to before.mapValues { "warned=${it.value.warned}" }.toString()
                             )
                         )
                         state = decision.newState
@@ -326,19 +311,25 @@ object SeatbeltVoiceReminder {
     private suspend fun withBoostedVolume(block: suspend () -> Unit) {
         val am = runCatching { audioManager() }.getOrNull()
         var restoreTo = -1
+        var restoreMuted = false
         if (am != null) {
             runCatching {
                 val pct = minVolumePct()
                 if (pct > 0) {
                     val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     val cur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    // No MUDO, getStreamVolume devolve o volume de ANTES do mudo (não 0), então
+                    // checar só cur<target deixava passar o caso mudo. Checa isStreamMute explícito.
+                    val muted = runCatching { am.isStreamMute(AudioManager.STREAM_MUSIC) }.getOrDefault(false)
                     val target = Math.ceil(pct / 100.0 * max).toInt().coerceIn(1, max)
-                    if (cur < target) {
+                    if (muted || cur < target) {
+                        // setStreamVolume com valor positivo já des-muta o canal.
                         am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
                         restoreTo = cur
+                        restoreMuted = muted
                         ClusterPersistentEventLogger.log(
                             DIAG_EVENT,
-                            mapOf("volBoost" to "$cur->$target", "max" to max, "pct" to pct)
+                            mapOf("volBoost" to "$cur->$target", "max" to max, "pct" to pct, "wasMuted" to muted)
                         )
                     }
                 }
@@ -348,7 +339,13 @@ object SeatbeltVoiceReminder {
             block()
         } finally {
             if (am != null && restoreTo >= 0) {
-                runCatching { am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0) }
+                runCatching {
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0)
+                    // Re-muta se estava mudo antes (o usuário deixou no mudo de propósito).
+                    if (restoreMuted) {
+                        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+                    }
+                }
             }
         }
     }

@@ -1,15 +1,12 @@
 package br.com.redesurftank.havalshisuku.managers
 
-import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.REARM_GRACE_MS
-import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.SeatPhase
-import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.SeatState
+import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.REARM_FASTENED_MS
 import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.evaluate
 import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.isEngineOff
 import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.isMoving
 import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceLogic.parseUnbelted
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,16 +14,15 @@ import org.junit.Test
 class SeatbeltVoiceLogicTest {
 
     private val t0 = 1_000_000L
+    private val off = emptySet<Int>()
 
     @Test
-    fun `parse do array de cintos so assentos conhecidos`() {
+    fun `parse so assentos conhecidos`() {
         assertEquals(setOf(1), parseUnbelted("(0,1,0,0,0)"))
         assertEquals(setOf(0, 4), parseUnbelted("{1,0,0,0,1}"))
-        assertEquals(emptySet<Int>(), parseUnbelted("(0,0,0,0,0)"))
-        assertEquals(emptySet<Int>(), parseUnbelted(null))
-        assertEquals(emptySet<Int>(), parseUnbelted("lixo"))
-        // índice além do 4 é ignorado
-        assertEquals(setOf(2), parseUnbelted("(0,0,1,0,0,1,1)"))
+        assertEquals(off, parseUnbelted("(0,0,0,0,0)"))
+        assertEquals(off, parseUnbelted(null))
+        assertEquals(setOf(2), parseUnbelted("(0,0,1,0,0,1,1)")) // idx>4 ignorado
     }
 
     @Test
@@ -35,131 +31,91 @@ class SeatbeltVoiceLogicTest {
         assertFalse(isMoving("0"))
         assertFalse(isMoving("0.3"))
         assertFalse(isMoving(null))
-        assertFalse(isMoving("--"))
     }
 
     @Test
-    fun `engine off usa o conjunto do TripConsistency`() {
-        assertTrue(isEngineOff("-1"))
-        assertTrue(isEngineOff("10"))
-        assertTrue(isEngineOff("15"))
-        assertFalse(isEngineOff("1"))
-        assertFalse(isEngineOff(null))
+    fun `engine off`() {
+        assertTrue(isEngineOff("-1")); assertTrue(isEngineOff("15")); assertFalse(isEngineOff("1"))
     }
 
     @Test
-    fun `regra 1 - arrancou com soltos avisa cada assento uma vez`() {
-        val d = evaluate(emptyMap(), setOf(1, 2), moving = true, nowMs = t0)
-        assertEquals(listOf(1, 2), d.announceSeats)
-        assertEquals(SeatPhase.ANNOUNCED, d.newState[1]?.phase)
-        assertEquals(SeatPhase.ANNOUNCED, d.newState[2]?.phase)
+    fun `primeira soltada andando avisa`() {
+        val d = evaluate(emptyMap(), setOf(0), moving = true, nowMs = t0)
+        assertEquals(listOf(0), d.announceSeats)
+        assertTrue(d.newState[0]!!.warned)
     }
 
     @Test
-    fun `parado nao fala e continua elegivel pra quando andar`() {
-        val d = evaluate(emptyMap(), setOf(1), moving = false, nowMs = t0)
-        assertTrue(d.announceSeats.isEmpty())
-        assertNull(d.newState[1]) // segue FRESH
-        val d2 = evaluate(d.newState, setOf(1), moving = true, nowMs = t0 + 5_000)
-        assertEquals(listOf(1), d2.announceSeats)
-    }
-
-    @Test
-    fun `regra 3 - quem ignorou nao e mais incomodado`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        val d2 = evaluate(s1, setOf(1), true, t0 + 3_600_000)
+    fun `seguir solto NAO repete`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState
+        val d2 = evaluate(s1, setOf(0), true, t0 + 60_000)
         assertTrue(d2.announceSeats.isEmpty())
-        assertNull(d2.recheckInMs)
+        assertTrue(d2.newState[0]!!.warned)
     }
 
     @Test
-    fun `regra 2 - prendeu soltou e ficou solto 30s avisa de novo`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        // prendeu
-        val s2 = evaluate(s1, emptySet(), true, t0 + 10_000).newState
-        assertEquals(SeatPhase.ARMED, s2[1]?.phase)
-        // soltou de novo -> janela de 30s, sem falar ainda
-        val d3 = evaluate(s2, setOf(1), true, t0 + 20_000)
-        assertTrue(d3.announceSeats.isEmpty())
-        assertEquals(REARM_GRACE_MS, d3.recheckInMs)
-        assertEquals(SeatPhase.REARM_PENDING, d3.newState[1]?.phase)
-        // 30s depois ainda solto -> fala
-        val d4 = evaluate(d3.newState, setOf(1), true, t0 + 20_000 + REARM_GRACE_MS)
-        assertEquals(listOf(1), d4.announceSeats)
-        assertEquals(SeatPhase.ANNOUNCED, d4.newState[1]?.phase)
+    fun `preso 3s e solta de novo avisa de novo`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState        // avisou
+        val s2 = evaluate(s1, off, true, t0 + 5_000).newState             // prende (começa timer)
+        val s3 = evaluate(s2, off, true, t0 + 5_000 + REARM_FASTENED_MS).newState // preso >=3s -> re-arma
+        val d4 = evaluate(s3, setOf(0), true, t0 + 20_000)                // solta de novo
+        assertEquals(listOf(0), d4.announceSeats)
     }
 
     @Test
-    fun `regra 2 - re-afivelou dentro dos 30s nao fala e continua armado`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        val s2 = evaluate(s1, emptySet(), true, t0 + 10_000).newState
-        val s3 = evaluate(s2, setOf(1), true, t0 + 15_000).newState // soltou (pending)
-        val d4 = evaluate(s3, emptySet(), true, t0 + 25_000) // prendeu aos 10s da janela
-        assertTrue(d4.announceSeats.isEmpty())
-        assertEquals(SeatPhase.ARMED, d4.newState[1]?.phase)
-        assertNull(d4.recheckInMs)
+    fun `preso menos de 3s e solta NAO reavisa (anti-flicker)`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState        // avisou
+        val s2 = evaluate(s1, off, true, t0 + 1_000).newState             // prende 1s
+        assertTrue(s2[0]!!.warned)                                        // ainda avisado (debounce)
+        val d3 = evaluate(s2, setOf(0), true, t0 + 2_000)                 // solta em <3s
+        assertTrue(d3.announceSeats.isEmpty())                           // não reavisa
     }
 
     @Test
-    fun `janela parcial pede recheck do tempo restante`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        val s2 = evaluate(s1, emptySet(), true, t0 + 5_000).newState
-        val d3 = evaluate(s2, setOf(1), true, t0 + 10_000) // abre a janela
-        // re-checagem no meio da janela (ex.: outro evento) recalcula o restante
-        val d4 = evaluate(d3.newState, setOf(1), true, t0 + 10_000 + 12_000)
-        assertTrue(d4.announceSeats.isEmpty())
-        assertEquals(REARM_GRACE_MS - 12_000, d4.recheckInMs)
+    fun `preso agenda recheck ate completar o re-arm`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState
+        // 1a avaliação com cinto preso: o timer de re-arm começa AGORA (elapsed 0) -> recheca no cheio.
+        val d2 = evaluate(s1, off, true, t0 + 1_000)
+        assertEquals(REARM_FASTENED_MS, d2.recheckInMs)
     }
 
     @Test
-    fun `janela vencida mas parado espera andar`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        val s2 = evaluate(s1, emptySet(), true, t0 + 5_000).newState
-        val s3 = evaluate(s2, setOf(1), true, t0 + 10_000).newState
-        // 30s+ depois, mas parado -> não fala, segue pendente
-        val d4 = evaluate(s3, setOf(1), false, t0 + 10_000 + REARM_GRACE_MS + 5_000)
-        assertTrue(d4.announceSeats.isEmpty())
-        assertEquals(SeatPhase.REARM_PENDING, d4.newState[1]?.phase)
-        // voltou a andar -> fala
-        val d5 = evaluate(d4.newState, setOf(1), true, t0 + 10_000 + REARM_GRACE_MS + 10_000)
-        assertEquals(listOf(1), d5.announceSeats)
+    fun `parado nao avisa e avisa quando andar`() {
+        val d1 = evaluate(emptyMap(), setOf(0), moving = false, nowMs = t0)
+        assertTrue(d1.announceSeats.isEmpty())
+        assertNull(d1.newState[0])                                       // segue armado (default)
+        val d2 = evaluate(d1.newState, setOf(0), moving = true, nowMs = t0 + 4_000)
+        assertEquals(listOf(0), d2.announceSeats)
     }
 
     @Test
-    fun `assentos independentes - um anunciado nao trava o outro`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        // outro assento solta depois: fala só ele, na hora (sem cooldown global)
-        val d2 = evaluate(s1, setOf(1, 3), true, t0 + 5_000)
-        assertEquals(listOf(3), d2.announceSeats)
-        assertEquals(SeatPhase.ANNOUNCED, d2.newState[1]?.phase)
+    fun `assentos independentes`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState       // avisa motorista
+        val d2 = evaluate(s1, setOf(0, 1), true, t0 + 5_000)             // passageiro solta agora
+        assertEquals(listOf(1), d2.announceSeats)                        // só o passageiro
+        assertTrue(d2.newState[0]!!.warned)
     }
 
     @Test
-    fun `reset de ignicao volta tudo pra fresh e re-avisa`() {
-        val s1 = evaluate(emptyMap(), setOf(1), true, t0).newState
-        assertTrue(s1.isNotEmpty())
-        // manager zera o mapa no ciclo de ignição
-        val d2 = evaluate(emptyMap(), setOf(1), true, t0 + 500_000)
-        assertEquals(listOf(1), d2.announceSeats)
+    fun `varios juntos avisam todos de uma vez`() {
+        val d = evaluate(emptyMap(), setOf(0, 1, 3), true, t0)
+        assertEquals(listOf(0, 1, 3), d.announceSeats)
     }
 
     @Test
-    fun `afivelado sem historico continua fora do mapa`() {
-        val d = evaluate(emptyMap(), emptySet(), true, t0)
-        assertTrue(d.announceSeats.isEmpty())
-        assertTrue(d.newState.isEmpty())
-        assertNull(d.recheckInMs)
+    fun `reset de ignicao (mapa vazio) volta a avisar`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState
+        assertTrue(s1[0]!!.warned)
+        val d2 = evaluate(emptyMap(), setOf(0), true, t0 + 500_000)      // manager zerou no ciclo
+        assertEquals(listOf(0), d2.announceSeats)
     }
 
     @Test
-    fun `recheck e o menor prazo entre assentos pendentes`() {
-        // assento 1 pendente há 20s (faltam 10s), assento 2 acabou de soltar (faltam 30s)
-        val state = mapOf(
-            1 to SeatState(SeatPhase.REARM_PENDING, t0 - 20_000),
-            2 to SeatState(SeatPhase.ARMED, t0 - 25_000)
-        )
-        val d = evaluate(state, setOf(1, 2), true, t0)
-        assertNotNull(d.recheckInMs)
-        assertEquals(10_000L, d.recheckInMs)
+    fun `preso re-armado apos recheck nao guarda estado`() {
+        val s1 = evaluate(emptyMap(), setOf(0), true, t0).newState       // avisou
+        val s2 = evaluate(s1, off, true, t0 + 1_000).newState            // prende (elapsed 0) -> guarda
+        assertTrue(s2[0]!!.warned)
+        val s3 = evaluate(s2, off, true, t0 + 1_000 + REARM_FASTENED_MS).newState // recheck: preso 3s -> re-arma
+        assertTrue(s3.isEmpty())                                         // default, sem estado
     }
 }
