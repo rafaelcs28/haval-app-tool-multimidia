@@ -1686,6 +1686,14 @@ public class ServiceManager {
         }
     }
 
+    /** Como {@link #updateData}, mas ECOA o valor pros listeners na hora (dataCache + onDataChanged),
+     *  pra a UI (card/popup da barra) refletir a mudança em TEMPO REAL mesmo quando o carro não
+     *  re-empurra a config imediatamente. Idempotente: publishOptimisticHvacValue ignora valor igual. */
+    public void updateDataOptimistic(String key, String value) {
+        updateData(key, value);
+        publishOptimisticHvacValue(key, value);
+    }
+
     private void publishOptimisticHvacValue(String key, String value) {
         String previous = dataCache.put(key, value);
         if (value != null && value.equals(previous)) {
@@ -2188,7 +2196,8 @@ public class ServiceManager {
     public void setHevSocTargetValue(int value) {
         int v = Math.max(20, Math.min(80, value));
         sharedPreferences.edit().putInt(SharedPreferencesKeys.HEV_SOC_TARGET_VALUE.getKey(), v).apply();
-        updateData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue(), String.valueOf(v));
+        // Optimistic: o card "HEV Prior. X%" (lê snapshot.socTarget) reflete o novo % em tempo real.
+        updateDataOptimistic(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue(), String.valueOf(v));
         Log.w(TAG, "[HEV-SOC UI_SET] alvo definido = " + v);
     }
 

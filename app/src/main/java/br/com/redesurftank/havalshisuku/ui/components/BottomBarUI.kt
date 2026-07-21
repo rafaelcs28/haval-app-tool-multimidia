@@ -5004,7 +5004,9 @@ private fun HevModeDialog(
                                         listOf("1" to "Inteligente", "2" to "Prioritário")
                                 ) { newVal ->
                                         reserve = newVal // otimista: popup reflete o toque na hora
-                                        serviceManager.updateData(
+                                        // updateDataOptimistic ecoa pros listeners -> o CARD da barra
+                                        // (que lê snapshot.powerReserve) também atualiza em tempo real.
+                                        serviceManager.updateDataOptimistic(
                                                 CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG
                                                         .getValue(),
                                                 newVal
