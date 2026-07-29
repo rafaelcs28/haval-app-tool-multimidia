@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NAO APAGUE. O build usa isShrinkResources=true (app/build.gradle.kts), e as variantes de voz do
+  aviso de cinto sao resolvidas por NOME em tempo de execucao (Resources.getIdentifier em
+  SeatbeltVoiceReminder.embeddedVariants) — nao ha referencia estatica R.raw.seatbelt_voice_seat0_2.
+  Sem este keep, o encolhedor de recursos considera as variantes NAO USADAS e as REMOVE do APK: o
+  aviso passaria a tocar so a variante base (ou nenhuma), sem nenhum erro de build.
+  Mesma familia da armadilha do ts.car.dcm.ConnDevice (classe-espelho apagada/renomeada pelo R8 por
+  ser usada apenas via Class.forName) — falha SILENCIOSA, nao crash.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/seatbelt_voice_*" />

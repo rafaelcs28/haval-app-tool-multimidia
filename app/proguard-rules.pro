@@ -30,3 +30,25 @@
 # (condition->a) DIFERENTE a cada build -> o que um build salvou vira lixo no proximo (config
 # reseta sozinha; regra desserializa com enum nulo e crasha UI/motor). Mantem os nomes estaveis.
 -keepnames class br.com.redesurftank.havalshisuku.ambientlight.** { *; }
+
+# Enums de models sao PERSISTIDOS por NOME em prefs (ex.: SteeringWheelAcControlType em
+# LAST_CLUSTER_AC_CONFIG; SteeringWheel*ActionType/ClimateCommandType nos botoes do volante).
+# Sem keep, o R8 renomeia as constantes DIFERENTE a cada build -> um valueOf() de valor salvo
+# pelo build anterior estoura IllegalArgumentException (crash-loop no card de AC do cluster).
+# Mesma armadilha documentada no ambientlight acima; manter os nomes das constantes estaveis.
+-keepnames enum br.com.redesurftank.havalshisuku.models.** { *; }
+
+# Classe-ESPELHO do OEM (ts.car.dcm.common.data.ConnDevice): existe no nosso fonte so pra
+# desserializar o Parcelable que o servico DCM do carro devolve. O nome DEVE bater EXATAMENTE com o
+# do OEM, e os metodos sao chamados por REFLEXAO (getDeviceUuid/getFriendlyName/getUsbSerialNumber/
+# getBtAddr/getAvailableCapabilitys/getActiveCapability/getDeviceConnectedState em
+# AndroidAutoDcmRecovery.invokeString/invokeInt).
+# BUG QUE ISTO CORRIGE: sem keep, o R8 renomeava a classe (mapping: ConnDevice -> w10), entao
+# Class.forName("ts.car.dcm.common.data.ConnDevice") lancava ClassNotFoundException, o
+# bundle.classLoader nao era setado e o unmarshal do parcel do OEM falhava (logcat: "E Parcel ...
+# Didn't find class ts.car.dcm.common.data.ConnDevice"). Como o codigo usa runCatching{}.getOrNull(),
+# a falha era SILENCIOSA: getDevices() devolvia lista VAZIA em TODA build de release/preview -> a
+# recuperacao DCM do Android Auto ficava inerte. Mesma familia do bug de enum renomeado acima.
+# Espelha o tratamento que com.autolink.** (outra classe-espelho do OEM) ja recebe no topo.
+-keep class ts.car.dcm.** { *; }
+-keepnames class ts.car.dcm.** { *; }

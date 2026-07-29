@@ -524,6 +524,20 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
         Shizuku.addBinderDeadListener(this);
         backgroundHandler.removeCallbacksAndMessages(null); // Remove any pending timeouts
         checkService();
+        // RECUPERACAO EVENT-DRIVEN do fail-safe de visibilidade do cluster.
+        // Enquanto o Shizuku esteve fora, o InstrumentProjector2 NAO decidiu visibilidade (nao da pra
+        // concluir "sem projecao" a partir de leitura cega — ver o comentario grande em
+        // updateVirtualClusterVisibility). Agora que as leituras voltaram a funcionar, revalida JA em
+        // vez de esperar o watchdog de 5s ou a rajada de re-init (que, se cair inteira dentro da
+        // janela cega, tambem le vazio). Reusa notifyDisplayStateChanged, que ja invalida o cache do
+        // `am stack list` e faz 3 sondas frescas (0/500/1000ms).
+        // Roda no backgroundHandler (este metodo e postado nele), portanto fora da main thread.
+        try {
+            br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.INSTANCE
+                    .notifyDisplayStateChanged(3);
+        } catch (Exception e) {
+            Log.e(TAG, "Error revalidating cluster visibility after Shizuku binder received", e);
+        }
     }
 
     @Override
@@ -786,6 +800,9 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
 
     @Override
     public void onDestroy() {
+        // Diagnóstico: por que o serviço morreu (recriação reseta o cluster e faz o tema
+        // piscar o velocímetro por cima do AA). Correlacionar com trim_memory/binder_dead.
+        ClusterPersistentEventLogger.logText("foreground_service_on_destroy", "isServiceRunning=" + isServiceRunning);
         if (handlerThread != null) {
             handlerThread.quitSafely();
         }
@@ -799,7 +816,27 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     }
 
     @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        // Loga só pressão real (>= TRIM_MEMORY_RUNNING_LOW=10) pra caçar recriação do
+        // serviço por memória — a causa provável do tema piscar o velocímetro no meio
+        // da viagem. Níveis baixos (RUNNING_MODERATE=5) são ruído e ficam de fora.
+        if (level >= 10) {
+            ClusterPersistentEventLogger.logText("foreground_service_trim_memory", "level=" + level);
+        }
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        ClusterPersistentEventLogger.logText("foreground_service_low_memory", "lowmem=true");
+    }
+
+    @Override
     public void onBinderDead() {
+        // Morte do binder do Shizuku dispara restart() -> serviço recriado. Suspeito nº1
+        // da recriação no meio da viagem.
+        ClusterPersistentEventLogger.logText("foreground_service_binder_dead", "shizuku_binder_dead=true");
         Shizuku.removeBinderReceivedListener(this::shizukuBinderReceived);
         Shizuku.removeBinderDeadListener(this);
         Log.w(TAG, "Shizuku binder is dead, stopping service");
@@ -807,6 +844,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     }
 
     private void restart() {
+        ClusterPersistentEventLogger.logText("foreground_service_restart", "requested=true");
         synchronized (lifecycleLock) {
             isShizukuInitialized = false;
             isServiceRunning = false;

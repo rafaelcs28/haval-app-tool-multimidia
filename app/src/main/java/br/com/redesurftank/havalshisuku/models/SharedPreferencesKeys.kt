@@ -369,6 +369,26 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "seatbeltVoiceMinVolumePct",
             "Volume mínimo (% do volume de mídia) forçado enquanto o aviso de cinto toca"
     ),
+    ENABLE_RESOURCE_OVERLAY(
+            "enableResourceOverlay",
+            "Indicador flutuante de CPU e RAM por cima dos apps (some com a barra estendida aberta)"
+    ),
+    RESOURCE_OVERLAY_FONT_SP(
+            "resourceOverlayFontSp",
+            "Tamanho da fonte do indicador flutuante de CPU/RAM (sp)"
+    ),
+    RESOURCE_OVERLAY_CORNER(
+            "resourceOverlayCorner",
+            "Canto de ancoragem do indicador flutuante: 0=sup.esq 1=sup.dir 2=inf.esq 3=inf.dir"
+    ),
+    RESOURCE_OVERLAY_X(
+            "resourceOverlayX",
+            "Deslocamento horizontal (dp) do indicador flutuante a partir do canto escolhido"
+    ),
+    RESOURCE_OVERLAY_Y(
+            "resourceOverlayY",
+            "Deslocamento vertical (dp) do indicador flutuante a partir do canto escolhido"
+    ),
     AMBIENT_LIGHT_IDLE_ENABLED(
             "ambientLightIdleEnabled",
             "Usar cor padrão de repouso no Ambient Light"

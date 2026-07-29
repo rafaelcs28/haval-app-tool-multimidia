@@ -1,6 +1,7 @@
 package br.com.redesurftank.havalshisuku.ui.components
 
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 internal enum class DashboardCardId(val storageKey: String) {
@@ -70,4 +71,27 @@ internal fun formatDashboardFuelLitersAndRange(percent: String, range: String): 
         distance != "--" -> distance
         else -> "--"
     }
+}
+
+// --- Colapso/geometria do dashboard estendido (Lote E, Fase 2, extraído do BottomBarUI.kt) ---
+// Puro (sem Compose/estado). shouldCollapse/isMostlyVertical são cobertos por DashboardCardLayoutTest.
+internal const val DASHBOARD_COLLAPSE_DRAG_THRESHOLD_PX = 80f
+internal const val DASHBOARD_COLLAPSE_VERTICAL_DOMINANCE_RATIO = 1.2f
+
+internal fun shouldCollapseDashboardAfterDrag(totalDragY: Float, totalDragX: Float = 0f): Boolean {
+        return totalDragY > DASHBOARD_COLLAPSE_DRAG_THRESHOLD_PX &&
+                isDashboardCollapseDragMostlyVertical(totalDragY, totalDragX)
+}
+
+internal fun isDashboardCollapseDragMostlyVertical(totalDragY: Float, totalDragX: Float): Boolean {
+        return totalDragY > 0f &&
+                totalDragY >= abs(totalDragX) * DASHBOARD_COLLAPSE_VERTICAL_DOMINANCE_RATIO
+}
+
+internal fun dashboardSlotWeight(index: Int): Float {
+        return when (index) {
+                0 -> 1.12f
+                1 -> 0.90f
+                else -> 1.03f
+        }
 }

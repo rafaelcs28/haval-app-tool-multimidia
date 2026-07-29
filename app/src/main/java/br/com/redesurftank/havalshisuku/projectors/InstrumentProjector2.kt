@@ -96,6 +96,8 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     // dispara updateVirtualClusterVisibility 2x). So reescreve alpha/visibility/JS se o estado mudou.
     private var lastAppliedProjectorVisible: Boolean? = null
     private var lastAppliedProjectorHidden: Boolean? = null
+    /** Throttle do log de "pulei a decisao de visibilidade por estar cego" (Shizuku fora). */
+    private var lastBlindVisibilitySkipLogAtMs = 0L
     private var lastPushedClusterEnabled: Boolean? = null
     private var lastPushedAppInDash: String? = null
 
@@ -169,6 +171,28 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     handler.postDelayed(this, 5000) // Check every 5s
                 }
             }
+
+    // Rajada curta de revalidação da projeção após re-init do WebView/projector (ex.:
+    // serviço recriado no meio da viagem). Nesses re-inits o estado da projeção reseta e
+    // o tema volta a desenhar o velocímetro por cima do AA até o watchdog de 5s. Aqui
+    // reavaliamos algumas vezes em ~1,6s pra o estado virar "projetando" em <1s e o tema
+    // NUNCA ficar mostrando o velocímetro por cima de AA ativo. Limitado a 4 disparos —
+    // não é polling, não reintroduz o custo de am stack list (OOM).
+    private var projectionRevalidateCount = 0
+    private val projectionRevalidateRunnable =
+            object : Runnable {
+                override fun run() {
+                    refreshProjectionStateFromDisplay("REINIT_REVALIDATE")
+                    projectionRevalidateCount++
+                    if (projectionRevalidateCount < 4) handler.postDelayed(this, 450L)
+                }
+            }
+
+    private fun scheduleProjectionRevalidationBurst() {
+        handler.removeCallbacks(projectionRevalidateRunnable)
+        projectionRevalidateCount = 0
+        handler.postDelayed(projectionRevalidateRunnable, 300L)
+    }
 
     val monitoredWarningKeys =
             setOf(
@@ -473,20 +497,6 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                 },
                 untilMs - now + 80L
         )
-    }
-
-    private fun isProjectionOverlayBypassActive(
-            carPlayInDash: Boolean,
-            androidAutoInDash: Boolean
-    ): Boolean {
-        if (androidAutoInDash) return false
-        if (!carPlayInDash) return false
-
-        // Camera/AVM/HVAC no longer hide the cluster Presentation. The native
-        // CarPlay patch keeps the video route alive, and hiding this WebView
-        // removes the protected Mapa overlay while the projection is healthy
-        // on display 3.
-        return false
     }
 
     private fun applyProjectionOverlayBypass(active: Boolean) {
@@ -1069,7 +1079,27 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         projectorWarmupBypassUntilMs =
                 SystemClock.uptimeMillis() + PROJECTION_PROJECTOR_WARMUP_BYPASS_MS
 
-        root = FrameLayout(outerContext).apply { setBackgroundColor(Color.TRANSPARENT) }
+        // NASCE OCULTO (parte 2 do fail-safe). Uma FrameLayout nova e View.VISIBLE por padrao, e o
+        // updateVirtualClusterVisibility("ON_CREATE") logo abaixo pode NAO decidir nada se o Shizuku
+        // estiver fora (leitura cega) — foi exatamente o caso do bug capturado em 2026-07-26: o
+        // servico foi recriado porque o binder do Shizuku morreu, no re-init as leituras davam vazio,
+        // o fail-safe nao aplicava visibilidade e o tema aparecia por cima do AA so por ser o default
+        // da View. Comecar oculto inverte para "OCULTO ATE PROVAR QUE NAO HA PROJECAO". No caminho
+        // normal (Shizuku vivo) o ON_CREATE aplica a visibilidade correta milissegundos depois.
+        //
+        // FALSO ALARME REGISTRADO (2026-07-27): apos deployar isto eu vi heartbeat rootVisible=false e
+        // achei que tinha travado o cluster oculto — revertei e o rootVisible CONTINUOU false, o que
+        // provou que a causa era outra: com o carro PARADO, isMainScreenOn() le CAR_BASIC_ENGINE_STATE
+        // (ServiceManager:3076 + EngineState:29) e da false, entao projectorVisible=false e o cluster
+        // fica oculto — CORRETO. rootVisible=false aparece 313x no log de 25/07 e 45x no de 26/07,
+        // muito antes desta mudanca. Ou seja: nao ha evidencia de que nascer oculto quebre nada; a
+        // comparacao "antes/depois" que me enganou tinha o ESTADO DO CARRO como variavel, nao o codigo.
+        // LICAO: rootVisible so e observavel de forma util com a tela do carro LIGADA (motor ligado).
+        root = FrameLayout(outerContext).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            alpha = 0f
+            isVisible = false
+        }
         setContentView(root)
         setupControlView(root)
         isAnyAppOnDisplay3 =
@@ -1080,6 +1110,9 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         syncInitialWarnings() // Fresh JS state on init — warnings need to be primed
         refreshNativeProjectionPanelStateFromCache()
         updateVirtualClusterVisibility(reason = "ON_CREATE")
+        // Projector recriado: revalida a projeção em rajada pra o tema não mostrar o
+        // velocímetro por cima de um AA que já está projetando.
+        scheduleProjectionRevalidationBurst()
         setupDataListeners()
     }
 
@@ -1361,6 +1394,9 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                             // state immediately so CarPlay/AA display overrides never stay stale.
                                             resetProjectionStateCache()
                                             updateVirtualClusterVisibility(reason = "WEBVIEW_PAGE_FINISHED")
+                                            // Após recarga do WebView, revalida a projeção em rajada
+                                            // pra o tema não mostrar o velocímetro por cima de AA ativo.
+                                            scheduleProjectionRevalidationBurst()
 
                                             // Re-aplica o toggle "ocultar velocidade na projeção"
                                             // (o <style> é reinjetado após cada carga/recarga de tema).
@@ -1680,15 +1716,61 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             reason: String = "UPDATE_VIRTUAL_CLUSTER_VISIBILITY",
             projectionPreparingD3: Boolean = isProjectionPreparingD3()
     ) {
+        // ===================== FAIL-SAFE: nao decidir visibilidade estando CEGO =====================
+        // BUG QUE ISTO CORRIGE (capturado pelo marcador do usuario em 2026-07-26 10:50:01):
+        // quando o binder do Shizuku morre, ShizukuUtils.runCommandAndGetOutput devolve STRING VAZIA
+        // (ShizukuUtils.java:25-31) — indistinguivel de "o comando rodou e nao achou nada". Toda a
+        // deteccao de projecao aqui (isCarPlayInDash / isProjectionMirrorInDash / isAnyAppOnDisplay)
+        // depende de `am stack list` via Shizuku, entao com o binder morto tudo le vazio e o app
+        // concluia "NAO HA PROJECAO NO CLUSTER" -> mostrava o tema POR CIMA do Android Auto, que
+        // continua projetando (a projecao do AA NAO depende do nosso app). Era um FAIL-OPEN: cego,
+        // assumia o padrao mais perigoso. Cronologia real: binder morreu 10:49:49, servico recriado
+        // 10:49:54, cluster voltou pro tema 10:49:58, usuario marcou 10:50:01, so se corrigiu
+        // ~10:50:17 (quando o Shizuku voltou) = ~19s de velocimetro sobre o AA.
+        // AGORA: cego => NAO mexe na visibilidade, preserva o ultimo estado conhecido. Num projetor
+        // recem-criado lastAppliedProjectorVisible/Hidden sao null, logo isto significa OCULTO ATE
+        // PROVAR O CONTRARIO em vez de visivel por padrao.
+        // TRADE-OFF ACEITO: se o Shizuku ficar fora por muito tempo E a projecao terminar nesse
+        // intervalo, o cluster fica sem o tema ate o binder voltar — muito menos grave que o tema
+        // sobre a projecao. A recuperacao e event-driven: ForegroundService dispara
+        // notifyDisplayStateChanged(3) quando o binder do Shizuku volta.
+        if (!br.com.redesurftank.havalshisuku.utils.ShizukuUtils.isShizukuAvailable()) {
+            // Throttle de 2s: esta funcao e chamada de muitos gatilhos (watchdog de 5s, prefs, sinal
+            // de painel nativo, eventos de display). Numa queda longa do Shizuku isso inundaria o
+            // arquivo. Mesmo padrao do projection_d3_hold acima.
+            val nowBlind = SystemClock.uptimeMillis()
+            if (nowBlind - lastBlindVisibilitySkipLogAtMs > 2_000L) {
+                lastBlindVisibilitySkipLogAtMs = nowBlind
+                ClusterPersistentEventLogger.log(
+                        "projection_visibility_skipped_blind",
+                        mapOf(
+                                "reason" to reason,
+                                "lastVisible" to lastAppliedProjectorVisible,
+                                "lastHidden" to lastAppliedProjectorHidden
+                        )
+                )
+                Log.w(
+                        TAG,
+                        "[$reason] Shizuku unavailable; keeping last cluster visibility " +
+                                "(fail-safe: nao concluir 'sem projecao' a partir de leitura cega)"
+                )
+            }
+            return
+        }
+
         val clusterEnabled =
                 preferences.getBoolean(SharedPreferencesKeys.ENABLE_VIRTUAL_CLUSTER.key, true)
         val projectorVisible =
                 shouldShowProjector() && ServiceManager.getInstance().isMainScreenOn
-        val androidAutoInDash =
-                br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
-                        .isAndroidAutoOnDisplay(3)
-        val overlayBypassActive =
-                isProjectionOverlayBypassActive(carPlayInDash, androidAutoInDash)
+        // Lote 4b: o bypass do overlay esta DESATIVADO de forma permanente — camera/AVM/HVAC nao
+        // escondem mais o Presentation do cluster (o patch nativo do CarPlay mantem a rota de video
+        // viva, e esconder esta WebView removia o overlay protegido do Mapa com a projecao saudavel
+        // no display 3). A funcao isProjectionOverlayBypassActive() retornava `false` nas TRES saidas,
+        // mas para chamar era preciso avaliar isAndroidAutoOnDisplay(3) = hasAndroidAutoVisualOnDisplay
+        // + isAndroidAutoProjectionSessionReadyForDisplay = ~3 processos de shell, em TODA invocacao
+        // (inclusive no watchdog de 5s, na main thread) e o resultado era jogado fora.
+        // Constante explicita: mesmo comportamento, zero shell.
+        val overlayBypassActive = false
         var isLeftCovered = false
         var isRightCovered = false
 

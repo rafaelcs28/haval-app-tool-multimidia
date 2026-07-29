@@ -150,6 +150,10 @@ object DisplayAppLauncher {
     private const val PREF_DESIRED_ANDROID_AUTO_DISPLAY_ID = "desiredAndroidAutoDisplayId"
     private const val ANDROID_AUTO_CLUSTER_GUARD_COOLDOWN_MS = 2_500L
     private const val ANDROID_AUTO_WINDOW_FOCUS_GUARD_COOLDOWN_MS = 4_000L
+    // Reavaliação imediata da projeção quando o AA aparece numa janela (event-driven),
+    // pra esconder o tema do cluster na hora em vez de esperar o watchdog de 5s.
+    private const val ANDROID_AUTO_PROJECTION_NOTIFY_COOLDOWN_MS = 1_000L
+    private var lastAndroidAutoProjectionNotifyAt = 0L
     private const val ANDROID_AUTO_WINDOW_FOCUS_LATE_VERIFY_DELAY_MS = 3_500L
     private const val ANDROID_AUTO_WINDOW_FOCUS_FINAL_VERIFY_DELAY_MS = 4_000L
     private const val ANDROID_AUTO_MEDIA_KEY_COOLDOWN_MS = 650L
@@ -1184,19 +1188,36 @@ object DisplayAppLauncher {
         return lastActiveAtMs > 0L && ageMs >= 0L && ageMs <= cacheMs
     }
 
+    /** elapsedRealtime do ultimo pre-aquecimento do bind do LinkCommand (AA_WINDOW_PREWARM). Serve
+     *  pra INSTRUMENTACAO: se o 1o comando pro cluster falhar e isto vier -1 (nunca disparou), a
+     *  hipotese "no wireless a janela nao sobe como o pacote do AA, entao o pre-aquecimento nao
+     *  acontece" fica CONFIRMADA em vez de teorica. */
+    private var lastAndroidAutoLinkPrewarmAtMs = 0L
+
     private suspend fun isAndroidAutoVisualProjectionReadyForToggle(reason: String): Boolean {
         // O binder do LinkCommand do AA sobe de forma ASSÍNCRONA (bindService -> onServiceConnected
         // depois). Pós-boot ele não fica pronto na 1ª checagem, então RETENTAMOS esperando o bind
         // completar + o link ativar (estilo CarPlay requestCarPlayUiIfLinkActivated). Antes esperava
         // 180ms uma vez e desistia (return) -> o 1º long-press do volante pro cluster era perdido e só
         // o 2º projetava; a 2ª chamada achava o bind (esquentado pela 1ª) já vivo.
+        // INSTRUMENTACAO (persistente, sobrevive ao R8 — Log.* e removido em release/preview).
+        // Objetivo: quando o 1o comando pro cluster nao for de primeira, o log dizer POR QUE, em vez
+        // de a gente teorizar. Captura o estado de ENTRADA: o binder ja estava vivo? o
+        // pre-aquecimento chegou a disparar? (ver lastAndroidAutoLinkPrewarmAtMs)
+        val binderAliveAtEntry = androidAutoLinkCommandBinder?.isBinderAlive == true
+        val prewarmAgoMs =
+            if (lastAndroidAutoLinkPrewarmAtMs > 0L) {
+                SystemClock.elapsedRealtime() - lastAndroidAutoLinkPrewarmAtMs
+            } else {
+                -1L
+            }
         if (androidAutoLinkCommandBinder?.isBinderAlive != true) {
             ensureAndroidAutoLinkCommandBound("${reason}_BIND")
         }
         // Checa ANTES de esperar (toggle subsequente com binder já vivo retorna na hora, sem latência);
         // se ainda não está pronto, retenta o bind + espera até ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS.
         // (O settle p/ o cluster renderizar é feito na projeção — ensureAppPatchLoadedForCluster — não aqui.)
-        repeat(ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS) {
+        repeat(ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS) { attemptIndex ->
             if (androidAutoLinkCommandBinder?.isBinderAlive == true) {
                 val linkStatus = readAndroidAutoLinkStatusIfAlreadyBound("${reason}_LINK")
                 if (shouldAllowAndroidAutoVisualProjectionToggleForState(
@@ -1204,6 +1225,19 @@ object DisplayAppLauncher {
                         dcmProjectionActive = false
                     )
                 ) {
+                    ClusterPersistentEventLogger.log(
+                        "aa_toggle_ready",
+                        mapOf(
+                            "reason" to reason,
+                            // attempt=0 => o binder ja estava quente (pre-aquecimento funcionou ou
+                            // toggle subsequente). attempt alto => bind frio quase estourando o teto.
+                            "attempt" to attemptIndex,
+                            "attemptsMax" to ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS,
+                            "binderAliveAtEntry" to binderAliveAtEntry,
+                            "prewarmAgoMs" to prewarmAgoMs,
+                            "linkStatus" to describeAndroidAutoLinkStatus(linkStatus)
+                        )
+                    )
                     return true
                 }
             } else {
@@ -1230,6 +1264,28 @@ object DisplayAppLauncher {
                         "dcmDevices=${dcmDevices.joinToString(prefix = "[", postfix = "]")}"
             )
         }
+        // ESTE e o evento que explica o "tive que mandar de novo": o comando e fire-and-forget
+        // (scope.launch sem checar resultado), entao quando isto retorna false o toggle e DROPADO em
+        // silencio. Campos-chave pro diagnostico:
+        //  - prewarmAgoMs=-1  => o pre-aquecimento NUNCA disparou (confirma a hipotese do wireless:
+        //    a janela nao sobe como o pacote do AA, entao onAppWindowChanged nao pre-aquece).
+        //  - binderAliveAtEntry=false + allowed=false => bind frio estourou o teto (~1,4s) e o fix
+        //    certo e alargar a janela de tentativas.
+        //  - dcmUsb/dcmBt => pista de TRANSPORTE (cabo vs sem fio) vinda dos device snapshots do DCM.
+        ClusterPersistentEventLogger.log(
+            if (allowed) "aa_toggle_ready_late" else "aa_toggle_not_ready",
+            mapOf(
+                "reason" to reason,
+                "attemptsMax" to ANDROID_AUTO_PROJECTION_TOGGLE_READY_ATTEMPTS,
+                "binderAliveAtEntry" to binderAliveAtEntry,
+                "prewarmAgoMs" to prewarmAgoMs,
+                "linkStatus" to describeAndroidAutoLinkStatus(linkStatus),
+                "dcmProjectionActive" to dcmProjectionActive,
+                "dcmDeviceCount" to dcmDevices.size,
+                "dcmUsb" to dcmDevices.count { !it.usbSerial.isNullOrBlank() },
+                "dcmBt" to dcmDevices.count { !it.btAddr.isNullOrBlank() }
+            )
+        )
         return allowed
     }
 
@@ -4747,7 +4803,32 @@ object DisplayAppLauncher {
     }
 
     private fun preserveAndroidAutoClusterContractAfterWindowChange(packageName: String) {
+        // GUARDA BARATA PRIMEIRO (Lote 4a). Esta funcao roda a CADA TYPE_WINDOW_STATE_CHANGED (todo
+        // app, dialogo, popup do OEM, teclado) e na MAIN thread. A guarda de elegibilidade abaixo
+        // custa `resolveActiveProjectionPackageForDisplay(3)` = 5-8 processos de shell (am stack list
+        // + fallback dumpsys) ANTES de qualquer checagem barata.
+        // PROVA DE EQUIVALENCIA: isAndroidAutoClusterPreservationEligibleForState() so retorna true
+        // com `desiredOnCluster == true`; logo, com a pref != 3 esta funcao JA retornava aqui — so
+        // depois de pagar os shells. Ler a pref (getInt em memoria) da o mesmo resultado de graca.
+        // PROVA DE PADRAO: a gemea preserveCarPlayClusterContractAfterWindowChange ja abre com
+        // `if (!isCarPlayDesiredOnCluster()) return`; a versao do AA era a excecao.
+        // (Unico efeito colateral no caminho pulado e lastAndroidAutoVisualProjectionEvidenceLogAt,
+        // um timestamp de throttle de log — sem consequencia funcional.)
+        if (!isAndroidAutoDesiredOnCluster()) return
         if (!isAndroidAutoClusterPreservationEligible()) return
+
+        // AA está no/assumindo o cluster (D3). Qualquer troca de janela relevante aqui — o
+        // evento chega tanto pelo pacote do AA quanto pelos do sistema/OEM (beantechs.*), e
+        // vale IGUAL para CABO e WIRELESS — reavalia a projeção JÁ (event-driven), pro
+        // InstrumentProjector2 esconder o tema do cluster (velocímetro esquerdo) na hora,
+        // sem esperar o watchdog de 5s. Cooldown evita rajada nas trocas rápidas de janela
+        // do AA (e mantém isto como evento, não como polling — não reintroduz o custo de
+        // am stack list que causou OOM).
+        val nowAaNotify = System.currentTimeMillis()
+        if (nowAaNotify - lastAndroidAutoProjectionNotifyAt > ANDROID_AUTO_PROJECTION_NOTIFY_COOLDOWN_MS) {
+            lastAndroidAutoProjectionNotifyAt = nowAaNotify
+            notifyDisplayStateChanged(3)
+        }
 
         if (shouldRestoreAndroidAutoClusterAfterProjectionWindowChange(packageName)) {
             val safePackage = packageName.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(80)
@@ -5600,41 +5681,22 @@ object DisplayAppLauncher {
         initialSignature: String,
         reason: String
     ) {
-        val generation = androidAutoSteeringSkipFallbackGeneration.incrementAndGet()
+        // DESATIVADO (causava "pula 2 faixas"): a rota nativa do OEM ja faz next/previous de forma
+        // confiavel com o MediaCenter (source 402) ativo. Este fallback disparava um 2o skip quando a
+        // assinatura de midia (titulo/artista/album/duracao) ainda nao tinha atualizado no poll do
+        // card (~1.5s) e o delay aqui era so 900ms -> falso "nao mudou" -> skip duplo. Por ser uma
+        // CORRIDA (poll vs 900ms) o sintoma era intermitente ("as vezes pula duas").
+        // Originalmente so o "next" duplicava (no "previous" a metadata da faixa recem-tocada
+        // atualizava dentro dos 900ms); o usuario reportou nos dois sentidos.
+        // initialSignature/keyCode mantidos na assinatura por compatibilidade do call site.
+        // ATENCAO: este fix ja existia no pr-93 (commit 71331c3) e SE PERDEU no rebase para a
+        // preview .71 — mesma classe de regressao do DEFAULT_KEYS. Se voltar a duplicar, primeiro
+        // confira se este corpo continua desativado.
         Log.w(
             TAG,
-            "[$reason] Scheduling Android Auto LinkCommand skip fallback keyCode=$keyCode"
+            "[$reason] Android Auto steering skip fallback disabled (native handles skip) " +
+                "keyCode=$keyCode"
         )
-        scope.launch {
-            delay(ANDROID_AUTO_STEERING_SKIP_FALLBACK_DELAY_MS)
-            if (generation != androidAutoSteeringSkipFallbackGeneration.get()) {
-                Log.w(TAG, "[${reason}_SKIP_FALLBACK] Skipping stale Android Auto skip fallback")
-                return@launch
-            }
-            val currentSignature = androidAutoSteeringMediaSignature()
-            if (currentSignature != initialSignature) {
-                Log.w(
-                    TAG,
-                    "[${reason}_SKIP_FALLBACK] Native route changed media; " +
-                        "skipping LinkCommand fallback keyCode=$keyCode"
-                )
-                return@launch
-            }
-            val sent = sendAndroidAutoNativeMediaDirectCommand(
-                keyCode = keyCode,
-                reason = "${reason}_SKIP_FALLBACK"
-            )
-            if (sent) {
-                BottomBarService.markAndroidAutoTrackCommandProgressReset(
-                    "Android Auto steering fallback ${androidAutoTrackCommandName(keyCode)}"
-                )
-            }
-            Log.w(
-                TAG,
-                "[${reason}_SKIP_FALLBACK] Android Auto LinkCommand skip fallback " +
-                    "keyCode=$keyCode sent=$sent"
-            )
-        }
     }
 
     private fun scheduleAndroidAutoSteeringPlaybackTargetReconcile(
@@ -6794,6 +6856,14 @@ object DisplayAppLauncher {
         Log.w(TAG, "CMD: $cmd")
         val out = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", "$cmd 2>&1"))
         Log.w(TAG, "OUT: [$out]")
+        // INVALIDACAO CENTRAL do cache de `am stack list` (Lote 4c). Este helper e o funil de TODOS
+        // os comandos que mutam layout (am start / am stack resize|remove|move / am display / am
+        // force-stop / wm / pm ...), entao invalidar AQUI cobre todos de uma vez — muito mais seguro
+        // que sair anotando cada ponto de mutacao e inevitavelmente esquecer um.
+        // Os poucos `sh("dumpsys ...")` de leitura tambem invalidam: e over-invalidacao INOFENSIVA
+        // (perde cache, nunca corrompe) e estao no caminho de recuperacao do CarPlay, fora do loop
+        // quente — em regime estavel nada fica invalidando o cache.
+        invalidateStackListCache()
         return out
     }
 
@@ -7615,6 +7685,17 @@ object DisplayAppLauncher {
     ) {
         scope.launch {
             repeat(20) {
+                // Leitura FRESCA por iteracao (Lote 4c): este laco ESPERA por uma mudanca externa (a
+                // config do volante do OEM subir), com intervalo de 150ms — menor que o TTL de 300ms
+                // do cache. Sem invalidar, metade das iteracoes leria o retrato anterior.
+                // POR QUE ISSO IMPORTA: no long-press a config do OEM abre SOZINHA e nao da pra
+                // cancelar o evento (ver ServiceManager.onSteeringCustomLongPress). Este poll existe
+                // pra ENCOBRIR essa tela intrusa o mais rapido possivel — dando BACK (toggles) ou
+                // BACK + abrindo o app do usuario por cima (OPEN_APP). Cachear aqui nao "atrasaria
+                // uma deteccao": deixaria a tela do OEM PISCANDO NA CARA DO MOTORISTA por mais tempo,
+                // em TODA acao de long-press mapeada, nos dois botoes.
+                // Sao no maximo 20 leituras, e so enquanto ele aperta o botao.
+                invalidateStackListCache()
                 if (getTopPackageOnDisplay(0) == "com.beantechs.settings") {
                     onConfigForeground.run()
                     return@launch
@@ -7644,7 +7725,37 @@ object DisplayAppLauncher {
                 }
             }
 
-            // Fallback to dumpsys if am stack list is not helping
+            // ===================== Lote 4d =====================
+            // ANTES: nao achar task no display caia SEMPRE neste fallback — um pipeline de TRES
+            // processos (`dumpsys activity activities | sed | grep`) sobre uma das saidas mais caras
+            // do AMS. E o pior: no estado NORMAL de direcao isso era a regra, nao a excecao, porque o
+            // nosso Presentation do cluster e FLAG_NOT_FOCUSABLE e NAO E TASK (InstrumentProjector2,
+            // criacao da janela) — logo o display 3 nunca aparece no `am stack list` quando nao ha
+            // projecao. Com getTopPackageOnDisplay(3) sendo chamado varias vezes por avaliacao, eram
+            // dezenas de processos por ciclo pra chegar no mesmo `null`.
+            //
+            // AGORA: "o `am stack list` foi lido COM SUCESSO e nao ha task neste display" e um
+            // NEGATIVO LEGITIMO, nao sinal de leitura falha. Devolve null direto.
+            //
+            // NOTA HONESTA sobre o fallback: ele SO agregaria valor se o dumpsys enxergasse atividade
+            // num display que o `am stack list` nao lista. Quando a leitura falha de verdade (Shizuku
+            // fora), `getStackList()` volta "" — mas o dumpsys tambem passa pelo Shizuku e voltaria ""
+            // igual. Ou seja, no caso de falha o fallback nao salva nada. Fica atras da flag abaixo
+            // pra reversao de UMA LINHA caso o teste no carro mostre divergencia.
+            if (!TOP_PACKAGE_DUMPSYS_FALLBACK_ENABLED) {
+                if (displayId == 3) {
+                    val nowNeg = SystemClock.uptimeMillis()
+                    if (nowNeg - lastTopPackageNegativeLogAt > 30_000L) {
+                        lastTopPackageNegativeLogAt = nowNeg
+                        Log.w(
+                            TAG,
+                            "[TOP_PKG_D$displayId] sem task no stack list -> negativo legitimo " +
+                                    "(fallback dumpsys desativado, Lote 4d)"
+                        )
+                    }
+                }
+                return null
+            }
             val output = ShizukuUtils.runCommandAndGetOutput(
                 arrayOf("sh", "-c", "dumpsys activity activities | sed -n '/Display #$displayId/,/Display #/p' | grep -E 'mResumedActivity|mCurrentFocus|mFocusedActivity'")
             )
@@ -7658,11 +7769,24 @@ object DisplayAppLauncher {
     }
 
     fun notifyDisplayStateChanged(displayId: Int) {
+        invalidateStackListCache()
         scope.launch {
             // Check multiple times with increasing delays to ensure system has updated stack state
             val delays = listOf(0L, 500L, 1000L)
             for (d in delays) {
                 if (d > 0) delay(d)
+                // ESTE LACO NAO PODE SER CACHEADO (Lote 4c). Ele nao e uma operacao querendo um
+                // retrato coerente: sao TRES SONDAS TEMPORAIS deliberadas, cujo proposito e pegar
+                // instantes DIFERENTES esperando o sistema assentar (ver o comentario acima). Servir
+                // a sonda de 500ms/1000ms com um retrato de ate 300ms atras (populado, por exemplo,
+                // pelo loop de 1s) destroi essa semantica e pode despachar um isActive=false FALSO.
+                // Consequencia verificada: isAnyAppOnDisplay3 tem PRODUTOR UNICO (o dispatch abaixo)
+                // e NENHUM watchdog que o corrija — o watchdog de 5s so recalcula carPlayInDash /
+                // projectionMirrorInDash. Um `false` errado fica TRAVADO ate o proximo
+                // launch/kill/handoff e deixa o velocimetro do tema por cima do app do cluster.
+                // 3 leituras frescas por handoff sao irrelevantes contra as ~600-700 mil/dia que o
+                // cache elimina.
+                invalidateStackListCache()
                 val isActive = isAnyAppOnDisplay(displayId)
                 val eventType = when (displayId) {
                     1 -> br.com.redesurftank.havalshisuku.models.ServiceManagerEventType.DISPLAY_1_APP_STATE_CHANGED
@@ -7681,8 +7805,88 @@ object DisplayAppLauncher {
         }
     }
 
+    // ===================== Cache de `am stack list` (Lote 4c) =====================
+    // POR QUE: cada leitura criava um PROCESSO (Shizuku newProcess + retries com sleep). Com 13 call
+    // sites e consumidores em regime permanente — loop de 1s do BottomBarService (7-8 leituras/tique),
+    // watchdog de 5s do InstrumentProjector2 (13 leituras, na MAIN thread) e todo evento de janela —
+    // dava ~600-700 mil processos/dia. O comentario em :348-352 deste arquivo ja identificava isso
+    // como a fonte DOMINANTE do OOM do system_server; medido no carro: crash a cada ~32 min.
+    // A leitura so custa quando ERRA o cache: a primeira popula e as outras 12 da mesma avaliacao
+    // saem instantaneas -> watchdog cai de 13 processos para 1, loop de 1s de 7-8 para 1 por tique.
+    //
+    // NOTA IMPORTANTE: isto NAO deixa a leitura menos coerente. HOJE as 13 leituras de uma mesma
+    // avaliacao sao frescas mas de INSTANTES DIFERENTES (a operacao ja ve estado inconsistente entre
+    // elas); com o cache todas passam a ver o mesmo instante.
+    //
+    // TTL curto de proposito: colapsa as leituras do MESMO instante e nada mais. Para desligar o
+    // cache inteiro (reversao de 1 linha, restaura o comportamento anterior) basta por 0L aqui.
+    /**
+     * Lote 4d: fallback `dumpsys activity activities` do getTopPackageOnDisplay.
+     * FALSE = "sem task no stack list" e negativo legitimo (poupa 3 processos por chamada, e no
+     * cluster ocioso isso era a REGRA). Trocar pra true reverte o comportamento antigo — reversao de
+     * UMA LINHA, igual ao TTL=0 do cache.
+     */
+    private const val TOP_PACKAGE_DUMPSYS_FALLBACK_ENABLED = false
+    private var lastTopPackageNegativeLogAt = 0L
+
+    // ATENCAO — CACHE DESLIGADO (2026-07-28). O dono reportou AA no cluster ficando TODO PRETO, de
+    // forma REPRODUZIVEL. Log: `aa_cluster_surface h=0` (superficie com altura ZERO; no dia 26/07 a
+    // mesma linha dava h=1088) + STALE_SURFACE_GUARD disparando. `h=0` NAO existia no log de 25/07 e
+    // passou a aparecer em 26 e 27/07 — exatamente quando o carro comecou a rodar o Lote 4c. Suspeita:
+    // retrato defasado do stack list levando a decisao de superficie/geometria com dado velho.
+    // 0L = sempre leitura fresca (comportamento pre-4c). NAO religar sem antes reproduzir o teste de
+    // projecao do AA no cluster e confirmar h!=0.
+    private const val STACK_LIST_CACHE_TTL_MS = 0L
+
+    private val stackListLock = Any()
+    private var cachedStackList: String? = null
+    private var cachedStackListAt = 0L
+    // Geracao incrementada a cada invalidacao. FECHA A "RESSURREICAO": uma leitura que comecou ANTES
+    // de uma mutacao pode terminar DEPOIS dela e regravaria dados pre-mutacao por cima da
+    // invalidacao (cenario real encontrado: `am display move-stack` -> sleep(200) -> releitura em
+    // :7413 devolveria null -> o `am stack resize` com os bounds do cluster nunca rodaria e o app
+    // pousaria com geometria errada). Com a geracao, esse resultado e devolvido a quem pediu mas
+    // NAO e publicado no cache.
+    private var stackListGeneration = 0
+
     private fun getStackList(): String {
-        return ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", "am stack list 2>&1"))
+        // Timestamp marcado ANTES da leitura de proposito (nao depois): uma leitura lenta —
+        // ShizukuUtils tem ate 3 tentativas com sleep(500), pode levar ~1s — nasce ja expirada em
+        // vez de ser servida como "fresca" por mais 300ms (o que daria ate ~1,3s de defasagem).
+        // Perde-se o cache nesse caso raro; nunca se serve dado velho.
+        val startedAt = SystemClock.uptimeMillis()
+        val generationAtStart: Int
+        synchronized(stackListLock) {
+            val cached = cachedStackList
+            if (cached != null && startedAt - cachedStackListAt < STACK_LIST_CACHE_TTL_MS) {
+                return cached
+            }
+            generationAtStart = stackListGeneration
+        }
+
+        // FORA do lock: nunca bloquear a main thread esperando o shell de outra thread. Duas threads
+        // podem ler em paralelo num miss — no pior caso desperdica um processo raro, o que e muito
+        // melhor que serializar a main atras de um spawn alheio.
+        val fresh = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", "am stack list 2>&1"))
+
+        synchronized(stackListLock) {
+            // Publica so se (a) ninguem invalidou durante a leitura e (b) esta amostra nao e mais
+            // ANTIGA que a ja cacheada (duas leituras concorrentes: a que comecou depois vence).
+            if (generationAtStart == stackListGeneration && startedAt >= cachedStackListAt) {
+                cachedStackList = fresh
+                cachedStackListAt = startedAt
+            }
+        }
+        return fresh
+    }
+
+    /** Descarta o cache de `am stack list`. Chamar sempre que o layout de tasks/displays possa ter
+     *  mudado — ver os call sites em [sh], [onAppWindowChanged] e [notifyDisplayStateChanged]. */
+    private fun invalidateStackListCache() {
+        synchronized(stackListLock) {
+            cachedStackList = null
+            stackListGeneration++
+        }
     }
 
     private data class StackInfo(val stackId: Int, val windowingMode: String, val isFreeform: Boolean)
@@ -7994,12 +8198,26 @@ object DisplayAppLauncher {
      * fullscreen mode works fine after move-stack.
      */
     fun onAppWindowChanged(packageName: String) {
+        // Mudanca de janela vinda de FORA (o usuario abriu/fechou app, o OEM moveu algo): o layout de
+        // tasks pode ter mudado sem passar pelo nosso sh(), entao o cache de `am stack list` precisa
+        // ser descartado aqui tambem (Lote 4c).
+        invalidateStackListCache()
         BottomBarService.requestBarRestoreAfterExternalFocus(
             packageName,
             "D0_WINDOW_CHANGED"
         )
         preserveCarPlayClusterContractAfterWindowChange(packageName)
         preserveAndroidAutoClusterContractAfterWindowChange(packageName)
+
+        // Pré-aquece o bind do LinkCommand do AA assim que a janela do AA aparece (AA passou a
+        // rodar): assim o guard de prontidão do 1º long-press pro cluster já acha o binder VIVO
+        // e projeta de primeira, em vez de perder o comando quando o bind assíncrono frio passa
+        // do teto (~1,4s) do retry. É só bind (BIND_AUTO_CREATE) — NÃO projeta, então sem risco
+        // de tela preta; e ensureAndroidAutoLinkCommandBound é idempotente/auto-limitado.
+        if (packageName == ANDROID_AUTO_PACKAGE) {
+            lastAndroidAutoLinkPrewarmAtMs = SystemClock.elapsedRealtime()
+            ensureAndroidAutoLinkCommandBound("AA_WINDOW_PREWARM")
+        }
 
         val config = getAllConfigs().find { it.packageName == packageName } ?: return
         if (config.displayId == 0) return

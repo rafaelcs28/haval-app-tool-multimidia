@@ -62,6 +62,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import br.com.redesurftank.havalshisuku.utils.HeadUnitResourceSampler
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class BottomBarService : LifecycleService() {
@@ -236,6 +237,7 @@ class BottomBarService : LifecycleService() {
         observeMenuState()
         observeDashboardActivityState()
         observeVisibility()
+        observeResourceOverlay()
         observeAutoHide()
         registerUpdateReceiver()
         startMediaMetadataMonitoring()
@@ -3127,6 +3129,173 @@ class BottomBarService : LifecycleService() {
         }
     }
 
+    // ==================== Overlay flutuante de CPU / RAM ====================
+    // Indicador pequeno por cima de TODOS os apps, visivel SO quando a barra estendida NAO esta em
+    // tela (com ela aberta o mesmo dado ja aparece no header do card de dinamica).
+    //
+    // DECISOES DE CUSTO (este recurso e um medidor de performance — nao pode ser ele o problema):
+    //  - OPT-IN, default DESLIGADO. So existe se o usuario ligar.
+    //  - `TextView` puro, NAO ComposeView: uma 3a arvore de Compose + Recomposer sairia bem mais caro
+    //    que duas linhas de texto, e a auditoria ja aponta custo nas 2 janelas existentes.
+    //  - Amostra a cada 2,5s e SO enquanto o overlay esta na tela; ao esconder, para o loop.
+    //  - Leitura e /proc puro (HeadUnitResourceSampler), fora da main thread. Sem shell.
+    //  - FLAG_NOT_TOUCHABLE: nunca rouba toque de app nenhum (senao viraria um retangulo morto).
+    private var resourceOverlayView: android.widget.TextView? = null
+    private var resourceOverlayJob: kotlinx.coroutines.Job? = null
+
+    private fun isResourceOverlayEnabled(): Boolean =
+            // getDeviceProtectedContext: TODO o app guarda prefs no device-protected storage
+            // (/data/user_de). Ler do contexto do Service pegava OUTRO arquivo — foi por isso que o
+            // toggle ligado nunca foi visto e o overlay so registrava "escondido".
+            br.com.redesurftank.App.getDeviceProtectedContext()
+                    .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+                    .getBoolean(SharedPreferencesKeys.ENABLE_RESOURCE_OVERLAY.key, false)
+
+    private fun observeResourceOverlay() {
+        // Semeia os espelhos observaveis a partir das prefs (a UI atualiza os dois lados).
+        val op = br.com.redesurftank.App.getDeviceProtectedContext()
+                .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+        BottomBarState.resourceOverlayEnabled = isResourceOverlayEnabled()
+        BottomBarState.resourceOverlayFontSp =
+                op.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_FONT_SP.key, 14)
+        BottomBarState.resourceOverlayCorner =
+                op.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_CORNER.key, 3)
+        BottomBarState.resourceOverlayX =
+                op.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_X.key, 12)
+        BottomBarState.resourceOverlayY =
+                op.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_Y.key, 90)
+        // Estilo/posicao: qualquer mudanca RECRIA a janela (WRAP_CONTENT + gravity mudam o layout).
+        // distinctUntilChanged evita recriar a cada recomposicao boba.
+        lifecycleScope.launch {
+            snapshotFlow {
+                        listOf(
+                                BottomBarState.resourceOverlayFontSp,
+                                BottomBarState.resourceOverlayCorner,
+                                BottomBarState.resourceOverlayX,
+                                BottomBarState.resourceOverlayY
+                        )
+                    }
+                    .distinctUntilChanged()
+                    .collectLatest {
+                        if (resourceOverlayView != null) {
+                            hideResourceOverlay()
+                            showResourceOverlay()
+                        }
+                    }
+        }
+        lifecycleScope.launch {
+            snapshotFlow {
+                        // Some SO com a estendida aberta (la o mesmo dado ja aparece no card de
+                        // dinamica). NAO exige mais BottomBarState.isVisible: a barra auto-esconde, e
+                        // era exatamente com ela escondida — usando outros apps — que o indicador
+                        // tinha de aparecer. Foi o que fez o overlay nunca surgir no 1o teste.
+                        BottomBarState.resourceOverlayEnabled &&
+                                !BottomBarState.isDashboardExpanded
+                    }
+                    .collectLatest { shouldShow ->
+                        if (shouldShow) showResourceOverlay() else hideResourceOverlay()
+                    }
+        }
+    }
+
+    private fun showResourceOverlay() {
+        if (resourceOverlayView != null) return
+        val wm = mWindowManager ?: return
+        val density = resources.displayMetrics.density
+        val tv =
+                android.widget.TextView(this).apply {
+                    setTextColor(android.graphics.Color.parseColor("#F5F5F5"))
+                    textSize = BottomBarState.resourceOverlayFontSp.toFloat()
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    setPadding(
+                            (8 * density).toInt(),
+                            (4 * density).toInt(),
+                            (8 * density).toInt(),
+                            (4 * density).toInt()
+                    )
+                    background =
+                            android.graphics.drawable.GradientDrawable().apply {
+                                cornerRadius = 6 * density
+                                setColor(android.graphics.Color.parseColor("#CC12141A"))
+                                setStroke(
+                                        (1 * density).toInt(),
+                                        android.graphics.Color.parseColor("#334A9EFF")
+                                )
+                            }
+                    text = "CPU --  RAM --"
+                }
+        val lp =
+                WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        } else {
+                            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+                        },
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        PixelFormat.TRANSLUCENT
+                )
+                        .apply {
+                            // Canto ancorado + deslocamento, ambos escolhidos pelo usuario. O topo
+                            // deste head unit as vezes fica sob area nao visivel, por isso o padrao
+                            // e o canto INFERIOR direito, acima da barra.
+                            gravity =
+                                    when (BottomBarState.resourceOverlayCorner) {
+                                        0 -> Gravity.TOP or Gravity.START
+                                        1 -> Gravity.TOP or Gravity.END
+                                        2 -> Gravity.BOTTOM or Gravity.START
+                                        else -> Gravity.BOTTOM or Gravity.END
+                                    }
+                            x = (BottomBarState.resourceOverlayX * density).toInt()
+                            y = (BottomBarState.resourceOverlayY * density).toInt()
+                        }
+        val add = runCatching { wm.addView(tv, lp) }
+        if (add.isFailure) {
+            // R8 remove Log.* em release: sem o canal persistente esta falha ficava MUDA (foi o que
+            // aconteceu no 1o teste — nenhuma 3a janela no dumpsys e nenhuma pista do motivo).
+            ClusterPersistentEventLogger.logText(
+                    "resource_overlay",
+                    "addView_falhou: " + (add.exceptionOrNull()?.toString() ?: "?")
+            )
+            return
+        }
+        ClusterPersistentEventLogger.logText(
+                "resource_overlay",
+                "exibido canto=${BottomBarState.resourceOverlayCorner} x=${lp.x} y=${lp.y} " +
+                        "fonte=${BottomBarState.resourceOverlayFontSp}sp"
+        )
+        resourceOverlayView = tv
+        HeadUnitResourceSampler.reset()
+        resourceOverlayJob =
+                lifecycleScope.launch {
+                    // 1a amostra so esquenta a base do calculo de CPU (exige duas leituras).
+                    withContext(Dispatchers.IO) { HeadUnitResourceSampler.sample() }
+                    while (true) {
+                        kotlinx.coroutines.delay(RESOURCE_OVERLAY_INTERVAL_MS)
+                        val s = withContext(Dispatchers.IO) { HeadUnitResourceSampler.sample() }
+                        val cpu = s.cpuPct?.let { "$it%" } ?: "--"
+                        val ram = s.ramPct?.let { "$it%" } ?: "--"
+                        resourceOverlayView?.text = "CPU $cpu  RAM $ram"
+                    }
+                }
+    }
+
+    private fun hideResourceOverlay() {
+        resourceOverlayJob?.cancel()
+        resourceOverlayJob = null
+        resourceOverlayView?.let { v ->
+            runCatching { mWindowManager?.removeView(v) }
+                    .onFailure { Log.w("BottomBarService", "Falha ao remover overlay de recursos: ${it.message}") }
+        }
+        resourceOverlayView = null
+        HeadUnitResourceSampler.reset()
+        ClusterPersistentEventLogger.logText("resource_overlay", "escondido")
+    }
+
     private fun observeMenuState() {
         lifecycleScope.launch {
             snapshotFlow {
@@ -3703,6 +3872,9 @@ class BottomBarService : LifecycleService() {
     }
 
     companion object {
+        /** Intervalo do overlay de CPU/RAM. 2,5s: suficiente pra acompanhar carga, barato o bastante
+         *  pra nao virar o proprio problema que o indicador existe pra medir. */
+        private const val RESOURCE_OVERLAY_INTERVAL_MS = 2_500L
         private const val DEBUG_MEDIA_TAG = "BottomBarDebug"
         private const val ACTION_DEBUG_MEDIA_COMMAND =
                 "br.com.redesurftank.havalshisuku.DEBUG_MEDIA_COMMAND"

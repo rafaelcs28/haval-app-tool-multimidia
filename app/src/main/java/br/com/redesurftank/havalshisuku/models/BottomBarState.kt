@@ -21,6 +21,16 @@ object BottomBarState {
     var isSliderDragging by mutableStateOf(false)
     var isVisible by mutableStateOf(true)
     var isDashboardExpanded by mutableStateOf(false)
+    /** Espelho OBSERVAVEL da pref ENABLE_RESOURCE_OVERLAY. Existe porque o snapshotFlow do
+     *  BottomBarService so reage a estado do Compose — ler a SharedPreference direto la nao
+     *  re-emitia, e o toggle so valeria depois de abrir/fechar a barra estendida. */
+    var resourceOverlayEnabled by mutableStateOf(false)
+    /** Espelhos OBSERVAVEIS do estilo/posicao do overlay de CPU/RAM: mudar no slider reposiciona na
+     *  hora, sem precisar reabrir nada (o servico observa por snapshotFlow). */
+    var resourceOverlayFontSp by mutableStateOf(14)
+    var resourceOverlayCorner by mutableStateOf(3) // 0=sup.esq 1=sup.dir 2=inf.esq 3=inf.dir
+    var resourceOverlayX by mutableStateOf(12)
+    var resourceOverlayY by mutableStateOf(90)
     var isMenuExpanded by mutableStateOf(false)
     var isSettingsMenuExpanded by mutableStateOf(false)
     var isOverrideMenuExpanded by mutableStateOf(false)

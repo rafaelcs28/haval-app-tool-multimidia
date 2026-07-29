@@ -90,7 +90,12 @@ public class AcControlScreen implements Screen {
                     case FAN_SPEED: {
                         var currentFanSpeed = serviceManager.getUpdatedData(CarConstants.CAR_HVAC_FAN_SPEED.getValue());
                         if (currentFanSpeed != null) {
-                            int speed = Integer.parseInt(currentFanSpeed);
+                            int speed;
+                            try {
+                                speed = Integer.parseInt(currentFanSpeed.trim());
+                            } catch (NumberFormatException e) {
+                                return; // valor de ventilacao invalido no CAN; ignora o comando
+                            }
                             if (key == Key.UP) {
                                 speed++;
                                 if (speed > 7)
@@ -105,7 +110,7 @@ public class AcControlScreen implements Screen {
                                 speed = 1;
                             }
 
-                            boolean powerMode = serviceManager.getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue()).equals("1");
+                            boolean powerMode = "1".equals(serviceManager.getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue()));
                             if (speed == 0) {
                                 serviceManager.updateData(CarConstants.CAR_HVAC_POWER_MODE.getValue(), "0");
                             } else if (!powerMode) {
@@ -149,7 +154,13 @@ public class AcControlScreen implements Screen {
     public void initialize() {
         this.serviceManager = ServiceManager.getInstance();
         var lastAcConfig = this.serviceManager.getSharedPreferences().getString(SharedPreferencesKeys.LAST_CLUSTER_AC_CONFIG.getKey(), SteeringWheelAcControlType.FAN_SPEED.name());
-        steeringWheelAcControlType = SteeringWheelAcControlType.valueOf(Objects.requireNonNullElse(lastAcConfig, SteeringWheelAcControlType.FAN_SPEED.name()));
+        // valueOf estoura se o nome salvo por um build anterior nao existir mais (R8 renomeia
+        // constantes) ou a pref estiver corrompida -> cai pra FAN_SPEED em vez de crashar em loop.
+        try {
+            steeringWheelAcControlType = SteeringWheelAcControlType.valueOf(Objects.requireNonNullElse(lastAcConfig, SteeringWheelAcControlType.FAN_SPEED.name()));
+        } catch (IllegalArgumentException e) {
+            steeringWheelAcControlType = SteeringWheelAcControlType.FAN_SPEED;
+        }
         steeringWheelAcControlTypeIndex = Arrays.asList(SteeringWheelAcControlType.values()).indexOf(steeringWheelAcControlType);
 
         // Forces AC screen to be displayed

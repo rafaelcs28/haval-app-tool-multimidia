@@ -24,7 +24,12 @@ public class MainMenu implements Screen {
         public static final int ON = 1;
         public static final int OFF = 0;
         public static String getLabel(String value) {
-            int val = Integer.parseInt(value);
+            int val;
+            try {
+                val = Integer.parseInt(value != null ? value.trim() : "");
+            } catch (NumberFormatException e) {
+                return "--";
+            }
             switch (val) {
                 case 1: return "ON";
                 case 0: return "OFF";
@@ -39,7 +44,12 @@ public class MainMenu implements Screen {
         public static final int EV = 3;
 
         public static String getLabel(String value) {
-            int val = Integer.parseInt(value);
+            int val;
+            try {
+                val = Integer.parseInt(value != null ? value.trim() : "");
+            } catch (NumberFormatException e) {
+                return "--";
+            }
             switch (val) {
                 case 0:
                     return "HEV";
@@ -57,7 +67,12 @@ public class MainMenu implements Screen {
         public static final int ECO = 2;
         public static final int SPORT = 1;
         public static String getLabel(String value) {
-            int val = Integer.parseInt(value);
+            int val;
+            try {
+                val = Integer.parseInt(value != null ? value.trim() : "");
+            } catch (NumberFormatException e) {
+                return "--";
+            }
             switch (val) {
                 case 0: return "Normal";
                 case 1: return "Sport";
@@ -76,7 +91,12 @@ public class MainMenu implements Screen {
         public static final int NORMAL = 0;
         public static final int SPORT = 1;
         public static String getLabel(String value) {
-            int val = Integer.parseInt(value);
+            int val;
+            try {
+                val = Integer.parseInt(value != null ? value.trim() : "");
+            } catch (NumberFormatException e) {
+                return "--";
+            }
             switch (val) {
                 case 2: return "Conforto";
                 case 0: return "Normal";
@@ -226,7 +246,14 @@ public class MainMenu implements Screen {
             public CycleValues(List<Object> values, CarConstants carOptionID) {
                 this.values = values;
                 String fromCar = ServiceManager.getInstance().getData(carOptionID.getValue());
-                this.currentOptionIndex = this.values.indexOf(Integer.parseInt(fromCar));
+                // fromCar pode vir null (binder OEM caido) ou nao-numerico no boot -> indice 0.
+                this.currentOptionIndex = -1;
+                if (fromCar != null) {
+                    try {
+                        this.currentOptionIndex = this.values.indexOf(Integer.parseInt(fromCar.trim()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
                 if (this.currentOptionIndex == -1) this.currentOptionIndex = 0;
                 this.carOptionID = carOptionID;
             }

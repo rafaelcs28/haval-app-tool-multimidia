@@ -157,8 +157,44 @@ public class ServiceManager {
             CarConstants.CAR_IPK_LIGHT_TPMS_WARNING,
             CarConstants.CAR_BASIC_ENGINE_SPEED,
             CarConstants.CAR_EV_INFO_INSTANT_ENERGY_CONSUMPTION,
-            CarConstants.CAR_IPK_LIGHT_FUEL_LOW
+            CarConstants.CAR_IPK_LIGHT_FUEL_LOW,
+            // --- Sync ao vivo do dashboard: chaves EXIBIDAS na barra estendida que precisam ser
+            // OBSERVADAS para refletir mudancas feitas FORA do proprio card (controles nativos do
+            // carro, botao "inverter", AC-liga-ventilacao). Sem assinar aqui, o servico do carro
+            // nunca faz callback e o valor fica preso no lido na abertura. (Restaura o fix perdido
+            // no rebase; invariante: toda chave que o dashboard escuta tambem e assinada.)
+            CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL,
+            CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL,
+            CarConstants.CAR_COMFORT_SETTING_SEAT_VENTILATION_MAX_LEVEL,
+            CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG,
+            CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG,
+            CarConstants.CAR_BASIC_AVG_FUEL_CONSUMPTION,
+            CarConstants.CAR_BASIC_CUR_JOURNEY_AVG_FUEL_CONSUME,
+            CarConstants.CAR_BASIC_REMAIN_ODOMETER,
+            CarConstants.CAR_EV_INFO_AVG_ENERGY_CONSUME_INFO_SINCE_STARTUP,
+            CarConstants.CAR_EV_INFO_BATTERY_POWER_PERCENTAGE,
+            CarConstants.CAR_EV_INFO_POWER_BATTERY_CURRENT,
+            // Voltagem da bateria 12V (auxiliar) — exibida no card de dinamica da barra estendida.
+            // SEM esta assinatura o valor congelaria no primeiro lido (o carro nunca empurraria
+            // atualizacao), que e a armadilha documentada deste DEFAULT_KEYS.
+            CarConstants.CAR_BASIC_BATTERY_VOLTAGE,
+            // ===== SONDA TSR (limite de placa) — item 3 do pull VoltDash =====
+            // Assina a família car.map.tsr.* pra descobrir se o barramento de strings carrega o
+            // limite de placa NESTE carro (caminho barato). Se vier vazio sempre, aí precisamos do
+            // canal android.car/ICarProperty por reflexão (caminho caro dele). O log da sonda em
+            // OnDataChanged (flag TSR_PROBE_LOG_ENABLED) crava o que cada chave emite dirigindo.
+            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT,
+            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT_SIGN_STATUS,
+            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT_TYPE,
+            CarConstants.CAR_MAP_TSR_NAV_TRAFIC_SIGN,
+            CarConstants.CAR_MAP_TSR_NAV_ROAD_TYPE,
+            CarConstants.CAR_MAP_TSR_NAV_CONTRY_TYPE,
+            CarConstants.CAR_MAP_TSR_NAV_TO_TRAFFIC_EYE_DISTANCE
     };
+
+    // Sonda TSR: loga toda mudança car.map.tsr.* no log persistente. Ligado só pra este teste de
+    // estrada; depois vira o consumidor real (ou é removido se o barramento não carregar o dado).
+    private static final boolean TSR_PROBE_LOG_ENABLED = true;
 
     private static final CarConstants[] KEYS_TO_SAVE = {
             CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE,
@@ -250,6 +286,20 @@ public class ServiceManager {
     private int wifiRestoreLastEnableAttempt = -100;
     private CarInfo carInfo;
     private IIntelligentVehicleControlService controlService;
+
+    // ===== Canal de controle RESILIENTE (portado do VoltDash, reimplementado c/ nossos nomes) =====
+    // Hoje, se o binder do serviço de controle do carro morre (o app OEM reinicia / OOM do
+    // system_server), o app simplesmente PARA de falar com o carro — nada reconecta. Isto adiciona:
+    // linkToDeath -> reconexão automática; watchdog de 10s que faz ping e recupera se morto; e
+    // recuperação também em falha de comando. É a mesma dor do bug do tema (binder morto no meio da
+    // viagem). PURAMENTE ADITIVO: o caminho normal de init não muda. Flag pra reversão de 1 linha.
+    private static final boolean CONTROL_CHANNEL_RESILIENCE_ENABLED = true;
+    private static final long CONTROL_CHANNEL_WATCHDOG_MS = 10000L;
+    private volatile boolean recoveringControlChannel = false;
+    private volatile int controlChannelRecoveryCount = 0;
+    private IBinder.DeathRecipient controlDeathRecipient;
+    private volatile Runnable controlChannelWatchdogRunnable;
+
     private IVehicle vehicle;
     private IDvr dvr;
     private boolean delayNextAVM = false;
@@ -322,6 +372,9 @@ public class ServiceManager {
     private volatile boolean isSelfWritingSceneNotify = false;
 
     private static final String HVAC_PACKAGE_NAME = "com.beantechs.hvac";
+    /** Prefixo das chaves de clima (car.hvac.*). Define o que é roteado pela fila serial de HVAC
+     *  em {@link #updateData} — ver o comentário de ordem lá. */
+    private static final String HVAC_KEY_PREFIX = "car.hvac.";
     private static final long HVAC_RESUME_DELAY_MS = 300;
     private boolean isHvacSuspended = false;
     private Runnable resumeHvacRunnable;
@@ -434,6 +487,7 @@ public class ServiceManager {
                 return false;
             }
             controlService = IIntelligentVehicleControlService.Stub.asInterface(controlBinder);
+            registerControlDeathRecipient(); // canal resiliente: reconecta sozinho se o binder morrer
 
             IBinder rawPoolBinder = getSystemService("com.beantechs.voice.adapter.VoiceAdapterService");
             if (rawPoolBinder == null) {
@@ -770,6 +824,7 @@ public class ServiceManager {
             ShizukuUtils.runCommandAndGetOutput(new String[]{"pm", "grant", context.getPackageName(), "android.permission.ACCESS_FINE_LOCATION"});
             controlService.registerDataChangedListener(context.getPackageName(), listener);
             controlService.addListenerKey(App.getContext().getPackageName(), getCombinedKeys());
+            startControlChannelWatchdog(); // canal resiliente: ping de 10s + recuperação se o binder morrer
 
             IBinder rawConnectivityBinder = getSystemService(Context.CONNECTIVITY_SERVICE);
             if (rawConnectivityBinder != null) {
@@ -842,6 +897,13 @@ public class ServiceManager {
         }
         MainUiManager.getInstance().updateScreen();
         timeInitialized = SystemClock.uptimeMillis();
+        // P9 — SEMEADURA da maquina de ocupacao do passageiro. E o que conserta o sintoma "o
+        // passageiro entra ANTES do app subir e nada acontece": a logica antiga era toda por BORDA
+        // (prevPassengerBeltState nascia -1) e a entrada nunca era vista. Aqui partimos do ESTADO.
+        // Comeca em VAZIO e escreve "0" (fail-safe: "nao sei" = desligado ate provar, nunca o
+        // contrario) e depois exige DUAS amostras de belt==1 com a porta fechada, espacadas, pra
+        // filtrar o ruido de power-on que causou o bug de 2026-07-01.
+        seedPassengerOccupancy();
         // Semeia o estado atual do hotspot (o receiver WIFI_AP só dispara em MUDANÇA; se já estava
         // ligado antes do serviço subir, a flag ficaria falsa).
         wifiTetherEnabled = currentWifiTetherState();
@@ -1100,6 +1162,16 @@ public class ServiceManager {
                     Log.w(TAG, "Launching app via DisplayAppLauncher: " + pkg + (activity != null ? " (" + activity + ")" : ""));
                     DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), pkg, activity);
                 }
+                break;
+            case OPEN_CARPLAY:
+                // Preset do OPEN_APP: o host do CarPlay não tem Activity de launcher, então não aparece
+                // no seletor de apps (que lista só CATEGORY_LAUNCHER). launchAnyAppFromJava resolve.
+                Log.w(TAG, "Steering: abrir CarPlay");
+                DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), "com.ts.carplay.app", null);
+                break;
+            case OPEN_ANDROID_AUTO:
+                Log.w(TAG, "Steering: abrir Android Auto");
+                DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), "com.ts.androidauto.app", null);
                 break;
             case CLIMATE_COMMAND:
                 handleSteeringWheelClimateCommand(button, tapType);
@@ -1509,6 +1581,129 @@ public class ServiceManager {
         }
     }
 
+    // ===== Canal de controle RESILIENTE — métodos (ver campos + comentário na declaração) =====
+
+    /**
+     * Liga o linkToDeath no binder do serviço de controle. Se o processo do controle do carro morre
+     * (reinício do app OEM / OOM do system_server), o binderDied dispara e agenda a recuperação no
+     * backgroundHandler (fora da main). Remove um recipient anterior antes, pra não empilhar.
+     */
+    private void registerControlDeathRecipient() {
+        if (!CONTROL_CHANNEL_RESILIENCE_ENABLED) return;
+        try {
+            IIntelligentVehicleControlService svc = controlService;
+            if (svc == null) return;
+            final IBinder binder = svc.asBinder();
+            if (binder == null) return;
+            if (controlDeathRecipient != null) {
+                try { binder.unlinkToDeath(controlDeathRecipient, 0); } catch (Throwable ignored) {}
+            }
+            controlDeathRecipient = new IBinder.DeathRecipient() {
+                @Override public void binderDied() {
+                    logPersistentClusterEvent("control_channel_binder_died", persistentEventDetails("trigger", "binderDied"));
+                    if (backgroundHandler != null) {
+                        backgroundHandler.post(() -> recoverControlChannel("BINDER_DIED"));
+                    } else {
+                        recoverControlChannel("BINDER_DIED");
+                    }
+                }
+            };
+            binder.linkToDeath(controlDeathRecipient, 0);
+        } catch (Throwable t) {
+            Log.w(TAG, "registerControlDeathRecipient falhou: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Re-adquire o binder do serviço de controle do zero e re-registra listener + chaves + re-dispatch.
+     * synchronized + guarda de reentrância (recoveringControlChannel) pra não rodar duas recuperações
+     * ao mesmo tempo (watchdog + binderDied podem coincidir). Desregistra o listener antigo antes de
+     * registrar o novo, pra não duplicar. Cada etapa vai pro log persistente (sobrevive ao R8).
+     */
+    public synchronized void recoverControlChannel(String reason) {
+        if (!CONTROL_CHANNEL_RESILIENCE_ENABLED) return;
+        if (recoveringControlChannel) return;
+        recoveringControlChannel = true;
+        long t0 = SystemClock.uptimeMillis();
+        try {
+            logPersistentClusterEvent("control_channel_recover_start",
+                    persistentEventDetails("reason", reason, "attempt", String.valueOf(controlChannelRecoveryCount + 1)));
+
+            if (!Shizuku.pingBinder()) {
+                throw new IllegalStateException("Shizuku indisponivel durante recuperacao do canal de controle");
+            }
+            Context context = App.getContext();
+
+            // desregistra o listener antigo se o binder velho ainda responde (evita listener duplicado)
+            IIntelligentVehicleControlService old = controlService;
+            if (old != null && listener != null) {
+                try {
+                    IBinder oldBinder = old.asBinder();
+                    if (oldBinder != null && oldBinder.isBinderAlive()) {
+                        old.unRegisterDataChangedListener(context.getPackageName(), listener);
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            IBinder rawControlBinder = getSystemService("com.beantechs.intelligentvehiclecontrol");
+            if (rawControlBinder == null) throw new IllegalStateException("binder de controle indisponivel");
+            IBinder controlBinder = new ShizukuBinderWrapper(rawControlBinder);
+            if (!controlBinder.pingBinder()) throw new IllegalStateException("binder de controle morto");
+            controlService = IIntelligentVehicleControlService.Stub.asInterface(controlBinder);
+
+            registerControlDeathRecipient();
+
+            if (listener == null) {
+                listener = new IListener.Stub() {
+                    @Override public void onDataChanged(String key, String value) { OnDataChanged(key, value); }
+                };
+            }
+            controlService.registerDataChangedListener(context.getPackageName(), listener);
+            controlService.addListenerKey(context.getPackageName(), getCombinedKeys());
+            dispatchAllData();
+
+            controlChannelRecoveryCount++;
+            logPersistentClusterEvent("control_channel_recover_ok",
+                    persistentEventDetails("reason", reason,
+                            "totalRecoveries", String.valueOf(controlChannelRecoveryCount),
+                            "elapsedMs", String.valueOf(SystemClock.uptimeMillis() - t0)));
+        } catch (Throwable e) {
+            logPersistentClusterEvent("control_channel_recover_fail",
+                    persistentEventDetails("reason", reason, "error", String.valueOf(e.getMessage())));
+        } finally {
+            recoveringControlChannel = false;
+        }
+    }
+
+    /**
+     * Watchdog: a cada 10s faz ping no binder do controle; se estiver morto (e nenhuma recuperação em
+     * curso), dispara recoverControlChannel. Idempotente — cancela o runnable anterior antes de reagendar,
+     * e só se reagenda enquanto ainda for o runnable ativo (evita duplicar o loop em re-init).
+     */
+    private void startControlChannelWatchdog() {
+        if (!CONTROL_CHANNEL_RESILIENCE_ENABLED) return;
+        if (backgroundHandler == null) return;
+        if (controlChannelWatchdogRunnable != null) {
+            backgroundHandler.removeCallbacks(controlChannelWatchdogRunnable);
+        }
+        controlChannelWatchdogRunnable = new Runnable() {
+            @Override public void run() {
+                try {
+                    if (!recoveringControlChannel && !isControlServiceAlive()) {
+                        logPersistentClusterEvent("control_channel_watchdog_dead", persistentEventDetails("trigger", "watchdog"));
+                        recoverControlChannel("WATCHDOG");
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    if (backgroundHandler != null && controlChannelWatchdogRunnable == this) {
+                        backgroundHandler.postDelayed(this, CONTROL_CHANNEL_WATCHDOG_MS);
+                    }
+                }
+            }
+        };
+        backgroundHandler.postDelayed(controlChannelWatchdogRunnable, CONTROL_CHANNEL_WATCHDOG_MS);
+    }
+
     public void addDataChangedListener(IDataChanged listener) {
         if (listener == null) {
             Log.e(TAG, "Cannot add null listener");
@@ -1661,28 +1856,52 @@ public class ServiceManager {
     }
 
     public void updateData(String key, String value) {
-        boolean isHvacCommand = hvacKeysToSuspend.contains(key);
         if (!isControlServiceAlive()) {
             Log.e(TAG, "ControlService not initialized");
             return;
         }
 
-        boolean shouldSuspend = isHvacCommand;
-        if (shouldSuspend) {
-            ensureHvacSuspended(key);
+        // ROTEAMENTO: todas as chaves "car.hvac.*" vão pela MESMA fila serial, não só as que
+        // disparam suspensão. Isso é essencial pra ORDEM: há sequências que dependem dela — em
+        // restoreAcState o comentário exige "restore AC power mode and AC enable LAST", e
+        // car.hvac.ac_enable NÃO está em hvacKeysToSuspend. Se ela ficasse sincrona enquanto as
+        // vizinhas viraram assíncronas, ela ultrapassaria a fila e a ordem inverteria.
+        boolean routeThroughHvacQueue = key != null && key.startsWith(HVAC_KEY_PREFIX);
+        if (!routeThroughHvacQueue) {
+            // Caminho normal: 1 chamada de binder, rápida. Segue SINCRONO de propósito — há
+            // chamadores que leem o valor logo depois, e mudar isso mexeria em caminhos
+            // car-críticos (ventilação, HEV, projeção) sem necessidade.
+            sendControlRequest(key, value);
+            return;
         }
+        boolean shouldSuspend = hvacKeysToSuspend.contains(key);
 
+        // Caminho HVAC: o custo aqui NÃO é o binder, é a suspensão do app OEM de clima
+        // (pm disable-user + am force-stop + sleep(150) + 1 shell de "está em foreground?").
+        // Isso rodava na thread do CHAMADOR, que é a MAIN (onClick/onValueChange dos cards e
+        // sliders da barra) => cada toque no clima travava a barra por centenas de ms.
+        // Agora: o ECO OTIMISTA continua sincrono (a UI reage na hora, sem regressão de
+        // responsividade percebida) e o trabalho caro vai pro backgroundHandler, que é um
+        // HandlerThread SERIAL — a ordem suspender -> comandar -> reagendar retomada é preservada.
+        // Bônus: isHvacSuspended/resumeHvacRunnable passam a ser tocados só por essa thread
+        // (antes eram compartilhados entre main e background).
+        publishOptimisticHvacValue(key, value);
+        backgroundHandler.post(() -> {
+            if (shouldSuspend) {
+                ensureHvacSuspended(key);
+            }
+            sendControlRequest(key, value);
+            if (shouldSuspend) {
+                scheduleHvacResumption();
+            }
+        });
+    }
+
+    private void sendControlRequest(String key, String value) {
         try {
             controlService.request("cmd.common.request.set", key, value);
-            if (isHvacCommand) {
-                publishOptimisticHvacValue(key, value);
-            }
         } catch (Exception e) {
             Log.e(TAG, "Error updating data", e);
-        }
-
-        if (shouldSuspend) {
-            scheduleHvacResumption();
         }
     }
 
@@ -1724,12 +1943,33 @@ public class ServiceManager {
             ShizukuUtils.runCommandAndGetOutput(new String[]{"pm", "disable-user", "--user", "0", HVAC_PACKAGE_NAME});
             ShizukuUtils.runCommandAndGetOutput(new String[]{"am", "force-stop", HVAC_PACKAGE_NAME});
             isHvacSuspended = true;
+            // Acabamos de matar o app: qualquer leitura cacheada de "foreground" está obsoleta.
+            hvacForegroundCheckedAt = 0L;
             // Short sleep to ensure the app is fully stopped before the car command is sent
             SystemClock.sleep(150);
         }
     }
 
+    /** Cache curto do "app de clima está em foreground?". Quando ele ESTÁ em foreground,
+     *  ensureHvacSuspended retorna sem marcar isHvacSuspended, então todo updateData seguinte
+     *  repetia o `am stack list` (1 processo por toque). 800ms é curto o bastante pra não segurar
+     *  estado velho de forma perceptível e já colapsa a rajada de um arraste de slider. */
+    private static final long HVAC_FOREGROUND_CACHE_MS = 800L;
+    private long hvacForegroundCheckedAt = 0L;
+    private boolean hvacForegroundCached = false;
+
     private boolean isHvacAppInForeground() {
+        long now = SystemClock.uptimeMillis();
+        if (hvacForegroundCheckedAt != 0L && now - hvacForegroundCheckedAt < HVAC_FOREGROUND_CACHE_MS) {
+            return hvacForegroundCached;
+        }
+        boolean result = readHvacAppInForeground();
+        hvacForegroundCached = result;
+        hvacForegroundCheckedAt = now;
+        return result;
+    }
+
+    private boolean readHvacAppInForeground() {
         try {
             // Check if the HVAC app is currently resumed via lightweight am stack list
             String topApp = br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.INSTANCE.getTopPackageOnDisplay(0);
@@ -1753,6 +1993,8 @@ public class ServiceManager {
             Log.w(TAG, "Resuming HVAC app after inactivity");
             ShizukuUtils.runCommandAndGetOutput(new String[]{"pm", "enable", HVAC_PACKAGE_NAME});
             isHvacSuspended = false;
+            // Reabilitamos o app: a próxima decisão de suspender precisa de leitura fresca.
+            hvacForegroundCheckedAt = 0L;
             resumeHvacRunnable = null;
         };
 
@@ -1775,6 +2017,10 @@ public class ServiceManager {
     }
 
     private void OnDataChanged(String key, String value) {
+        // Sonda TSR (item 3): crava no log persistente o que a família car.map.tsr.* emite dirigindo.
+        if (TSR_PROBE_LOG_ENABLED && key != null && key.startsWith("car.map.tsr")) {
+            logPersistentClusterEvent("tsr_probe", persistentEventDetails("key", key, "value", String.valueOf(value)));
+        }
         // REMOVIDO: 2 broadcasts por mudança de dado (android.intent.haval.<key> e .<key>_<value>).
         // Ninguém os consumia — nenhum receiver dinâmico nem no manifest escuta essas actions, e o
         // setPackage(nosso app) impede apps externos de receber. Era código morto que só gerava
@@ -1868,6 +2114,9 @@ public class ServiceManager {
                     shutdownWifiTetherForRestore();
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue())) {
+                // Espelho pra maquina de ocupacao (P7 exige "carro parado"); sem isto o P7 nunca
+                // armaria, porque passengerCarStopped(null) e fail-closed = false.
+                lastSpeedRaw = value;
                 float currentSpeed = Float.parseFloat(value);
                 boolean closeWindowOnSpeed = sharedPreferences.getBoolean(SharedPreferencesKeys.CLOSE_WINDOWS_ON_SPEED.getKey(), false);
                 boolean closeSunRoofOnSpeed = sharedPreferences.getBoolean(SharedPreferencesKeys.CLOSE_SUNROOF_ON_SPEED.getKey(), false);
@@ -1928,6 +2177,9 @@ public class ServiceManager {
                     applyHevSocTargetIfActive("POWER_ON");
                 }
             } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("1")) {
+                // SONDA (diagnostico): registra os sensores de ocupacao no exato instante em que o
+                // recurso decide ventilar ou nao. E aqui que a resposta importa.
+                probeOccupancySensors("ac_on");
                 // A/C ligou: aplica a ventilacao dos bancos (motorista + passageiro se presente).
                 applySeatVentilationOnAcIfActive("AC_ON");
             } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && value.equals("0")) {
@@ -1939,49 +2191,93 @@ public class ServiceManager {
                     updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) {
-                // So marcamos QUANDO a porta do passageiro abriu (borda fechado->aberto). Esse instante
-                // distingue "saiu" de "afivelou" quando o alerta de cinto do passageiro volta a 0.
+                lastDoorRaw = value;
+                if (anyOtherDoorOpen(value)) lastOtherDoorOpenMs = System.currentTimeMillis();
                 int pdoor = passengerDoorOpenState(value);
                 if (pdoor >= 0) {
+                    long agora = System.currentTimeMillis();
+                    // ---- P3: porta do passageiro ABRIU ----
                     if (prevPassengerDoorState == 0 && pdoor == 1) {
-                        lastPassengerDoorOpenMs = System.currentTimeMillis();
+                        lastPassengerDoorOpenMs = agora;
+                        if (occImpliesPresent(occState)) passengerDoorOpenSinceBeliefMs = agora;
+                        // Porta aberta = instante ambiguo: cancela qualquer candidato em voo.
+                        cancelPassengerPromote();
+                        cancelPassengerWeakRevoke();
+                        if (occState == OCC_PENDENTE) setOccState(OCC_VAZIO, "porta_abriu_cancela_candidato");
+                        // Seguranca: quem esta saindo nao toma vento. Se ficou, o P4 religa em 4s.
+                        if (occImpliesPresent(occState) && csvIndexState(lastBeltRaw, 1) == 0) {
+                            updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+                        }
+                    }
+                    // ---- P4: porta do passageiro FECHOU = ADJUDICACAO ----
+                    if (prevPassengerDoorState == 1 && pdoor == 0) {
+                        long aberta = agora - lastPassengerDoorOpenMs;
+                        lastPassengerDoorCloseMs = agora;
+                        probeOccupancySensors("porta_passageiro_fechou");
+                        if (manualMode == MANUAL_ABSENT) {
+                            // Ciclo de porta completo: a "bolsa" provavelmente saiu; solta o sticky.
+                            manualMode = MANUAL_NONE;
+                        }
+                        if (aberta < PASSENGER_MIN_DOOR_OPEN_MS) {
+                            // Abertura RAPIDA (pedagio, drive-thru, conversa na janela): ninguem entra
+                            // nem sai nesse tempo. NAO adjudica — preserva quem esta a bordo afivelado.
+                            Log.i("PassengerOcc", "adjudicacao_ignorada_porta_rapida ms=" + aberta);
+                            logPersistentClusterEvent("passenger_occ", "adjudicacao_ignorada_porta_rapida ms=" + aberta);
+                        } else {
+                            schedulePassengerAdjudication();
+                        }
                     }
                     prevPassengerDoorState = pdoor;
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue())) {
+                lastBeltRaw = value;
                 int belt = passengerBeltWarnState(value);
                 if (belt >= 0) {
-                    if (belt == 1 && prevPassengerBeltState == 0) {
-                        // Alguem sentou (sem cinto) ENQUANTO o carro roda. Exige 0->1 real: no startup
-                        // prev=-1 NAO marca presenca (senao re-liga o banco vazio e ignora o "ausente"
-                        // manual). Alem disso, exige CORROBORACAO DA PORTA (simetrico ao caminho de
-                        // saida, que ja exige) + DEBOUNCE (confirma so se o cinto continuar em 1 apos
-                        // alguns segundos). Sem isso, ruido/pisca do sensor de cinto no power-on (sem
-                        // ninguem ter entrado, porta nunca abriu) marcava presenca por conta propria.
-                        boolean doorOpenNow = passengerDoorOpenState(getUpdatedData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) == 1;
-                        boolean doorRecentlyOpened = (System.currentTimeMillis() - lastPassengerDoorOpenMs) < PASSENGER_DOOR_CORRELATION_WINDOW_MS;
-                        if (doorOpenNow || doorRecentlyOpened) {
-                            schedulePassengerPresenceConfirmation();
-                            prevPassengerBeltState = belt;
-                        } else {
-                            // Rejeitado (sem porta): NAO avanca prevPassengerBeltState (fica em 0).
-                            // Se avancasse, um 1->0 espurio subsequente cairia no ramo de SAIDA e
-                            // poderia zerar uma presenca real sem ninguem ter saido de fato.
-                            Log.w(TAG, "Ignoring passenger belt-occupied signal without door corroboration (possible sensor noise)");
+                    int doorNow = csvIndexState(lastDoorRaw, 1);
+                    if (belt == 1) {
+                        if (doorNow == 1) {
+                            // ---- P2: cinto==1 com a porta ABERTA. Instante ambiguo (sentando OU
+                            // descendo). NADA e criado aqui — e exatamente isto que torna
+                            // "liga na saida" impossivel. A decisao fica pro P4.
+                            Log.i("PassengerOcc", "belt1_porta_aberta_ignorado");
+                        } else if (occState == OCC_FRACO) {
+                            // O sensor voltou a confirmar quem estava so inferido. Mesma presenca,
+                            // ZERO escrita no CAN.
+                            setOccState(OCC_FORTE, "belt1_reconfirma_fraco");
+                        } else if (occState == OCC_VAZIO && manualMode != MANUAL_ABSENT) {
+                            // ---- P1: unico criador automatico de presenca. Porta FECHADA =>
+                            // belt==1 so pode ser gente sentada (teorema). Confirma com re-leitura.
+                            boolean contextoEmbarque =
+                                    (System.currentTimeMillis() - lastPassengerDoorCloseMs)
+                                            < PASSENGER_EMBARK_CONTEXT_MS;
+                            setOccState(OCC_PENDENTE, contextoEmbarque ? "belt1_embarque" : "belt1_selado");
+                            schedulePassengerPresenceConfirmation(
+                                    contextoEmbarque
+                                            ? PASSENGER_BELT_CONFIRM_DEBOUNCE_MS
+                                            : PASSENGER_PROMOTE_SEALED_MS);
                         }
-                    } else if (belt == 0 && prevPassengerBeltState == 1) {
-                        // O alerta zerou: ou afivelou (continua no banco) ou levantou e saiu.
-                        // Porta do passageiro aberta agora (ou aberta ha <12s) -> SAIU; senao so afivelou.
-                        boolean doorOpenNow = passengerDoorOpenState(getUpdatedData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue())) == 1;
-                        boolean doorJustOpened = (System.currentTimeMillis() - lastPassengerDoorOpenMs) < 12000L;
-                        if (doorOpenNow || doorJustOpened) {
-                            setPassengerPresent(false, "belt_clear_left");
+                    } else { // belt == 0
+                        if (doorNow == 1) {
+                            // ---- P6: saiu. Desliga na hora (caminho rapido); P4 confirma depois.
+                            cancelPassengerPromote();
+                            setOccState(OCC_VAZIO, "belt0_porta_aberta_saiu");
+                        } else if (occState == OCC_FORTE) {
+                            // ---- P5: afivelou. NAO desliga (era o sintoma "sai e nao desliga").
+                            setOccState(OCC_FRACO, "belt0_porta_fechada_afivelou");
+                            // Arma a revogacao SO aqui: coincidencia de outra porta aberta + parado
+                            // = pode ter saido pela porta do motorista (cenario sem porta propria).
+                            if ((anyOtherDoorOpen(lastDoorRaw)
+                                            || (System.currentTimeMillis() - lastOtherDoorOpenMs)
+                                                    < PASSENGER_OTHER_DOOR_WINDOW_MS)
+                                    && passengerCarStopped(lastSpeedRaw)) {
+                                schedulePassengerWeakRevoke();
+                            }
+                        } else if (occState == OCC_PENDENTE) {
+                            cancelPassengerPromote();
+                            setOccState(OCC_VAZIO, "belt0_cancela_candidato");
                         }
-                        // senao: so afivelou -> mantem a presenca atual.
-                        prevPassengerBeltState = belt;
-                    } else {
-                        prevPassengerBeltState = belt;
                     }
+                    prevPassengerBeltState = belt;
                 }
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
@@ -2012,11 +2308,153 @@ public class ServiceManager {
     private volatile int prevPassengerDoorState = -1;
     private volatile int prevPassengerBeltState = -1;
     private volatile long lastPassengerDoorOpenMs = 0L;
-    // Janela p/ correlacionar porta+cinto na ENTRADA (espelha a janela de 12s ja usada na saida).
-    private static final long PASSENGER_DOOR_CORRELATION_WINDOW_MS = 15000L;
+
+    // ===== MAQUINA DE OCUPACAO (2026-07-27) =====
+    // TEOREMA que sustenta o desenho: com a porta do passageiro FECHADA, belt==1 so pode ser gente
+    // sentada — ninguem embarca nem desembarca com a porta fechada. Logo:
+    //  * presenca so pode ser CRIADA com a porta FECHADA  -> "liga na saida" fica IMPOSSIVEL, nao
+    //    apenas improvavel (o desafivelar-pra-sair sempre acontece com a porta abrindo);
+    //  * belt 1->0 com porta FECHADA = afivelou -> NAO desliga (era o sintoma "sai e nao desliga");
+    //  * belt 1->0 com porta ABERTA = saiu -> desliga na hora;
+    //  * todo ciclo de porta e ADJUDICADO com leitura fresca -> pega quem andou de cinto e saiu.
+    // A pref PASSENGER_PRESENT passa a ser ESPELHO write-only pra UI; a decisao mora em occState.
+    private static final int OCC_VAZIO = 0;
+    private static final int OCC_PENDENTE = 1; // candidato aguardando confirmacao (NAO ventila)
+    private static final int OCC_FORTE = 2; // belt==1 agora, porta fechada (re-verificavel)
+    private static final int OCC_FRACO = 3; // entrou e afivelou (nenhum sensor confirma nem refuta)
+    private final Object passengerLock = new Object();
+    private volatile int occState = OCC_VAZIO;
+    private volatile String lastBeltRaw = null; // espelho do push (evita binder no caminho quente)
+    private volatile String lastDoorRaw = null;
+    private volatile String lastSpeedRaw = null;
+    private volatile long lastPassengerDoorCloseMs = 0L;
+    private volatile long lastOtherDoorOpenMs = 0L;
+    private volatile long passengerDoorOpenSinceBeliefMs = 0L;
+    private volatile Boolean prevEngineOff = null; // borda propria de ignicao
+    private static final int MANUAL_NONE = 0, MANUAL_PRESENT = 1, MANUAL_ABSENT = 2;
+    private volatile int manualMode = MANUAL_NONE;
+    private volatile long manualAtMs = 0L;
+    private volatile Runnable pendingPassengerAdjudicate;
+    private volatile Runnable pendingPassengerWeakRevoke;
+    /** Contexto de embarque: fechamento de porta recente => confirmacao mais rapida. */
+    private static final long PASSENGER_EMBARK_CONTEXT_MS = 30000L;
+    /** Carro "selado" (boot com alguem dentro, entrada pela porta do motorista, ruido de power-on). */
+    private static final long PASSENGER_PROMOTE_SEALED_MS = 10000L;
+    /** Atraso da adjudicacao do ciclo de porta. */
+    private static final long PASSENGER_ADJUDICATE_MS = 4000L;
+    /**
+     * Porta tem de ficar aberta ao menos isto pra o ciclo ser adjudicado. Pedido do dono: "ninguem
+     * entra e sai com menos tempo que isso" — assim pedagio/drive-thru/conversa na janela (aberturas
+     * rapidas) NAO derrubam a presenca de quem esta afivelado a bordo.
+     */
+    private static final long PASSENGER_MIN_DOOR_OPEN_MS = 3000L;
+    /** Revogacao da crenca fraca quando a saida foi por OUTRA porta (cenario da porta do motorista). */
+    private static final long PASSENGER_WEAK_REVOKE_MS = 45000L;
+    private static final long PASSENGER_OTHER_DOOR_WINDOW_MS = 20000L;
     // So confirma presenca se o cinto continuar em 1 apos esse tempo (filtra ruido/pisca do sensor).
     private static final long PASSENGER_BELT_CONFIRM_DEBOUNCE_MS = 4000L;
     private volatile Runnable pendingPassengerPresenceConfirm;
+
+    // ==================== SONDA DE OCUPACAO (diagnostico, sem mudar comportamento) ====================
+    // NAO ha sensor de ocupacao direto neste carro: seated_state e morto e as chaves car.oms.frs.*
+    // dependem da camera/sensor de monitoramento de ocupantes, que este carro NAO POSSUI (confirmado
+    // pelo dono). Sobra o ALERTA de cinto (ambiguo: 0 = afivelado OU banco vazio) + a porta.
+    // O QUE ESTA SONDA AINDA RESPONDE, e que decide o sintoma "entrou antes do carro ligar":
+    // o alerta de cinto chega com a IGNICAO DESLIGADA? Se num fechamento de porta com engine=off o
+    // belt vier 1, a transicao E visivel com o carro parado e da pra captura-la; se vier sempre 0,
+    // a informacao nao existe no barramento e nenhum software a recupera.
+    // Leitura leve, no backgroundHandler, so em 2 momentos pontuais (nunca em caminho quente).
+    private void probeOccupancySensors(String reason) {
+        backgroundHandler.post(() -> {
+            try {
+                // FRESCO no cinto: e exatamente o valor em disputa neste instante.
+                String belt = getUpdatedData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue());
+                String door = getData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue());
+                String engine = getData(CarConstants.CAR_BASIC_ENGINE_STATE.getValue());
+                String speed = getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue());
+                String msg = "OCC_PROBE reason=" + reason
+                        + " belt=" + belt
+                        + " door=" + door
+                        + " engine=" + engine
+                        + " speed=" + speed;
+                // Log.i com TAG estavel: o logger persistente depende de flag/toggle de diagnostico,
+                // e a build do dono pode nao gravar. Os dois canais garantem o dado.
+                Log.i("OccProbe", msg);
+                logPersistentClusterEvent("occ_probe", msg);
+            } catch (Exception e) {
+                Log.e("OccProbe", "falha na sonda de ocupacao", e);
+            }
+        });
+    }
+
+    // ---------- helpers da maquina de ocupacao ----------
+
+    /** Indice de um campo "{a,b,c,d,e}" como int, ou -1 se ilegivel. Nunca lanca. */
+    private int csvIndexState(String raw, int index) {
+        try {
+            if (raw == null) return -1;
+            String[] parts = raw.replace("{", "").replace("}", "").split(",");
+            if (index >= parts.length) return -1;
+            String v = parts[index].trim();
+            return v.equals("1") ? 1 : (v.equals("0") ? 0 : -1);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Alguma porta que NAO e a do passageiro esta aberta? (rede do cenario "saiu por outra porta") */
+    private boolean anyOtherDoorOpen(String doorRaw) {
+        try {
+            if (doorRaw == null) return false;
+            String[] parts = doorRaw.replace("{", "").replace("}", "").split(",");
+            for (int i = 0; i < parts.length; i++) {
+                if (i == 1) continue; // 1 = passageiro
+                if (parts[i].trim().equals("1")) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Carro parado? FAIL-CLOSED: leitura ruim conta como NAO parado (nao revoga por engano). */
+    private boolean passengerCarStopped(String speedRaw) {
+        try {
+            if (speedRaw == null) return false;
+            return Float.parseFloat(speedRaw.trim()) <= 0.5f;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** true se o estado implica alguem no banco (o que a ventilacao usa). */
+    private boolean occImpliesPresent(int state) {
+        return state == OCC_FORTE || state == OCC_FRACO;
+    }
+
+    /**
+     * Unico ponto que muda occState. Atua no CAN so quando a PRESENCA efetiva muda (evita reescrever
+     * nivel a cada FORTE<->FRACO, que e a mesma presenca) e espelha na pref pra UI.
+     */
+    private void setOccState(int novo, String reason) {
+        boolean antesPresente;
+        int antes;
+        synchronized (passengerLock) {
+            antes = occState;
+            if (antes == novo) return;
+            antesPresente = occImpliesPresent(antes);
+            occState = novo;
+        }
+        boolean agoraPresente = occImpliesPresent(novo);
+        sharedPreferences.edit()
+                .putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), agoraPresente)
+                .apply();
+        String msg = "occ " + antes + "->" + novo + " presente=" + agoraPresente + " reason=" + reason;
+        Log.i("PassengerOcc", msg);
+        logPersistentClusterEvent("passenger_occ", msg);
+        if (antesPresente != agoraPresente) {
+            applyPassengerVentilation();
+        }
+    }
 
     /** Presenca do passageiro, persistida nas prefs. */
     private boolean isPassengerPresent() {
@@ -2025,26 +2463,186 @@ public class ServiceManager {
 
     // Confirma presenca do passageiro apos o debounce, relendo o cinto fresh (fica pendente ate
     // disparar; um novo 0->1 corroborado cancela e reagenda, evitando confirmacoes acumuladas).
-    private void schedulePassengerPresenceConfirmation() {
-        if (pendingPassengerPresenceConfirm != null) {
-            backgroundHandler.removeCallbacks(pendingPassengerPresenceConfirm);
-        }
-        Runnable confirm = () -> {
+    private void cancelPassengerPromote() {
+        Runnable r = pendingPassengerPresenceConfirm;
+        if (r != null) {
+            backgroundHandler.removeCallbacks(r);
             pendingPassengerPresenceConfirm = null;
-            int belt = passengerBeltWarnState(getUpdatedData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue()));
-            if (belt == 1) {
-                setPassengerPresent(true, "belt_occupied_confirmed");
+        }
+    }
+
+    private void cancelPassengerWeakRevoke() {
+        Runnable r = pendingPassengerWeakRevoke;
+        if (r != null) {
+            backgroundHandler.removeCallbacks(r);
+            pendingPassengerWeakRevoke = null;
+        }
+    }
+
+    private void cancelPassengerAdjudication() {
+        Runnable r = pendingPassengerAdjudicate;
+        if (r != null) {
+            backgroundHandler.removeCallbacks(r);
+            pendingPassengerAdjudicate = null;
+        }
+    }
+
+    /**
+     * Le cinto e porta FRESCOS. Retorna null se o binder falhar (getUpdatedData da null) — nesse caso
+     * o chamador NAO deve decidir. Um retry curto e feito pelo proprio chamador quando faz sentido.
+     */
+    private int[] readPassengerBeltDoorFresh() {
+        String beltRaw = getUpdatedData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.getValue());
+        String doorRaw = getUpdatedData(CarConstants.CAR_BASIC_DOOR_STATUS.getValue());
+        if (beltRaw != null) lastBeltRaw = beltRaw;
+        if (doorRaw != null) lastDoorRaw = doorRaw;
+        int belt = csvIndexState(beltRaw, 1);
+        int door = csvIndexState(doorRaw, 1);
+        if (belt < 0 || door < 0) return null;
+        return new int[] {belt, door};
+    }
+
+    /**
+     * P1 (confirmacao): promove PENDENTE->FORTE so com RE-LEITURA FRESCA. Este debounce com leitura
+     * fresca e o que consertou o bug de 2026-07-01 (ruido de power-on marcava presenca em banco
+     * vazio) — o atraso pode SUBIR, nunca descer, e a leitura fresca nunca pode ser trocada por
+     * "confia no ultimo push".
+     */
+    private void schedulePassengerPresenceConfirmation(long delayMs) {
+        cancelPassengerPromote();
+        Runnable confirm = new Runnable() {
+            @Override
+            public void run() {
+                pendingPassengerPresenceConfirm = null;
+                if (occState != OCC_PENDENTE) return;
+                if (manualMode == MANUAL_ABSENT) {
+                    setOccState(OCC_VAZIO, "confirm_suprimido_manual_ausente");
+                    return;
+                }
+                int[] bd = readPassengerBeltDoorFresh();
+                if (bd == null) {
+                    Log.w("PassengerOcc", "confirm_sem_leitura (binder) — nao decide");
+                    logPersistentClusterEvent("passenger_occ", "confirm_sem_leitura");
+                    setOccState(OCC_VAZIO, "confirm_sem_leitura");
+                    return;
+                }
+                if (bd[0] == 1 && bd[1] == 0) {
+                    setOccState(OCC_FORTE, "confirmado_belt1_porta_fechada");
+                } else {
+                    setOccState(OCC_VAZIO, "confirm_rejeitado belt=" + bd[0] + " porta=" + bd[1]);
+                }
             }
         };
         pendingPassengerPresenceConfirm = confirm;
-        backgroundHandler.postDelayed(confirm, PASSENGER_BELT_CONFIRM_DEBOUNCE_MS);
+        backgroundHandler.postDelayed(confirm, delayMs);
+    }
+
+    /**
+     * P4 (adjudicacao): todo ciclo de porta do passageiro que durou o minimo e julgado com leitura
+     * fresca. belt==1 -> presente; belt==0 -> AUSENTE independente do estado anterior. E a rede que
+     * pega quem entrou, afivelou e depois saiu (o sintoma "sai e nao desliga").
+     */
+    private void schedulePassengerAdjudication() {
+        cancelPassengerAdjudication();
+        Runnable adj = new Runnable() {
+            @Override
+            public void run() {
+                pendingPassengerAdjudicate = null;
+                int[] bd = readPassengerBeltDoorFresh();
+                if (bd == null) {
+                    logPersistentClusterEvent("passenger_occ", "adjudicacao_sem_leitura");
+                    return; // nao decide; ignicao e P7 continuam cobrindo
+                }
+                if (bd[1] == 1) return; // reabriu: novo ciclo em curso
+                if (bd[0] == 1) {
+                    passengerDoorOpenSinceBeliefMs = 0L;
+                    setOccState(OCC_FORTE, "adjudicado_belt1");
+                } else {
+                    // Excecao unica: o dono marcou "presente" DURANTE este ciclo de porta.
+                    if (manualMode == MANUAL_PRESENT && manualAtMs >= lastPassengerDoorOpenMs) {
+                        manualMode = MANUAL_NONE;
+                        logPersistentClusterEvent("passenger_occ", "adjudicacao_respeita_manual_presente");
+                        return;
+                    }
+                    setOccState(OCC_VAZIO, "adjudicado_banco_vazio");
+                }
+            }
+        };
+        pendingPassengerAdjudicate = adj;
+        backgroundHandler.postDelayed(adj, PASSENGER_ADJUDICATE_MS);
+    }
+
+    /**
+     * P9 — semeia a ocupacao a partir do ESTADO atual (nao de bordas). Duas amostras espacadas: uma
+     * unica leitura de belt==1 poderia ser o ruido de power-on documentado no bug de 2026-07-01.
+     */
+    private void seedPassengerOccupancy() {
+        // Fail-safe explicito: enquanto nao houver prova, o banco fica DESLIGADO.
+        occState = OCC_VAZIO;
+        manualMode = MANUAL_NONE;
+        sharedPreferences.edit()
+                .putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), false)
+                .apply();
+        backgroundHandler.post(() -> {
+            try {
+                updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), "0");
+            } catch (Exception ignored) {
+            }
+        });
+        Runnable amostra2 = new Runnable() {
+            @Override
+            public void run() {
+                int[] bd = readPassengerBeltDoorFresh();
+                if (bd == null) {
+                    logPersistentClusterEvent("passenger_occ", "seed_sem_leitura_2");
+                    return;
+                }
+                if (bd[0] == 1 && bd[1] == 0 && occState == OCC_VAZIO) {
+                    setOccState(OCC_FORTE, "seed_2_amostras_belt1");
+                } else {
+                    logPersistentClusterEvent("passenger_occ",
+                            "seed_amostra2_negativa belt=" + bd[0] + " porta=" + bd[1]);
+                }
+            }
+        };
+        backgroundHandler.postDelayed(() -> {
+            int[] bd = readPassengerBeltDoorFresh();
+            if (bd == null) {
+                logPersistentClusterEvent("passenger_occ", "seed_sem_leitura_1");
+                return;
+            }
+            if (bd[0] == 1 && bd[1] == 0) {
+                // 1a amostra positiva: espera a 2a antes de acreditar.
+                backgroundHandler.postDelayed(amostra2, PASSENGER_PROMOTE_SEALED_MS);
+            } else {
+                logPersistentClusterEvent("passenger_occ",
+                        "seed_amostra1_negativa belt=" + bd[0] + " porta=" + bd[1]);
+            }
+        }, PASSENGER_PROMOTE_SEALED_MS);
+    }
+
+    /** P7: crenca FRACA + saida provavel por outra porta -> revoga se o cinto nao reassertar. */
+    private void schedulePassengerWeakRevoke() {
+        cancelPassengerWeakRevoke();
+        Runnable rev = new Runnable() {
+            @Override
+            public void run() {
+                pendingPassengerWeakRevoke = null;
+                if (occState != OCC_FRACO) return;
+                int[] bd = readPassengerBeltDoorFresh();
+                if (bd == null) return;
+                if (bd[0] == 1) {
+                    setOccState(OCC_FORTE, "fraco_reconfirmado");
+                } else if (bd[1] == 0) {
+                    setOccState(OCC_VAZIO, "fraco_revogado_saida_outra_porta");
+                }
+            }
+        };
+        pendingPassengerWeakRevoke = rev;
+        backgroundHandler.postDelayed(rev, PASSENGER_WEAK_REVOKE_MS);
     }
 
     /** Grava a presenca do passageiro e reaplica a ventilacao. */
-    private void setPassengerPresent(boolean present, String reason) {
-        sharedPreferences.edit().putBoolean(SharedPreferencesKeys.PASSENGER_PRESENT.getKey(), present).apply();
-        applyPassengerVentilation();
-    }
 
     /** Estado da porta do passageiro a partir do car.basic.door_status "{a,b,...}" (indice 1).
      *  1 = aberta, 0 = fechada, -1 se nao der pra ler. */
@@ -2077,13 +2675,23 @@ public class ServiceManager {
         if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) return;
         String ac = getUpdatedData(CarConstants.CAR_HVAC_POWER_MODE.getValue());
         if (ac != null && ac.trim().equals("1")) {
-            updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), isPassengerPresent() ? "3" : "0");
+            updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), occImpliesPresent(occState) ? "3" : "0");
         }
     }
 
     /** Inverte manualmente a presenca do passageiro (botao na UI) e reaplica a ventilacao. */
     public void togglePassengerPresent() {
-        setPassengerPresent(!isPassengerPresent(), "toggle_manual");
+        boolean novoPresente = !occImpliesPresent(occState);
+        // O antigo NAO cancelava a confirmacao agendada: um confirm em voo desfazia o "ausente" que o
+        // dono acabou de marcar. Bug real, corrigido aqui.
+        cancelPassengerPromote();
+        cancelPassengerAdjudication();
+        cancelPassengerWeakRevoke();
+        manualMode = novoPresente ? MANUAL_PRESENT : MANUAL_ABSENT;
+        manualAtMs = System.currentTimeMillis();
+        // Manual "presente" entra como FRACO (crenca inferida, sem sensor confirmando) — e o mesmo
+        // estado de quem entrou e afivelou, que e exatamente a situacao em que o botao e usado.
+        setOccState(novoPresente ? OCC_FRACO : OCC_VAZIO, "toggle_manual");
     }
 
     // Aplica a ventilacao dos bancos SE o AC estiver ligado (power_mode==1) E a pref estiver on.

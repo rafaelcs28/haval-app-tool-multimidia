@@ -370,32 +370,112 @@ object SeatbeltVoiceReminder {
             else -> R.raw.seatbelt_voice_seat3 // 3 = meio; também fallback
         }
 
-    // Override externo (troca de voz sem rebuild): <base>.mp3 ou .m4a na pasta de arquivos do app.
-    private fun resolveExternal(base: String): File? =
-        listOf("$base.mp3", "$base.m4a")
-            .map { File(App.getContext().getExternalFilesDir(null), it) }
-            .firstOrNull { it.isFile && it.length() > 0 }
+    // ======================= VARIANTES ALEATORIAS DE VOZ =======================
+    // Objetivo: NAO falar sempre a mesma frase. Cada "slot" (cada assento e o multi) pode ter N
+    // audios; sorteia um, EVITANDO REPETIR O ULTIMO tocado daquele slot — sorteio puro repete e mata
+    // a graca justamente na 2a vez, que e quando a pessoa presta atencao.
+    //
+    // De onde vem as variantes (as duas fontes entram no MESMO sorteio):
+    //  - EXTERNAS, sem rebuild: qualquer arquivo na pasta de arquivos do app cujo nome comece com a
+    //    base e termine em .mp3/.m4a. Ex.: seatbelt_voice_seat0.mp3, seatbelt_voice_seat0_vovo.mp3,
+    //    seatbelt_voice_seat0_narrador.mp3. Basta jogar os arquivos la (o app le na proxima fala,
+    //    sem restart).
+    //  - EMBUTIDAS, sobrevivem a reinstalacao limpa: res/raw/<base>.mp3 e <base>_2 .. <base>_9.
+    //
+    // ATENCAO (armadilha real): as embutidas sao resolvidas por NOME (getIdentifier) e o build usa
+    // isShrinkResources=true -> sem referencia estatica o encolhedor de recursos as REMOVE do APK,
+    // em silencio. Por isso existe res/raw/keep.xml com tools:keep="@raw/seatbelt_voice_*".
+    private const val MAX_EMBEDDED_VARIANTS = 9
 
-    private fun setSeatSource(player: MediaPlayer, seat: Int) {
-        val custom = resolveExternal("seatbelt_voice_seat$seat")
-        if (custom != null) {
-            player.setDataSource(custom.absolutePath)
-        } else {
-            App.getContext().resources.openRawResourceFd(rawResForSeat(seat)).use { afd ->
-                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+    /** Uma opcao de audio sorteavel. [key] identifica pra nao repetir; [apply] aponta o player. */
+    private class VoiceVariant(val key: String, val apply: (MediaPlayer) -> Unit)
+
+    /** Ultima variante tocada por slot (base) — usada pra nao repetir em sequencia. */
+    private val lastVariantKeyBySlot = HashMap<String, String>()
+
+    /** Arquivos externos que pertencem a este slot. */
+    private fun externalVariants(base: String): List<File> {
+        val dir = App.getContext().getExternalFilesDir(null) ?: return emptyList()
+        val files = dir.listFiles() ?: return emptyList()
+        return files
+            .filter { file ->
+                if (!file.isFile || file.length() <= 0L) return@filter false
+                val name = file.name
+                val lower = name.lowercase()
+                if (!lower.endsWith(".mp3") && !lower.endsWith(".m4a")) return@filter false
+                if (!name.startsWith(base)) return@filter false
+                // O que vem DEPOIS da base tem de ser a extensao ou "_sufixo" — assim "…seat0" nunca
+                // engole um hipotetico "…seat01" nem o proprio "…seat0" casa com outro slot.
+                val rest = name.removePrefix(base)
+                rest.startsWith(".") || rest.startsWith("_")
+            }
+            .sortedBy { it.name } // ordem estavel: o sorteio e que varia, nao a lista
+    }
+
+    /** Recursos embutidos deste slot: <base>, <base>_2 .. <base>_9 (os que existirem). */
+    private fun embeddedVariantResIds(base: String): List<Pair<String, Int>> {
+        val ctx = App.getContext()
+        val pkg = ctx.packageName
+        val found = ArrayList<Pair<String, Int>>()
+        val names = ArrayList<String>(MAX_EMBEDDED_VARIANTS)
+        names.add(base)
+        for (i in 2..MAX_EMBEDDED_VARIANTS) names.add("${base}_$i")
+        for (name in names) {
+            val id = ctx.resources.getIdentifier(name, "raw", pkg)
+            if (id != 0) found.add(name to id)
+        }
+        return found
+    }
+
+    /**
+     * Sorteia uma variante do slot, sem repetir a ultima. Externas + embutidas concorrem juntas.
+     * Fallback: se nada for encontrado (ex.: encolhedor removeu os raws E nao ha arquivo externo),
+     * cai no recurso passado em [fallbackResId] pra o aviso NUNCA ficar mudo.
+     */
+    @Synchronized
+    private fun pickVariant(base: String, fallbackResId: Int): VoiceVariant {
+        val options = ArrayList<VoiceVariant>()
+        for (file in externalVariants(base)) {
+            options.add(VoiceVariant("ext:${file.name}") { it.setDataSource(file.absolutePath) })
+        }
+        for ((name, resId) in embeddedVariantResIds(base)) {
+            options.add(
+                VoiceVariant("raw:$name") { player ->
+                    App.getContext().resources.openRawResourceFd(resId).use { afd ->
+                        player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    }
+                }
+            )
+        }
+        if (options.isEmpty()) {
+            return VoiceVariant("raw:fallback") { player ->
+                App.getContext().resources.openRawResourceFd(fallbackResId).use { afd ->
+                    player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                }
             }
         }
+        val last = lastVariantKeyBySlot[base]
+        val pool = options.filter { it.key != last }.ifEmpty { options }
+        val chosen = pool.random()
+        lastVariantKeyBySlot[base] = chosen.key
+        ClusterPersistentEventLogger.log(
+            DIAG_EVENT,
+            mapOf(
+                "variant" to chosen.key,
+                "slot" to base,
+                "options" to options.size,
+                "previous" to (last ?: "-")
+            )
+        )
+        return chosen
+    }
+
+    private fun setSeatSource(player: MediaPlayer, seat: Int) {
+        pickVariant("seatbelt_voice_seat$seat", rawResForSeat(seat)).apply(player)
     }
 
     private fun setMultiSource(player: MediaPlayer) {
-        val custom = resolveExternal("seatbelt_voice_multi")
-        if (custom != null) {
-            player.setDataSource(custom.absolutePath)
-        } else {
-            App.getContext().resources.openRawResourceFd(R.raw.seatbelt_voice_multi).use { afd ->
-                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            }
-        }
+        pickVariant("seatbelt_voice_multi", R.raw.seatbelt_voice_multi).apply(player)
     }
 
     // Toca UM áudio e ESPERA terminar (fila sequencial quando há vários). Player e foco nunca vazam:

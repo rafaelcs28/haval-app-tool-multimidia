@@ -388,4 +388,64 @@ class ThemeManager private constructor(val context: Context) {
         val dir = File(themesDir, folderName)
         return if (dir.exists()) dir.deleteRecursively() else false
     }
+
+    /**
+     * Instala/atualiza temas EMBUTIDOS no APK (pasta `assets/themes/<Nome>/`) para `filesDir/themes`,
+     * no boot. Para cada tema em assets, compara a <version> do theme.xml embutido com a instalada e
+     * copia os arquivos só se ainda não existir OU se a versão embutida for maior. Efeitos:
+     *  - você larga o tema em `app/src/main/assets/themes/<Nome>/` e o build já o carrega pro app;
+     *  - um ajuste empurrado por telnet (mesma versão) NÃO é sobrescrito à toa;
+     *  - pra reinstalar após editar, basta subir o número em <version> no theme.xml e rebuildar.
+     * Formato do tema = o mesmo dos locais: theme.xml + index.html + thumbnail.png (pasta plana).
+     * Chamar FORA da main thread (I/O). Idempotente.
+     */
+    fun ensureBundledThemesInstalled() {
+        try {
+            val themeFolders = (context.assets.list("themes") ?: emptyArray()).filter { name ->
+                try {
+                    context.assets.list("themes/$name")?.contains("theme.xml") == true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            for (themeName in themeFolders) {
+                try {
+                    val bundledVersion = readBundledThemeVersion(themeName)
+                    val destDir = File(themesDir, themeName)
+                    val installedXml = File(destDir, "theme.xml")
+                    val installedVersion = if (installedXml.exists()) {
+                        parseThemeXml(installedXml.inputStream(), themeName, true)?.version
+                    } else null
+
+                    val shouldInstall = !destDir.exists() ||
+                            installedVersion.isNullOrEmpty() ||
+                            (bundledVersion != null && isNewerVersion(installedVersion, bundledVersion))
+                    if (!shouldInstall) continue
+
+                    if (!destDir.exists()) destDir.mkdirs()
+                    val files = context.assets.list("themes/$themeName") ?: emptyArray()
+                    for (fileName in files) {
+                        context.assets.open("themes/$themeName/$fileName").use { input ->
+                            FileOutputStream(File(destDir, fileName)).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                    Log.i(TAG, "Bundled theme installed/updated: $themeName (v${bundledVersion ?: "?"})")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed installing bundled theme '$themeName'", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureBundledThemesInstalled failed", e)
+        }
+    }
+
+    private fun readBundledThemeVersion(themeName: String): String? {
+        return try {
+            parseThemeXml(context.assets.open("themes/$themeName/theme.xml"), themeName, false)?.version
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
