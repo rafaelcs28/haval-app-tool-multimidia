@@ -3776,6 +3776,16 @@ public class ServiceManager {
     // DataTrack tem toggle próprio (BLOCK_DATATRACK_TELEMETRY / MobileDataManager).
     public void ensureDebloatedSystemApps() {
         try {
+            // 1) Lê o estado REAL do sistema na primeira vez (pref ainda não definida): se o pacote já
+            //    está desativado por fora (ex.: telnet / pm disable-user), o toggle nasce marcado ON.
+            //    Depois disso a pref é a dona do estado — quem manda é o usuário pela UI.
+            reconcileDebloatPref(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.getKey(),
+                    "com.neusoft.na.navigation");
+            reconcileDebloatPref(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.getKey(),
+                    "com.iflytek.cutefly.speechclient.hmi");
+            reconcileDebloatPref(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.getKey(),
+                    "com.beantechs.weatherservice");
+            // 2) Aplica cada toggle (idempotente; reaplica no boot).
             applyDebloatToggle(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.getKey(),
                     "com.neusoft.na.navigation");
             applyDebloatToggle(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.getKey(),
@@ -3784,6 +3794,31 @@ public class ServiceManager {
                     "com.beantechs.weatherservice");
         } catch (Exception e) {
             Log.e(TAG, "Error ensuring debloated system apps", e);
+        }
+    }
+
+    // Semeia a pref de debloat a partir do estado real do pacote — SÓ enquanto a pref nunca foi
+    // definida (nem pelo usuário, nem por um boot anterior). Assim, um pacote já desativado por fora
+    // (telnet/pm) faz o toggle aparecer ON ao instalar; a partir daí a pref é a fonte da verdade.
+    private void reconcileDebloatPref(String prefKey, String representativePackage) {
+        if (sharedPreferences.contains(prefKey)) return;
+        boolean currentlyDisabled = !isPackageEnabledForUser(representativePackage);
+        sharedPreferences.edit().putBoolean(prefKey, currentlyDisabled).apply();
+    }
+
+    // true se o pacote está instalado E habilitado para o user 0. Cobre os dois jeitos de desativar:
+    // "pm disable-user" (some do -e) e "pm uninstall --user 0" (some do -e). Em erro, assume ENABLED
+    // (conservador: não marca o toggle ON à toa).
+    private boolean isPackageEnabledForUser(String pkg) {
+        try {
+            String out = ShizukuUtils.runCommandAndGetOutput(new String[]{"pm", "list", "packages", "-e", pkg});
+            if (out == null) return true;
+            for (String line : out.split("\\n")) {
+                if (line.trim().equals("package:" + pkg)) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return true;
         }
     }
 
