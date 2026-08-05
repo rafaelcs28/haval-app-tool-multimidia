@@ -88,25 +88,6 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.ENABLE_SEATBELT_VOICE.key, true)
                 )
         }
-        // Default FALSE de proposito: o overlay e um poll permanente + uma janela extra de overlay.
-        // Opt-in pra nao reintroduzir custo de repouso em quem nao pediu.
-        var enableResourceOverlay by remember {
-                mutableStateOf(
-                        prefs.getBoolean(SharedPreferencesKeys.ENABLE_RESOURCE_OVERLAY.key, false)
-                )
-        }
-        var overlayFontSp by remember {
-                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_FONT_SP.key, 14))
-        }
-        var overlayCorner by remember {
-                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_CORNER.key, 3))
-        }
-        var overlayX by remember {
-                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_X.key, 12))
-        }
-        var overlayY by remember {
-                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.RESOURCE_OVERLAY_Y.key, 90))
-        }
         var seatbeltMinVol by remember {
                 mutableStateOf(
                         prefs.getInt(
@@ -563,7 +544,6 @@ fun BasicSettingsTab() {
         var mobileDataAutoblockCapMb by remember {
                 mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, 2048).coerceIn(512, 8192))
         }
-        var blockDatatrack by remember { mutableStateOf(mdm.isDatatrackBlocked()) }
         var mobileDataUsedMb by remember { mutableStateOf(0L) }
         var mobileBlockReason by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(mobileControlEnabled, mobileDataCycleDay) {
@@ -763,21 +743,6 @@ fun BasicSettingsTab() {
                 )
         )
 
-        // Card 3 — congelar telemetria OEM (privacidade + WiFi/Starlink)
-        settingsList.add(
-                SettingItem(
-                        title = "Bloquear telemetria (DataTrack → nuvem)",
-                        description =
-                                "Congela o serviço OEM que manda telemetria pra nuvem (com.beantechs.datatrackservice). Reversível; não mexe no comando remoto. Não derruba o gasto do TBOX na fatura — ajuda na privacidade e no WiFi/Starlink.",
-                        group = SettingsGroups.FEATURES,
-                        checked = blockDatatrack,
-                        onCheckedChange = {
-                                blockDatatrack = it
-                                br.com.redesurftank.havalshisuku.managers.MobileDataManager.setDatatrackBlocked(it)
-                        }
-                )
-        )
-
         // Card — prioridade de redes WiFi (troca automática pela preferida disponível)
         settingsList.add(
                 SettingItem(
@@ -908,145 +873,6 @@ fun BasicSettingsTab() {
                                                 },
                                                 label = "App a abrir no swipe-up"
                                         )
-                                }
-                        }
-                )
-        )
-
-        settingsList.add(
-                SettingItem(
-                        title = "Indicador de CPU e RAM flutuante",
-                        description =
-                                "Mostra o uso de CPU e RAM da multimídia num quadradinho no canto superior, por cima de qualquer app. Some sozinho quando você abre a barra estendida (lá o dado já aparece no card de dinâmica). Começa desligado: enquanto está ligado, o app faz uma leitura a cada 2,5s.",
-                        group = SettingsGroups.DISPLAY,
-                        checked = enableResourceOverlay,
-                        onCheckedChange = {
-                                enableResourceOverlay = it
-                                prefs.edit {
-                                        putBoolean(SharedPreferencesKeys.ENABLE_RESOURCE_OVERLAY.key, it)
-                                }
-                                // Espelho observavel: faz o overlay aparecer/sumir NA HORA.
-                                br.com.redesurftank.havalshisuku.models.BottomBarState
-                                        .resourceOverlayEnabled = it
-                        },
-                        customContent = {
-                                if (enableResourceOverlay) {
-                                        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                                                Text(
-                                                        "Canto: " +
-                                                                when (overlayCorner) {
-                                                                        0 -> "superior esquerdo"
-                                                                        1 -> "superior direito"
-                                                                        2 -> "inferior esquerdo"
-                                                                        else -> "inferior direito"
-                                                                },
-                                                        color = AppColors.TextSecondary,
-                                                        fontSize = 13.sp
-                                                )
-                                                Row(
-                                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                        listOf(
-                                                                        0 to "↖",
-                                                                        1 to "↗",
-                                                                        2 to "↙",
-                                                                        3 to "↘"
-                                                                )
-                                                                .forEach { (idx, label) ->
-                                                                        val sel = overlayCorner == idx
-                                                                        Surface(
-                                                                                onClick = {
-                                                                                        overlayCorner = idx
-                                                                                        prefs.edit {
-                                                                                                putInt(SharedPreferencesKeys.RESOURCE_OVERLAY_CORNER.key, idx)
-                                                                                        }
-                                                                                        br.com.redesurftank.havalshisuku.models.BottomBarState
-                                                                                                .resourceOverlayCorner = idx
-                                                                                },
-                                                                                color =
-                                                                                        if (sel) AppColors.Primary.copy(alpha = 0.22f)
-                                                                                        else AppColors.CardBackground,
-                                                                                shape = RoundedCornerShape(8.dp),
-                                                                                modifier = Modifier.weight(1f)
-                                                                        ) {
-                                                                                Text(
-                                                                                        label,
-                                                                                        modifier = Modifier.padding(vertical = 10.dp),
-                                                                                        textAlign = TextAlign.Center,
-                                                                                        color =
-                                                                                                if (sel) AppColors.Primary
-                                                                                                else AppColors.TextSecondary,
-                                                                                        fontSize = 18.sp
-                                                                                )
-                                                                        }
-                                                                }
-                                                }
-                                                Text(
-                                                        "Tamanho da fonte: $overlayFontSp sp",
-                                                        color = AppColors.TextSecondary,
-                                                        fontSize = 13.sp,
-                                                        modifier = Modifier.padding(top = 10.dp)
-                                                )
-                                                Slider(
-                                                        value = overlayFontSp.toFloat(),
-                                                        onValueChange = {
-                                                                overlayFontSp = it.toInt()
-                                                                br.com.redesurftank.havalshisuku.models.BottomBarState
-                                                                        .resourceOverlayFontSp = overlayFontSp
-                                                        },
-                                                        onValueChangeFinished = {
-                                                                prefs.edit {
-                                                                        putInt(SharedPreferencesKeys.RESOURCE_OVERLAY_FONT_SP.key, overlayFontSp)
-                                                                }
-                                                        },
-                                                        valueRange = 10f..30f,
-                                                        steps = 19
-                                                )
-                                                Text(
-                                                        "Distância da borda lateral: $overlayX dp",
-                                                        color = AppColors.TextSecondary,
-                                                        fontSize = 13.sp
-                                                )
-                                                Slider(
-                                                        value = overlayX.toFloat(),
-                                                        onValueChange = {
-                                                                overlayX = it.toInt()
-                                                                br.com.redesurftank.havalshisuku.models.BottomBarState
-                                                                        .resourceOverlayX = overlayX
-                                                        },
-                                                        onValueChangeFinished = {
-                                                                prefs.edit {
-                                                                        putInt(SharedPreferencesKeys.RESOURCE_OVERLAY_X.key, overlayX)
-                                                                }
-                                                        },
-                                                        valueRange = 0f..400f
-                                                )
-                                                Text(
-                                                        "Distância da borda de cima/baixo: $overlayY dp",
-                                                        color = AppColors.TextSecondary,
-                                                        fontSize = 13.sp
-                                                )
-                                                Slider(
-                                                        value = overlayY.toFloat(),
-                                                        onValueChange = {
-                                                                overlayY = it.toInt()
-                                                                br.com.redesurftank.havalshisuku.models.BottomBarState
-                                                                        .resourceOverlayY = overlayY
-                                                        },
-                                                        onValueChangeFinished = {
-                                                                prefs.edit {
-                                                                        putInt(SharedPreferencesKeys.RESOURCE_OVERLAY_Y.key, overlayY)
-                                                                }
-                                                        },
-                                                        valueRange = 0f..300f
-                                                )
-                                                Text(
-                                                        "Arraste com o indicador na tela: ele reposiciona ao vivo. Feche a barra estendida pra vê-lo.",
-                                                        color = AppColors.TextSecondary,
-                                                        fontSize = 12.sp
-                                                )
-                                        }
                                 }
                         }
                 )
@@ -3287,6 +3113,9 @@ fun BasicSettingsTab() {
                 )
         )
 
+        // Subaba "Performance" — último grupo (SettingsGroups.PERFORMANCE): debloat + DataTrack +
+        // overlay CPU/RAM. Bloco mantido em PerformanceScreen.kt pra não inchar este arquivo.
+        settingsList.addAll(performanceSettingItems(prefs))
 
         GroupedSettingsLayout(items = settingsList)
 
