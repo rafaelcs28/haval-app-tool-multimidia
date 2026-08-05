@@ -80,6 +80,11 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "disableAvmCarStopped",
             "Desativar camera AVM quando o carro está parado"
     ),
+    // ===== Debloat: desativa apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
+    // Reversível (pm install-existing) e reaplicado no boot por ServiceManager.ensureDebloatedSystemApps().
+    DISABLE_NATIVE_NAVIGATION("disableNativeNavigation", "Desativar navegador GPS nativo (Neusoft)"),
+    DISABLE_NATIVE_VOICE("disableNativeVoice", "Desativar assistente de voz nativo (iFlyTek)"),
+    DISABLE_NATIVE_WEATHER("disableNativeWeather", "Desativar serviço de previsão do tempo (OEM)"),
     CAR_MONITOR_PROPERTIES("carMonitorProperties", "Propriedades do monitoramento do carro"),
     BYPASS_SELF_INSTALLATION_INTEGRITY_CHECK(
             "bypassSelfInstallationIntegrityCheck",
@@ -289,6 +294,14 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     CUSTOM_THEME_REPO_ENV("customThemeRepoEnv", "Ambiente do Repositório (Prod/Dev)"),
     ACTIVE_CUSTOM_THEME("activeCustomTheme", "Tema Dinâmico Ativo"),
     BOTTOM_BAR_AUTO_HIDE("bottomBarAutoHide", "Esconder barra automaticamente após 30s"),
+    BOTTOM_BAR_HIDDEN("bottomBarHidden", "Manter a barra inferior escondida (dashboard pelo atalho do volante)"),
+    HIDE_LEFT_NAV_PANE("hideLeftNavPane", "Ocultar o painel lateral esquerdo (navegação do sistema)"),
+    AUTO_MOVE_PROJECTION_TO_CLUSTER("autoMoveProjectionToCluster", "Mover a projeção (Android Auto / CarPlay) automaticamente para o cluster"),
+    BOTTOM_BAR_SWIPE_UP_ACTION("bottomBarSwipeUpAction", "Ação ao deslizar a barra para cima"),
+    BOTTOM_BAR_SWIPE_UP_PACKAGE("bottomBarSwipeUpPackage", "App aberto ao deslizar a barra para cima"),
+    DASHBOARD_AUTO_OPEN_ON_PROJECTION("dashboardAutoOpenOnProjection", "Reabrir o dashboard sozinho quando a projeção vai pro cluster"),
+    WIFI_PRIORITY_ENABLED("wifiPriorityEnabled", "Trocar de WiFi sozinho pela rede de maior prioridade disponível"),
+    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)"),
     BOTTOM_BAR_OVERRIDES("bottomBarOverrides", "Overrides de aplicativos salvos (JSON)"),
     DASHBOARD_CARD_ORDER("dashboardCardOrder", "Ordem dos cards do dashboard"),
     ENABLE_SPEED_ADJUSTMENT("enableSpeedAdjustment", "Habilitar ajuste de velocidade no painel"),
@@ -401,5 +414,21 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     HEV_SOC_TARGET_VALUE("hevSocTargetValue", "% de bateria a manter no HEV Prioritário (20-80)"),
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),
     AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)"),
-    ENABLE_HOT_ROUTER("enableHotRouter", "Roteia o hotspot pelo 4G ou WLAN (Starlink) quando disponível")
+    ENABLE_HOT_ROUTER("enableHotRouter", "Roteia o hotspot pelo 4G ou WLAN (Starlink) quando disponível"),
+    // ===== Dados móveis do carro (contador + bloqueio) =====
+    BLOCK_CAR_MOBILE_DATA("blockCarMobileData", "Bloquear dados móveis do carro (usar só WiFi/Starlink)"),
+    BLOCK_DATATRACK_TELEMETRY("blockDatatrackTelemetry", "Congelar telemetria OEM DataTrack (envio pra nuvem)"),
+    MOBILE_DATA_CONTROL_ENABLED("mobileDataControlEnabled", "Master: ativa o controle de dados móveis do carro"),
+    MOBILE_DATA_DISABLED_BY_APP("mobileDataDisabledByApp", "Controle interno: 4G desabilitado por este app (não religa o off manual do usuário)"),
+    MOBILE_DATA_BLOCK_ON_WIFI("mobileDataBlockOnWifi", "Bloquear dados móveis quando conectado ao WiFi"),
+    MOBILE_DATA_BLOCK_ON_PROJECTION("mobileDataBlockOnProjection", "Bloquear dados móveis quando no Android Auto/CarPlay"),
+    MOBILE_DATA_LIMIT_MB("mobileDataLimitMb", "Limite do pacote de dados móveis do carro (MB)"),
+    MOBILE_DATA_CYCLE_DAY("mobileDataCycleDay", "Dia de renovação do pacote de dados (1-31)"),
+    MOBILE_DATA_AUTOBLOCK("mobileDataAutoblock", "Bloquear dados móveis automaticamente perto do limite"),
+    MOBILE_DATA_AUTOBLOCK_PCT("mobileDataAutoblockPct", "Bloquear automaticamente ao atingir (% do pacote) [legado]"),
+    MOBILE_DATA_AUTOBLOCK_CAP_MB("mobileDataAutoblockCapMb", "Teto de dados da multimídia p/ auto-bloqueio (MB)"),
+    MOBILE_DATA_AUTOBLOCK_FIRED_CYCLE("mobileDataAutoblockFiredCycle", "Ciclo em que o auto-bloqueio já disparou (controle interno)"),
+    MOBILE_DATA_TRAFFIC_ACCUM_BYTES("mobileDataTrafficAccumBytes", "Acumulado de bytes móveis no ciclo (fallback TrafficStats)"),
+    MOBILE_DATA_TRAFFIC_LAST_READING("mobileDataTrafficLastReading", "Última leitura do TrafficStats móvel (controle interno)"),
+    MOBILE_DATA_TRAFFIC_CYCLE_TAG("mobileDataTrafficCycleTag", "Ciclo atual do acumulador de bytes (controle interno)")
 }

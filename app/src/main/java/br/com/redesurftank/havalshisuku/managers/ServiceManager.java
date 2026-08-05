@@ -177,24 +177,8 @@ public class ServiceManager {
             // Voltagem da bateria 12V (auxiliar) — exibida no card de dinamica da barra estendida.
             // SEM esta assinatura o valor congelaria no primeiro lido (o carro nunca empurraria
             // atualizacao), que e a armadilha documentada deste DEFAULT_KEYS.
-            CarConstants.CAR_BASIC_BATTERY_VOLTAGE,
-            // ===== SONDA TSR (limite de placa) — item 3 do pull VoltDash =====
-            // Assina a família car.map.tsr.* pra descobrir se o barramento de strings carrega o
-            // limite de placa NESTE carro (caminho barato). Se vier vazio sempre, aí precisamos do
-            // canal android.car/ICarProperty por reflexão (caminho caro dele). O log da sonda em
-            // OnDataChanged (flag TSR_PROBE_LOG_ENABLED) crava o que cada chave emite dirigindo.
-            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT,
-            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT_SIGN_STATUS,
-            CarConstants.CAR_MAP_TSR_NAV_SPEED_LIMIT_TYPE,
-            CarConstants.CAR_MAP_TSR_NAV_TRAFIC_SIGN,
-            CarConstants.CAR_MAP_TSR_NAV_ROAD_TYPE,
-            CarConstants.CAR_MAP_TSR_NAV_CONTRY_TYPE,
-            CarConstants.CAR_MAP_TSR_NAV_TO_TRAFFIC_EYE_DISTANCE
+            CarConstants.CAR_BASIC_BATTERY_VOLTAGE
     };
-
-    // Sonda TSR: loga toda mudança car.map.tsr.* no log persistente. Ligado só pra este teste de
-    // estrada; depois vira o consumidor real (ou é removido se o barramento não carregar o dado).
-    private static final boolean TSR_PROBE_LOG_ENABLED = true;
 
     private static final CarConstants[] KEYS_TO_SAVE = {
             CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE,
@@ -443,6 +427,18 @@ public class ServiceManager {
             if (clusterServiceConnection != null) {
                 context.unbindService(clusterServiceConnection);
             }
+            // Desregistra nosso listener de tecla ANTES de desbindar: o inputservice guarda a
+            // própria referência de binder, então cada re-init deixava o listener anterior
+            // registrado e somava outro — depois de 1 re-init cada toque era despachado 2x (e o
+            // carro parava de agir justamente nos toques dobrados). (netseek 7ed87d8)
+            if (inputService != null && inputListener != null) {
+                try {
+                    inputService.unregisterKeyEventListener(INPUT_LISTENER_KEY_CODES, inputListener);
+                    Log.w(TAG, "InputService listener unregistered");
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to unregister input listener", e);
+                }
+            }
             if (inputServiceConnection != null) {
                 context.unbindService(inputServiceConnection);
             }
@@ -452,6 +448,10 @@ public class ServiceManager {
             }
             handlerThread = null;
             backgroundHandler = null;
+            // O runnable do heartbeat vivia no handler que acabamos de destruir. Sem limpar esta
+            // flag, o startClusterHeartbeat() curto-circuita pra sempre e o sinal de 1s (msgId=134
+            // "Android vivo") nunca volta depois de um re-init. (netseek e17269d)
+            isClusterHeartbeatRunning = false;
         } catch (Exception e) {
             Log.e(TAG, "Error during service cleanup", e);
         }
@@ -518,6 +518,12 @@ public class ServiceManager {
             clusterCallback = new IClusterCallback.Stub() {
                 @Override
                 public void callbackMsg(int msgId, ClusterMsgData data) {
+                    // Só os msgIds do protocolo do cluster que importam. Logar todos inunda o
+                    // logcat (registrar o callback faz o carro despejar ~100 msgs de uma vez, o que
+                    // rotaciona o buffer e destrói a janela ao redor de uma falha). (netseek 7ed87d8)
+                    if (msgId == 133 || msgId == 134 || msgId == 135 || msgId == 75) {
+                        Log.w(TAG, "[CLUSTER_RX] msgId=" + msgId + " value=" + data.getIntValue());
+                    }
                     if (DisplayAppLauncher.INSTANCE.shouldLogAndroidAutoClusterCallbackProbe(msgId)) {
                         Log.w(
                                 TAG,
@@ -577,7 +583,13 @@ public class ServiceManager {
                             return;
                         }
                         clusterCardView = whichCard;
-                        dispatchServiceManagerEvent(ServiceManagerEventType.CLUSTER_CARD_CHANGED, clusterCardView);
+                        // Fan-out FORA da binder thread do carro: dispatchServiceManagerEvent notifica
+                        // todos os listeners de forma síncrona e pode alcançar o projetor/WebView.
+                        // Segurar a thread do com.autolink.clusterservice arrisca ele tratar o callback
+                        // como não-responsivo e derrubá-lo — o sintoma é o msgId=133 ficar mudo até a
+                        // gente re-registrar. A guarda do ClusterCardSyncPolicy acima fica intacta.
+                        // (netseek e17269d)
+                        dispatchClusterEventOffBinderThread(ServiceManagerEventType.CLUSTER_CARD_CHANGED, clusterCardView);
                         Log.w(
                                 TAG,
                                 "Cluster card changed: "
@@ -602,8 +614,19 @@ public class ServiceManager {
                     } else if (msgId == 134) {
                         if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_INSTRUMENT_CUSTOM_MEDIA_INTEGRATION.getKey(), false)) {
                             if (data.getIntValue() == 2) {
-                                sendHeartBeatToCluster();
-                                startClusterHeartbeat();
+                                // sendHeartBeatToCluster() chama de volta o cluster service via binder.
+                                // Fazer isso de dentro do próprio callback dele segura a thread dele;
+                                // roda fora. (netseek e17269d)
+                                Handler heartbeatHandler = backgroundHandler;
+                                if (heartbeatHandler != null) {
+                                    heartbeatHandler.post(() -> {
+                                        sendHeartBeatToCluster();
+                                        startClusterHeartbeat();
+                                    });
+                                } else {
+                                    sendHeartBeatToCluster();
+                                    startClusterHeartbeat();
+                                }
                             }
                         }
                     } else if (msgId == 135) {
@@ -613,6 +636,13 @@ public class ServiceManager {
                                 "cluster_media_command",
                                 "msgId=135 value=" + val
                         );
+                        // REVERTIDO ao comportamento PRÉ-ONTEM (2026-08-05): o port do netseek (52a6b08)
+                        // passou a ackar o 135 SEMPRE (ou variantes) e isso QUEBROU o next/prev do volante
+                        // — o eco do 135 de prev/next (val 1/2) confundia o carro (piscava a posição, não
+                        // pulava). Voltamos EXATAMENTE ao handler que funcionava 100%: comando de mídia que
+                        // o AA trata (prev/next) é engolido + return SEM eco; ack só de 1/2 quando NÃO é AA
+                        // e o toggle de mídia está on. O experimento de ack pro #34 (menu grudando) fica pra
+                        // revisitar com TESTE de AA ativo (não vale quebrar a mídia por ele).
                         if (DisplayAppLauncher.INSTANCE.handleAndroidAutoClusterMediaCommand(val)) {
                             Log.w(TAG, "Android Auto handled cluster media command msgId=135 value=" + val);
                             return;
@@ -825,6 +855,16 @@ public class ServiceManager {
             controlService.registerDataChangedListener(context.getPackageName(), listener);
             controlService.addListenerKey(App.getContext().getPackageName(), getCombinedKeys());
             startControlChannelWatchdog(); // canal resiliente: ping de 10s + recuperação se o binder morrer
+            initMobileDataGuard(); // dados móveis: reaplica bloqueio no boot + permissão + check periódico do auto-bloqueio
+            // Reaplica o "ocultar painel lateral esquerdo" no boot (o setting global persiste, mas o OEM
+            // pode limpar). Portado do fork netseek.
+            try {
+                if (App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+                        .getBoolean(br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys.HIDE_LEFT_NAV_PANE.getKey(), false)) {
+                    ShizukuUtils.runCommandAndGetOutput(new String[]{"settings", "put", "global", "policy_control", "immersive.navigation=*"});
+                }
+            } catch (Throwable ignored) {
+            }
 
             IBinder rawConnectivityBinder = getSystemService(Context.CONNECTIVITY_SERVICE);
             if (rawConnectivityBinder != null) {
@@ -832,6 +872,28 @@ public class ServiceManager {
                 connectivityManager = IConnectivityManager.Stub.asInterface(connectivityBinder);
             } else {
                 Log.w(TAG, "Connectivity service binder unavailable; tethering controls will be skipped");
+            }
+
+            // ===== DIAG TEMP — validação do mecanismo de troca de WiFi (recurso "prioridade de rede"). =====
+            // Gatilho por telnet:
+            //   am broadcast -a br.com.redesurftank.WIFI_DIAG --es op state          (calibração, read-only, NÃO desconecta)
+            //   am broadcast -a br.com.redesurftank.WIFI_DIAG --es op switch --ei netid 4 --ez dis true   (troca única; cai o link se sair do Consórcio)
+            //   am broadcast -a br.com.redesurftank.WIFI_DIAG --es op testswitch      (Consórcio->Galaxy->Consórcio, auto-reverte sozinho)
+            // Resultado: cat /data/data/br.com.redesurftank.havalshisuku/files/wifidiag.out   (via telnet root)
+            // REMOVER este bloco + o método runWifiDiag + a AIDL IWifiManager após validar.
+            try {
+                IntentFilter wifiDiagFilter = new IntentFilter("br.com.redesurftank.WIFI_DIAG");
+                context.registerReceiver(new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context ctx, Intent intent) {
+                        final String op = intent.getStringExtra("op");
+                        final int netid = intent.getIntExtra("netid", -1);
+                        final boolean dis = intent.getBooleanExtra("dis", true);
+                        new Thread(() -> runWifiDiag(ctx.getApplicationContext(), op, netid, dis), "wifi-diag").start();
+                    }
+                }, wifiDiagFilter);
+            } catch (Throwable t) {
+                Log.w(TAG, "wifi diag receiver register failed", t);
             }
 
             IntentFilter bluetoothFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
@@ -883,6 +945,7 @@ public class ServiceManager {
             if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_FRIDA_HOOKS.getKey(), false)) pendingTasks.add(this::initializeFrida);
             ensureSteeringWheelButtonIntegration();
             ensureSystemApps();
+            ensureDebloatedSystemApps();
             TripConsistencyManager.Companion.getInstance().initialize();
             SeatbeltVoiceReminder.initialize();
         } catch (RemoteException e) {
@@ -1162,16 +1225,6 @@ public class ServiceManager {
                     Log.w(TAG, "Launching app via DisplayAppLauncher: " + pkg + (activity != null ? " (" + activity + ")" : ""));
                     DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), pkg, activity);
                 }
-                break;
-            case OPEN_CARPLAY:
-                // Preset do OPEN_APP: o host do CarPlay não tem Activity de launcher, então não aparece
-                // no seletor de apps (que lista só CATEGORY_LAUNCHER). launchAnyAppFromJava resolve.
-                Log.w(TAG, "Steering: abrir CarPlay");
-                DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), "com.ts.carplay.app", null);
-                break;
-            case OPEN_ANDROID_AUTO:
-                Log.w(TAG, "Steering: abrir Android Auto");
-                DisplayAppLauncher.INSTANCE.launchAnyAppFromJava(App.getContext(), "com.ts.androidauto.app", null);
                 break;
             case CLIMATE_COMMAND:
                 handleSteeringWheelClimateCommand(button, tapType);
@@ -1500,17 +1553,73 @@ public class ServiceManager {
         }
     }
 
+    /**
+     * Despacha um evento do ServiceManager SEM segurar a thread do chamador. Usado a partir do
+     * callback do cluster service (binder): o fan-out para os listeners é síncrono e pode tocar o
+     * projetor/WebView, então rodar inline manteria o com.autolink.clusterservice bloqueado em nós
+     * durante todo o processamento. (netseek e17269d)
+     */
+    private void dispatchClusterEventOffBinderThread(ServiceManagerEventType event, Object... args) {
+        Handler handler = backgroundHandler;
+        if (handler == null) {
+            dispatchServiceManagerEvent(event, args);
+            return;
+        }
+        handler.post(() -> {
+            long startedAt = SystemClock.uptimeMillis();
+            dispatchServiceManagerEvent(event, args);
+            long elapsedMs = SystemClock.uptimeMillis() - startedAt;
+            if (elapsedMs > 50L) {
+                Log.w(TAG, "Cluster event fan-out slow: " + event + " took " + elapsedMs + "ms");
+            }
+        });
+    }
+
+    /**
+     * Solta nosso callback do cluster no shutdown. Sem isto, o ClusterService do carro mantém uma
+     * referência ao callback deste processo depois que a gente morre, e despachar pra ele estoura
+     * DeadObjectException do lado do carro. (netseek e17269d)
+     */
+    public void releaseClusterCallback() {
+        final IClusterService service = clusterService;
+        final IClusterCallback.Stub callback = clusterCallback;
+        if (service == null || callback == null) return;
+        try {
+            service.unregisterCallback(callback);
+            Log.w(TAG, "Cluster callback unregistered on shutdown");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to unregister cluster callback on shutdown", e);
+        }
+    }
+
+    /**
+     * Solta nosso listener de tecla no shutdown, pela mesma razão do callback do cluster: o input
+     * service mantém a referência de binder depois que a gente morre. (netseek 7ed87d8)
+     */
+    public void releaseInputListener() {
+        final IInputService service = inputService;
+        final IInputListener listener = inputListener;
+        if (service == null || listener == null) return;
+        try {
+            service.unregisterKeyEventListener(INPUT_LISTENER_KEY_CODES, listener);
+            Log.w(TAG, "Input listener unregistered on shutdown");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to unregister input listener on shutdown", e);
+        }
+    }
+
     private void sendClusterIntMsg(int type, int value) {
         if (clusterService == null) {
-            Log.e(TAG, "ClusterService not initialized");
+            Log.e(TAG, "[CLUSTER_TX] setMsg(" + type + ", " + value + ") dropped: service null");
             return;
         }
         ClusterMsgData msg = new ClusterMsgData();
         msg.setIntValue(value);
         try {
             clusterService.setMsg(type, msg);
+            Log.w(TAG, "[CLUSTER_TX] setMsg(" + type + ", " + value + ")");
         } catch (RemoteException e) {
-            Log.e(TAG, "Error sending message to cluster service", e);
+            Log.e(TAG, "[CLUSTER_TX] setMsg(" + type + ", " + value + ") failed", e);
         }
     }
 
@@ -1519,26 +1628,42 @@ public class ServiceManager {
             ClusterMsgData msg = new ClusterMsgData();
             msg.setIntValue(1);
             clusterService.setMsg(75, msg);
+            Log.w(TAG, "[CLUSTER_TX] setMsg(75, 1) android-ready");
         } catch (Exception e) {
-            Log.e(TAG, "Error setting cluster service message", e);
+            Log.e(TAG, "[CLUSTER_TX] setMsg(75, 1) android-ready failed", e);
         }
     }
 
     public synchronized void startClusterHeartbeat() {
-        if (isClusterHeartbeatRunning)
+        if (isClusterHeartbeatRunning) {
+            Log.w(TAG, "[HEARTBEAT] start skipped: already running");
             return;
+        }
+        Handler handler = backgroundHandler;
+        if (handler == null) {
+            // Antes isto dava NPE silencioso e saía do caller; o loop simplesmente nunca começava.
+            Log.e(TAG, "[HEARTBEAT] start failed: backgroundHandler null");
+            return;
+        }
         isClusterHeartbeatRunning = true;
+        Log.w(TAG, "[HEARTBEAT] loop starting");
         sendAndroidReadyToCluster();
-        backgroundHandler.postDelayed(new Runnable() {
+        handler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_INSTRUMENT_CUSTOM_MEDIA_INTEGRATION.getKey(), false)) {
+                    Log.e(TAG, "[HEARTBEAT] loop exiting: media-integration pref is off");
                     isClusterHeartbeatRunning = false;
                     return;
                 }
                 sendHeartBeatToCluster();
-                backgroundHandler.postDelayed(this, 1000);
-
+                Handler h = backgroundHandler;
+                if (h != null) {
+                    h.postDelayed(this, 1000);
+                } else {
+                    Log.e(TAG, "[HEARTBEAT] loop exiting: backgroundHandler gone");
+                    isClusterHeartbeatRunning = false;
+                }
             }
         }, 1000);
     }
@@ -1548,11 +1673,21 @@ public class ServiceManager {
             clusterHeartBeatCount = 0; // Reset to avoid overflow
         }
         ClusterMsgData msg = new ClusterMsgData();
-        msg.setIntValue(clusterHeartBeatCount++);
+        int beat = clusterHeartBeatCount++;
+        msg.setIntValue(beat);
         try {
-            clusterService.setMsg(134, msg);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error sending heartbeat to cluster service", e);
+            IClusterService service = clusterService;
+            if (service == null) {
+                // Era um NPE não-tratado que matava a thread do handler silenciosamente.
+                Log.e(TAG, "[HEARTBEAT] beat=" + beat + " dropped: service null");
+                return;
+            }
+            service.setMsg(134, msg);
+            if (beat % 10 == 0) {
+                Log.w(TAG, "[HEARTBEAT] alive beat=" + beat);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "[HEARTBEAT] beat=" + beat + " failed", e);
         }
     }
 
@@ -1702,6 +1837,85 @@ public class ServiceManager {
             }
         };
         backgroundHandler.postDelayed(controlChannelWatchdogRunnable, CONTROL_CHANNEL_WATCHDOG_MS);
+    }
+
+    // ===== Dados móveis do carro (controle: master + regras) =====
+    private volatile Runnable mobileDataAutoblockRunnable;
+    private static final long MOBILE_DATA_CHECK_MS = 15 * 1000L; // 15s: pega consumo/WiFi/projeção
+    private android.net.ConnectivityManager.NetworkCallback mobileDataWifiCallback;
+    private BroadcastReceiver mobileDataTetherReceiver;
+
+    private void initMobileDataGuard() {
+        try {
+            android.content.Context ctx = App.getContext();
+            MobileDataManager.INSTANCE.ensureUsageStatsPermission(ctx); // pro NetworkStatsManager (best-effort)
+            MobileDataManager.INSTANCE.recomputeAndApply(ctx); // aplica as regras salvas no boot
+            MobileDataManager.INSTANCE.applyDatatrackState(); // reaplica o congelamento do datatrack salvo no boot
+            registerMobileDataWifiCallback(ctx); // reavalia na hora quando o WiFi conecta/cai
+            registerMobileDataTetherReceiver(ctx); // reforça o bloqueio na hora que o hotspot liga/desliga
+        } catch (Throwable t) {
+            Log.w(TAG, "initMobileDataGuard: " + t.getMessage());
+        }
+        if (backgroundHandler == null || mobileDataAutoblockRunnable != null) return;
+        mobileDataAutoblockRunnable = new Runnable() {
+            @Override public void run() {
+                try {
+                    MobileDataManager.INSTANCE.recomputeAndApply(App.getContext());
+                } catch (Throwable ignored) {
+                } finally {
+                    if (backgroundHandler != null && mobileDataAutoblockRunnable == this) {
+                        backgroundHandler.postDelayed(this, MOBILE_DATA_CHECK_MS);
+                    }
+                }
+            }
+        };
+        backgroundHandler.postDelayed(mobileDataAutoblockRunnable, MOBILE_DATA_CHECK_MS);
+    }
+
+    // Callback de WiFi: quando conecta/cai, reavalia as regras na hora (a regra "bloquear no WiFi"
+    // precisa reagir rápido; o periódico de 15s é só a rede de segurança pra consumo/projeção).
+    private void registerMobileDataWifiCallback(android.content.Context ctx) {
+        try {
+            if (mobileDataWifiCallback != null) return;
+            android.net.ConnectivityManager cm =
+                    (android.net.ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            android.net.NetworkRequest req = new android.net.NetworkRequest.Builder()
+                    .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                    .build();
+            mobileDataWifiCallback = new android.net.ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(android.net.Network network) {
+                    MobileDataManager.INSTANCE.recomputeAndApply(App.getContext());
+                }
+                @Override public void onLost(android.net.Network network) {
+                    MobileDataManager.INSTANCE.recomputeAndApply(App.getContext());
+                }
+            };
+            cm.registerNetworkCallback(req, mobileDataWifiCallback);
+        } catch (Throwable t) {
+            Log.w(TAG, "registerMobileDataWifiCallback: " + t.getMessage());
+        }
+    }
+
+    // Hotspot (tether) ligou/desligou -> reforça o bloqueio NA HORA. O hotspot religa o dado móvel pra
+    // ter uplink; sem este gatilho, o vazamento ficaria aberto até o próximo tick de 15s. O broadcast
+    // android.net.conn.TETHER_STATE_CHANGED não é protegido (qualquer app registra).
+    private void registerMobileDataTetherReceiver(android.content.Context ctx) {
+        try {
+            if (mobileDataTetherReceiver != null) return;
+            mobileDataTetherReceiver = new BroadcastReceiver() {
+                @Override public void onReceive(Context c, Intent i) {
+                    try {
+                        MobileDataManager.INSTANCE.recomputeAndApply(App.getContext());
+                    } catch (Throwable ignored) {
+                    }
+                }
+            };
+            ctx.registerReceiver(mobileDataTetherReceiver,
+                    new IntentFilter("android.net.conn.TETHER_STATE_CHANGED"));
+        } catch (Throwable t) {
+            Log.w(TAG, "registerMobileDataTetherReceiver: " + t.getMessage());
+        }
     }
 
     public void addDataChangedListener(IDataChanged listener) {
@@ -2017,10 +2231,6 @@ public class ServiceManager {
     }
 
     private void OnDataChanged(String key, String value) {
-        // Sonda TSR (item 3): crava no log persistente o que a família car.map.tsr.* emite dirigindo.
-        if (TSR_PROBE_LOG_ENABLED && key != null && key.startsWith("car.map.tsr")) {
-            logPersistentClusterEvent("tsr_probe", persistentEventDetails("key", key, "value", String.valueOf(value)));
-        }
         // REMOVIDO: 2 broadcasts por mudança de dado (android.intent.haval.<key> e .<key>_<value>).
         // Ninguém os consumia — nenhum receiver dinâmico nem no manifest escuta essas actions, e o
         // setPackage(nosso app) impede apps externos de receber. Era código morto que só gerava
@@ -2741,31 +2951,6 @@ public class ServiceManager {
         backgroundHandler.postDelayed(hevSocMonitorRunnable, HEV_SOC_MONITOR_INTERVAL_MS);
     }
 
-    // Marcador de diagnóstico do cluster (botões na barra estendida). O usuário toca quando vê um bug
-    // intermitente (bugTag identifica qual): grava um marcador + snapshot do estado-chave no log
-    // persistente (cluster-events) pra correlacionar depois. Chave pras 2 queixas atuais: tinha
-    // CarPlay/AA projetando no cluster naquele instante? (A/C some / tema pisca com velocímetro). O
-    // histórico de troca de cards/tema já está no log contínuo; este marcador crava a HORA + o estado
-    // pra achar a janela certa e etiquetar QUAL bug foi.
-    public void logClusterDiagMarker(String bugTag) {
-        try {
-            boolean carplay = DisplayAppLauncher.INSTANCE.isCarPlayOnDisplay(3);
-            boolean aa = DisplayAppLauncher.INSTANCE.isAndroidAutoOnDisplay(3);
-            String hvacPanel = getUpdatedData(CarConstants.CAR_HVAC_PANEL_DISPLAY_NOTIFY.getValue());
-            String avm = getUpdatedData(CarConstants.SYS_AVM_PREVIEW_STATUS.getValue());
-            logPersistentClusterEvent("user_diag_marker", persistentEventDetails(
-                    "bug", bugTag,
-                    "carplayOnCluster", carplay,
-                    "aaOnCluster", aa,
-                    "hvacPanelNotify", hvacPanel,
-                    "avmStatus", avm
-            ));
-            Log.w(TAG, "cluster diag marker logged bug=" + bugTag + " carplay=" + carplay + " aa=" + aa);
-        } catch (Exception e) {
-            Log.e(TAG, "logClusterDiagMarker failed", e);
-        }
-    }
-
     public void applyHevSocTargetIfActive(String reason) {
         try {
             if (!sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PERSIST_HEV_SOC_TARGET.getKey(), false)) {
@@ -3043,6 +3228,14 @@ public class ServiceManager {
         } catch (Throwable ignored) {
         }
         return "";
+    }
+
+    // Hotspot (Wi-Fi AP) REALMENTE no ar? Prefere o carrier do sysfs (real, via wlan2); neste OEM o
+    // getWifiApState()=-1, então cai pro cache do receiver WIFI_AP_STATE_CHANGED. MESMA lógica do
+    // shutdownWifiTetherForRestore. Usado pelo card de conectividade e pelo status do HotRouter.
+    public boolean isHotspotOnAir() {
+        String carrier = softApCarrier();
+        return "1".equals(carrier) || (carrier.isEmpty() && currentWifiTetherState());
     }
 
     // Desliga o BT salvando que estava ligado (p/ religar no próximo power-on). Não sobrescreve um
@@ -3576,6 +3769,37 @@ public class ServiceManager {
         }
     }
 
+    // Debloat opt-in: desativa apps do sistema (OEM) que ficam rodando e consomem RAM/CPU da
+    // multimídia, cada um atrás do seu toggle (default OFF). Reaplicado no boot para sobreviver a
+    // updates/OTA que reabilitem os pacotes. Para "desligar mais coisas" basta acrescentar outra
+    // chamada a applyDebloatToggle (NÃO incluir operatorcenter/OTA nem drivinganalysis/TBOX). O
+    // DataTrack tem toggle próprio (BLOCK_DATATRACK_TELEMETRY / MobileDataManager).
+    public void ensureDebloatedSystemApps() {
+        try {
+            applyDebloatToggle(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.getKey(),
+                    "com.neusoft.na.navigation");
+            applyDebloatToggle(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.getKey(),
+                    "com.iflytek.cutefly.speechclient.hmi", "com.beantechs.voiceclient");
+            applyDebloatToggle(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.getKey(),
+                    "com.beantechs.weatherservice");
+        } catch (Exception e) {
+            Log.e(TAG, "Error ensuring debloated system apps", e);
+        }
+    }
+
+    // Aplica um toggle de debloat a um ou mais pacotes: ON => desabilita (pm uninstall --user 0 + pkill),
+    // OFF => reabilita (pm install-existing). Reversível e idempotente.
+    private void applyDebloatToggle(String prefKey, String... packages) {
+        boolean disable = sharedPreferences.getBoolean(prefKey, false);
+        for (String pkg : packages) {
+            if (disable) {
+                disableSystemApp(pkg);
+            } else {
+                enableSystemApp(pkg);
+            }
+        }
+    }
+
     public void disableSystemApp(String packageName) {
         try {
             ShizukuUtils.runCommandAndGetOutput(new String[]{"pm", "uninstall", "--user", "0", packageName});
@@ -3653,6 +3877,254 @@ public class ServiceManager {
         } catch (IllegalAccessException | InvocationTargetException e) {
             Log.e(TAG, "Error getting system service: " + serviceName, e);
             throw new RuntimeException(e);
+        }
+    }
+
+    // ===== DIAG TEMP — validação do mecanismo de troca de WiFi (recurso "prioridade de rede"). =====
+    // O core emite cada passo pro sink. Duas frentes: telnet (grava em <filesDir>/wifidiag.out) e
+    // UI (botão em Informações -> popup). REMOVER tudo após validar.
+    public interface DiagSink { void line(String s); }
+
+    // Frente telnet (receiver WIFI_DIAG): grava o acumulado em arquivo a cada passo.
+    private void runWifiDiag(Context ctx, String op, int netid, boolean dis) {
+        StringBuilder log = new StringBuilder();
+        wifiDiagRun(ctx, op, netid, dis, s -> {
+            log.append(s).append("\n");
+            writeWifiDiag(ctx, log.toString());
+        });
+    }
+
+    // Frente UI (botão): roda em thread própria (tem sleep) e reporta cada linha pro sink.
+    public void runWifiDiagToSink(Context ctx, String op, DiagSink sink) {
+        final Context app = ctx.getApplicationContext();
+        new Thread(() -> wifiDiagRun(app, op, -1, true, sink), "wifi-diag-ui").start();
+    }
+
+    private void wifiDiagRun(Context ctx, String op, int netid, boolean dis, DiagSink sink) {
+        try {
+            IBinder raw = getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.IWifiManager wifi =
+                    android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+            WifiManager appWm = (WifiManager) ctx.getSystemService(Context.WIFI_SERVICE);
+            String pkg = ctx.getPackageName();
+
+            sink.line("Rede agora: " + describeWifiConn(appWm));
+
+            if ("state".equals(op)) {
+                int st = wifi.getWifiEnabledState();
+                sink.line("getWifiEnabledState=" + st + (st == 3
+                        ? "  (ENABLED -> calibracao OK, enableNetwork confiavel)"
+                        : "  (INESPERADO -> numeracao NAO bate, NAO trocar!)"));
+            } else if ("switch".equals(op)) {
+                boolean ok = wifi.enableNetwork(netid, dis, pkg);
+                sink.line("enableNetwork(" + netid + ", dis=" + dis + ")=" + ok);
+                sleepQuiet(6000);
+                sink.line("depois: " + describeWifiConn(appWm));
+            } else if ("testswitch".equals(op)) {
+                // Auto-reverte: rede atual -> Galaxy(4) -> Consorcio(1). Recupera sozinho mesmo se o link cair.
+                int calib = wifi.getWifiEnabledState();
+                sink.line("Calibracao getWifiEnabledState=" + calib);
+                if (calib != 3) {
+                    sink.line("ABORTADO: calibracao != 3 -> mecanismo NAO confirmado. Nao vou trocar.");
+                } else {
+                    sink.line("Calibracao OK. Trocando para Galaxy (netId 4)...");
+                    boolean ok1 = wifi.enableNetwork(4, true, pkg);
+                    sink.line("enableNetwork(4,true)=" + ok1 + "  (o WiFi pode piscar ~12s)");
+                    sleepQuiet(12000);
+                    sink.line("Durante (deveria estar em Galaxy): " + describeWifiConn(appWm));
+                    boolean ok2 = wifi.enableNetwork(1, true, pkg);
+                    sink.line("Voltando para Consorcio (netId 1): enableNetwork(1,true)=" + ok2);
+                    sleepQuiet(9000);
+                    sink.line("Final (deveria ter voltado): " + describeWifiConn(appWm));
+                }
+            } else {
+                sink.line("op desconhecido: " + op);
+            }
+        } catch (Throwable t) {
+            sink.line("ERRO: " + t);
+        }
+        sink.line("== fim ==");
+    }
+
+    // Lista as redes WiFi salvas (netId + SSID) via dumpsys (shell). Saída: "netId|SSID" por item.
+    // Pro botão de teste montar a lista dinâmica (sem chumbar netId).
+    public java.util.List<String> listSavedWifi() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        try {
+            String raw = ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "dumpsys wifi | grep '^ID:'"});
+            if (raw != null) {
+                for (String line : raw.split("\n")) {
+                    int idIdx = line.indexOf("ID:");
+                    int ssidIdx = line.indexOf("SSID:");
+                    if (idIdx < 0 || ssidIdx <= idIdx) continue;
+                    String idPart = line.substring(idIdx + 3, ssidIdx).trim();
+                    String rest = line.substring(ssidIdx + 5).trim();
+                    String ssid;
+                    if (rest.startsWith("\"")) {
+                        int end = rest.indexOf('"', 1);
+                        ssid = end > 0 ? rest.substring(1, end) : rest;
+                    } else {
+                        int sp = rest.indexOf(' ');
+                        ssid = sp > 0 ? rest.substring(0, sp) : rest;
+                    }
+                    try {
+                        Integer.parseInt(idPart);
+                        out.add(idPart + "|" + ssid);
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
+    }
+
+    // Força a troca pra rede netId (disableOthers=true) e reporta cada passo pro sink. No fim
+    // re-habilita todas as redes salvas (disableOthers=false) pra não deixar nenhuma presa. Thread própria.
+    // Troca (força) o WiFi pra netId e re-habilita as outras (fallback). Retorna true se o
+    // enableNetwork principal deu certo. BLOCKING (Shizuku + sleep) -> chamar FORA da main thread.
+    // Reutilizado pelo WifiPriorityManager (troca automática por prioridade).
+    public boolean switchWifiToNetwork(int netId) {
+        try {
+            IBinder raw = getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.IWifiManager wifi =
+                    android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+            String pkg = App.getContext().getPackageName();
+            if (wifi.getWifiEnabledState() != 3) return false; // WiFi não ENABLED -> aborta
+            // Conecta em netId e DESABILITA as outras -> fica grudado na preferida.
+            // NÃO re-habilita as outras aqui: re-habilitar deixava o auto-join do Android voltar pra
+            // rede de sinal mais forte (a de prioridade MENOR) ~8-10s depois (o "volta pro outro").
+            // As outras ficam desabilitadas enquanto o vigia mantém a preferida; enableAllSavedWifi()
+            // restaura o pool (fallback quando a preferida cai / desconectado / recurso desligado).
+            return wifi.enableNetwork(netId, true, pkg);
+        } catch (Throwable t) {
+            Log.e(TAG, "switchWifiToNetwork failed", t);
+            return false;
+        }
+    }
+
+    /** Re-habilita TODAS as redes salvas (desfaz o disableOthers do switch). Pro fallback quando a
+     *  preferida cai e pra restaurar o comportamento normal quando o recurso de prioridade é desligado. */
+    public void enableAllSavedWifi() {
+        try {
+            IBinder raw = getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.IWifiManager wifi =
+                    android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+            String pkg = App.getContext().getPackageName();
+            for (String e : listSavedWifi()) {
+                try {
+                    int id = Integer.parseInt(e.substring(0, e.indexOf('|')));
+                    wifi.enableNetwork(id, false, pkg);
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "enableAllSavedWifi failed", t);
+        }
+    }
+
+    /** Cadastra (ou atualiza) uma rede WiFi com SSID+senha e devolve o netId (-1 se falhar). NÃO conecta
+     *  (use switchWifiToNetwork depois). Senha vazia/null = rede aberta; senão WPA/WPA2-PSK. Via
+     *  WifiManager do app (precisa CHANGE_WIFI_STATE). Pro comando remoto "conectar em rede nova". */
+    public int addWifiNetwork(String ssid, String password) {
+        try {
+            WifiManager wm = (WifiManager) App.getContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null || ssid == null || ssid.isEmpty()) return -1;
+            android.net.wifi.WifiConfiguration wc = new android.net.wifi.WifiConfiguration();
+            wc.SSID = "\"" + ssid + "\"";
+            if (password == null || password.isEmpty()) {
+                wc.allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.NONE);
+            } else {
+                wc.preSharedKey = "\"" + password + "\"";
+                wc.allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK);
+            }
+            // se já existe salva com esse SSID, atualiza (mantém o netId em vez de duplicar)
+            for (String e : listSavedWifi()) {
+                int bar = e.indexOf('|');
+                if (bar > 0 && e.substring(bar + 1).equals(ssid)) {
+                    try { wc.networkId = Integer.parseInt(e.substring(0, bar)); } catch (Throwable ignored) {}
+                    break;
+                }
+            }
+            int netId = wm.addNetwork(wc);
+            if (netId >= 0) {
+                try { wm.saveConfiguration(); } catch (Throwable ignored) {}
+            }
+            return netId;
+        } catch (Throwable t) {
+            Log.e(TAG, "addWifiNetwork failed", t);
+            return -1;
+        }
+    }
+
+    /** Liga/desliga o WiFi do carro via `svc wifi` (Shizuku). ATENÇÃO: desligar pode CORTAR o canal
+     *  remoto se o carro só tem internet pelo WiFi (o EcoTrip fica sem MQTT). Retorna true se rodou. */
+    public boolean setCarWifiEnabled(boolean enabled) {
+        try {
+            ShizukuUtils.runCommandAndGetOutput(new String[]{"svc", "wifi", enabled ? "enable" : "disable"});
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "setCarWifiEnabled failed", t);
+            return false;
+        }
+    }
+
+    public void switchWifiToSink(Context ctx, int netId, DiagSink sink) {
+        final Context app = ctx.getApplicationContext();
+        new Thread(() -> {
+            try {
+                IBinder raw = getSystemService(Context.WIFI_SERVICE);
+                android.net.wifi.IWifiManager wifi =
+                        android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+                WifiManager appWm = (WifiManager) app.getSystemService(Context.WIFI_SERVICE);
+                String pkg = app.getPackageName();
+                sink.line("Rede agora: " + describeWifiConn(appWm));
+                int calib = wifi.getWifiEnabledState();
+                if (calib != 3) {
+                    sink.line("Calibracao " + calib + " != 3 (ENABLED) -> abortado, sem trocar.");
+                    sink.line("== fim ==");
+                    return;
+                }
+                sink.line("Calibracao OK. Forcando troca para netId " + netId + " ...");
+                boolean ok = wifi.enableNetwork(netId, true, pkg);
+                sink.line("enableNetwork(" + netId + ", true)=" + ok + "  (o WiFi pode piscar ~10s)");
+                sleepQuiet(10000);
+                sink.line("Depois: " + describeWifiConn(appWm));
+                // NÃO re-habilita as outras: re-habilitar fazia o Android voltar pra rede de sinal
+                // mais forte ~10s depois (o "volta pro outro"). Fica grudado na escolhida.
+                sink.line("Mantido na rede escolhida (as outras ficam desabilitadas pra nao voltar).");
+                sink.line("== fim ==");
+            } catch (Throwable t) {
+                sink.line("ERRO: " + t);
+                sink.line("== fim ==");
+            }
+        }, "wifi-switch-ui").start();
+    }
+
+    private static String describeWifiConn(WifiManager wm) {
+        try {
+            android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
+            if (wi == null) return "wifiInfo=null";
+            return "ssid=" + wi.getSSID() + " netId=" + wi.getNetworkId() + " rssi=" + wi.getRssi();
+        } catch (Throwable t) {
+            return "conn? " + t;
+        }
+    }
+
+    private static void sleepQuiet(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ignored) {
+        }
+    }
+
+    private static void writeWifiDiag(Context ctx, String s) {
+        try {
+            File out = new File(ctx.getFilesDir(), "wifidiag.out");
+            FileWriter fw = new FileWriter(out, false);
+            fw.write(s);
+            fw.close();
+        } catch (Throwable ignored) {
         }
     }
 

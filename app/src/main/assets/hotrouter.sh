@@ -17,6 +17,7 @@ NAME="hotrouter"
 LOG="$BASE/$NAME.log"
 PIDFILE="$BASE/$NAME.pid"
 STATEFILE="$BASE/$NAME.state"
+IP_FORWARD_STATEFILE="$BASE/$NAME.ip_forward.original"
 HOTSPOT_IF="wlan2"
 WLAN_IF="wlan0"
 WLAN_TABLE="wlan0"
@@ -32,6 +33,27 @@ log() {
 
 write_state() {
   echo "$1|$(date +%s)" > "$STATEFILE"
+}
+
+# Snapshot/restore do ip_forward do sistema (idempotente). Nosso roteamento liga ip_forward=1;
+# sem restaurar, ficava =1 pra sempre depois de parar. (adotado do PR #115 / marcelofp)
+save_ip_forward_state() {
+  [ -f "$IP_FORWARD_STATEFILE" ] && return 0
+  original="$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)"
+  case "$original" in
+    0|1) echo "$original" > "$IP_FORWARD_STATEFILE" ;;
+    *) log ERROR "Unable to snapshot ip_forward" ; return 1 ;;
+  esac
+}
+
+restore_ip_forward_state() {
+  [ -f "$IP_FORWARD_STATEFILE" ] || return 0
+  original="$(cat "$IP_FORWARD_STATEFILE" 2>/dev/null)"
+  case "$original" in
+    0|1) echo "$original" > /proc/sys/net/ipv4/ip_forward ;;
+    *) log ERROR "Invalid saved ip_forward value: $original" ;;
+  esac
+  rm -f "$IP_FORWARD_STATEFILE"
 }
 
 trim_log() {
@@ -178,6 +200,7 @@ do_stop() {
   kill_old_hotrouters
   cleanup_duplicate_rules
   teardown_iptables
+  restore_ip_forward_state
   ip route flush cache
   write_state "OFF"
   log INFO "Service stopped + teardown done"
@@ -202,8 +225,9 @@ kill_old_hotrouters
 
 echo $$ > "$PIDFILE"
 
-trap 'rm -f "$PIDFILE"; write_state "OFF"; log INFO "Service stopped"; exit 0' INT TERM EXIT
+trap 'rm -f "$PIDFILE"; restore_ip_forward_state; write_state "OFF"; log INFO "Service stopped"; exit 0' INT TERM EXIT
 
+save_ip_forward_state
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
 last_mode="initial"

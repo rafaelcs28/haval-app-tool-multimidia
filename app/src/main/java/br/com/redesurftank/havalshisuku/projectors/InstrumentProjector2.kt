@@ -79,7 +79,9 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private var batteryCurrent = 0f
     private var isAnyAppOnDisplay3 = false
     private var isAnyAppOnDisplay1 = false
-    private var currentCard = 0
+    // Semeia com o último card conhecido do carro (em vez de 0), pra um projetor recém-criado
+    // não renderizar o card 0 antes do primeiro report do cluster. (netseek e28c751)
+    private var currentCard = ServiceManager.getInstance().clusterCardView
     private var isWarningActive = false
     private var testDefaultDisplayOverrideActive = FORCE_MAP_DISPLAY_AS_DEFAULT_FOR_TESTS
     private val dismissedWarnings = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -1041,7 +1043,11 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                 val sm = ServiceManager.getInstance()
                                 for (key in monitoredWarningKeys) {
                                     val value = sm.getData(key)
-                                    if (ClusterWarningPolicy.shouldTriggerCriticalWarningFlow(key, value)) {
+                                    // Grava TODOS os avisos ativos ao dispensar (não só os
+                                    // críticos): assim o syncInitialWarnings suprime também os
+                                    // visual-only já dispensados quando o tema recarrega/troca de
+                                    // card. (netseek b2708e7)
+                                    if (ClusterWarningPolicy.isWarningValueActive(value)) {
                                         dismissedWarnings[key] = value!!
                                     }
                                 }
@@ -1227,7 +1233,21 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value -> {
                         evaluateJsIfReady(
                                 webView,
-                                "control('evMode', '${MainMenu.EvModeOptions.getLabel(value)}')"
+                                "control('evMode', '${evModeLabelWithSubmode(value)}')"
+                        )
+                    }
+                    CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value,
+                    CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.value -> {
+                        // Submodo HEV (Inteligente/Prioritário) OU o % alvo do Prioritário mudou — pela
+                        // multimídia OU pelo long-press do OK. Re-empurra a label do evMode com (I)/(P XX%)
+                        // NA HORA (real-time no cluster, sem sair/voltar o menu). As duas chaves já são
+                        // observadas (DEFAULT_KEYS).
+                        val evModeVal =
+                                ServiceManager.getInstance()
+                                        .getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
+                        evaluateJsIfReady(
+                                webView,
+                                "control('evMode', '${evModeLabelWithSubmode(evModeVal)}')"
                         )
                     }
                     CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value -> {
@@ -1555,7 +1575,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
 
         // Modes and Settings
         val evMode = sm.getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
-        updates["evMode"] = MainMenu.EvModeOptions.getLabel(evMode)
+        updates["evMode"] = evModeLabelWithSubmode(evMode)
 
         val drivingMode = sm.getData(CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value)
         val drivingModeLabel = MainMenu.DrivingModeOptions.getLabel(drivingMode)
@@ -1604,6 +1624,31 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         batchEvaluateJs(webView, updates)
     }
 
+    /**
+     * Label do modo de força pro cluster. Em HEV, anexa o submodo: "(I)" Inteligente / "(P)" Prioritário
+     * (lê CAR_EV_SETTING_POWER_RESERVE_CONFIG: 2=Prioritário, senão Inteligente). EV/EVP ficam inalterados.
+     */
+    private fun evModeLabelWithSubmode(evModeValue: String?): String {
+        val base = MainMenu.EvModeOptions.getLabel(evModeValue)
+        if (evModeValue?.trim() == "0") { // HEV
+            val sm = ServiceManager.getInstance()
+            val reserve = sm.getData(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value)
+            return if (reserve?.trim() == "2") {
+                // Prioritário: mostra o % alvo (mesma fonte da barra estendida).
+                val pct =
+                        sm.getData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.value)
+                                ?.trim()
+                                ?.toIntOrNull()
+                                ?.coerceIn(20, 80)
+                                ?: 50
+                "$base (P $pct%)"
+            } else {
+                "$base (I)" // Inteligente
+            }
+        }
+        return base
+    }
+
     private fun updateCardEntryValuesWebView(cardId: Int) {
         val sm = ServiceManager.getInstance()
         val updates = mutableMapOf<String, String>()
@@ -1626,7 +1671,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             }
             ClusterCardIds.MAIN_MENU_CARD -> {
                 val evMode = sm.getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
-                updates["evMode"] = MainMenu.EvModeOptions.getLabel(evMode)
+                updates["evMode"] = evModeLabelWithSubmode(evMode)
 
                 val drivingMode = sm.getData(CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value)
                 val drivingModeLabel = MainMenu.DrivingModeOptions.getLabel(drivingMode)
@@ -1662,12 +1707,20 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private fun syncInitialWarnings() {
         val sm = ServiceManager.getInstance()
         val webView = this.webView ?: return
-        for (key in monitoredWarningKeys) {
-            val value = sm.getData(key) ?: "0"
-            if (dismissedWarnings[key] == value) {
-                continue
+        // Se o usuário já dispensou o aviso globalmente, ao recarregar o tema NÃO re-empurra
+        // nada — só limpa. Sem isto, um reload de tema (troca de card, re-init do projetor)
+        // revivia o aviso já dispensado. isWarningDismissed volta a false quando chega nova
+        // telemetria crítica (:1305) ou o card vira menu (:878). (netseek b2708e7)
+        if (isWarningDismissed) {
+            evaluateJsIfReady(webView, "clearWarnings()")
+        } else {
+            for (key in monitoredWarningKeys) {
+                val value = sm.getData(key) ?: "0"
+                if (dismissedWarnings[key] == value) {
+                    continue
+                }
+                evaluateJsIfReady(webView, "updateWarning('$key', '$value')")
             }
-            evaluateJsIfReady(webView, "updateWarning('$key', '$value')")
         }
     }
 

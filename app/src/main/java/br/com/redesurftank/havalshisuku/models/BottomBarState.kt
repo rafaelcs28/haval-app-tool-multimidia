@@ -15,6 +15,27 @@ object BottomBarState {
         VOLUME
     }
 
+    /** O que um swipe pra cima na barra faz. Valores = [SwipeUpAction.key]. */
+    var swipeUpAction by mutableStateOf(SwipeUpAction.DASHBOARD.key)
+
+    /** Pacote aberto quando [swipeUpAction] == [SwipeUpAction.CUSTOM_APP]. */
+    var swipeUpPackage by mutableStateOf("")
+
+    enum class SwipeUpAction(val key: String, val label: String) {
+        DASHBOARD("dashboard", "Abrir o Dashboard (Impulse)"),
+        HAVAL_HOME("haval_home", "Ir para a Home Haval"),
+        APP_LAUNCHER("app_launcher", "Lista de apps Haval"),
+        CUSTOM_APP("custom_app", "Abrir um app específico");
+
+        companion object {
+            fun fromKey(key: String?): SwipeUpAction =
+                    entries.firstOrNull { it.key == key } ?: DASHBOARD
+
+            const val HAVAL_HOME_PACKAGE = "com.beantechs.mediacenter"
+            const val APP_LAUNCHER_PACKAGE = "com.beantechs.applist"
+        }
+    }
+
     var activeSliderType by mutableStateOf<SliderType?>(null)
     var sliderPositionX by mutableStateOf(0f)
     var sliderInteractionTrigger by mutableStateOf(0)
@@ -49,6 +70,10 @@ object BottomBarState {
     var mediaProgressUpdatedAtMs by mutableLongStateOf(0L)
     var mediaCanSeek by mutableStateOf(false)
     var autoHideEnabled by mutableStateOf(false)
+    /** Espelho OBSERVAVEL da pref BOTTOM_BAR_HIDDEN: quando true, a barra inferior NAO e desenhada
+     *  (nem o overscan e aplicado) e o dashboard se abre so pelo atalho do volante. O servico segue
+     *  vivo (atalho + monitores). Observado por snapshotFlow no BottomBarService p/ aplicar ao vivo. */
+    var barHidden by mutableStateOf(false)
     var isFridaRunning by mutableStateOf(false)
     var isDeleteModeEnabled by mutableStateOf(false)
     val restoredApps = mutableStateListOf<String>()

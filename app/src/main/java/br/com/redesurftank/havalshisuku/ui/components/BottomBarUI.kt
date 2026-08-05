@@ -175,9 +175,48 @@ private fun String?.toComposeColor(): Color {
         }
 }
 
+/**
+ * Roda o que o usuário configurou para um swipe pra cima na barra. Default = abrir o Dashboard
+ * (Impulse), que era o único comportamento antes disso virar configurável. (netseek swipe-up)
+ */
+private fun performSwipeUpAction(context: android.content.Context) {
+        val action = BottomBarState.SwipeUpAction.fromKey(BottomBarState.swipeUpAction)
+
+        // Toda ação primeiro recolhe o que a barra tinha aberto.
+        BottomBarState.isVisible = true
+        BottomBarState.isMenuExpanded = false
+        BottomBarState.isSettingsMenuExpanded = false
+        BottomBarState.isOverrideMenuExpanded = false
+
+        val packageToLaunch =
+                when (action) {
+                        BottomBarState.SwipeUpAction.DASHBOARD -> null
+                        BottomBarState.SwipeUpAction.HAVAL_HOME ->
+                                BottomBarState.SwipeUpAction.HAVAL_HOME_PACKAGE
+                        BottomBarState.SwipeUpAction.APP_LAUNCHER ->
+                                BottomBarState.SwipeUpAction.APP_LAUNCHER_PACKAGE
+                        BottomBarState.SwipeUpAction.CUSTOM_APP ->
+                                BottomBarState.swipeUpPackage.takeIf { it.isNotBlank() }
+                }
+
+        if (packageToLaunch == null) {
+                // Dashboard escolhido (ou "app específico" sem app definido) -> cai no dashboard.
+                BottomBarState.isDashboardExpanded = true
+                return
+        }
+
+        BottomBarState.isDashboardExpanded = false
+        BottomBarState.selectedPackage = packageToLaunch
+        br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.launchAnyAppFromJava(
+                context,
+                packageToLaunch
+        )
+}
+
 @Composable
 fun BottomBarContent() {
         val serviceManager = ServiceManager.getInstance()
+        val barContext = androidx.compose.ui.platform.LocalContext.current
         val scope = rememberCoroutineScope()
 
         // States for AC, Volume, etc.
@@ -365,21 +404,7 @@ fun BottomBarContent() {
                                                                                                         it.pressed
                                                                                                 })
                                                                                         if (shouldExpand) {
-                                                                                                BottomBarState
-                                                                                                        .isDashboardExpanded =
-                                                                                                        true
-                                                                                                BottomBarState
-                                                                                                        .isVisible =
-                                                                                                        true
-                                                                                                BottomBarState
-                                                                                                        .isMenuExpanded =
-                                                                                                        false
-                                                                                                BottomBarState
-                                                                                                        .isSettingsMenuExpanded =
-                                                                                                        false
-                                                                                                BottomBarState
-                                                                                                        .isOverrideMenuExpanded =
-                                                                                                        false
+                                                                                                performSwipeUpAction(barContext)
                                                                                         } else {
                                                                                                 BottomBarState
                                                                                                         .isDashboardExpanded =

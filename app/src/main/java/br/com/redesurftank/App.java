@@ -37,17 +37,6 @@ public class App extends Application {
                 "versionCode=" + BuildConfig.VERSION_CODE + " versionName=" + BuildConfig.VERSION_NAME
         );
 
-        // Instala temas embutidos (app/src/main/assets/themes/<Nome>/) em filesDir/themes no boot,
-        // comparando versao — permite embutir tema no APK sem depender de download/GitHub. I/O → background.
-        new Thread(() -> {
-            try {
-                br.com.redesurftank.havalshisuku.managers.ThemeManager.Companion
-                        .getInstance(getContext()).ensureBundledThemesInstalled();
-            } catch (Throwable t) {
-                ClusterPersistentEventLogger.logText("bundled_themes_install_fail", String.valueOf(t.getMessage()));
-            }
-        }, "bundled-themes-install").start();
-
         br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.ensureDefaultDesktopShortcuts();
 
         var context = getContext();

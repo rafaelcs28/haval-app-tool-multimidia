@@ -8,10 +8,18 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Ler estado/scan do WiFi PELO PRÓPRIO app (prioridade de WiFi: isWifiEnabled/getScanResults/
+         getConnectionInfo/startScan). Sem estas, o app (uid do app) toma SecurityException; o switch
+         via Shizuku já funcionava (uid shell), mas a leitura/decisão do vigia não. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" tools:ignore="ProtectedPermissions" />
+    <!-- Contador de dados móveis do carro (NetworkStatsManager): concedidas via Shizuku no boot. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_NETWORK_USAGE_HISTORY" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
@@ -199,6 +207,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Estado de conectividade pro EcoTrip puxar (roteamento + 4G). Read-only. SEM readPermission:
+             o EcoTrip tem chave diferente e a permissão 'normal' não é re-concedida sem reinstalar; o
+             acesso é restrito pelo guard de pacote (getCallingPackage) dentro do provider. -->
+        <provider
+            android:name=".providers.ConnectivityStatusProvider"
+            android:authorities="br.com.redesurftank.havalshisuku.status"
+            android:enabled="true"
+            android:exported="true" />
     </application>
 
 </manifest>

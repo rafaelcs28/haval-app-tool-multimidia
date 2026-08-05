@@ -227,6 +227,13 @@ class BottomBarService : LifecycleService() {
                         .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
         BottomBarState.autoHideEnabled =
                 prefs.getBoolean(SharedPreferencesKeys.BOTTOM_BAR_AUTO_HIDE.key, false)
+        BottomBarState.barHidden =
+                prefs.getBoolean(SharedPreferencesKeys.BOTTOM_BAR_HIDDEN.key, false)
+        BottomBarState.swipeUpAction =
+                prefs.getString(SharedPreferencesKeys.BOTTOM_BAR_SWIPE_UP_ACTION.key, null)
+                        ?: BottomBarState.SwipeUpAction.DASHBOARD.key
+        BottomBarState.swipeUpPackage =
+                prefs.getString(SharedPreferencesKeys.BOTTOM_BAR_SWIPE_UP_PACKAGE.key, "") ?: ""
 
         BottomBarState.isVisible = true
 
@@ -239,6 +246,7 @@ class BottomBarService : LifecycleService() {
         observeVisibility()
         observeResourceOverlay()
         observeAutoHide()
+        observeBarHidden()
         registerUpdateReceiver()
         startMediaMetadataMonitoring()
         startMediaAccessMonitoring()
@@ -3069,7 +3077,7 @@ class BottomBarService : LifecycleService() {
         val lp = params ?: return
         val density = this.resources.displayMetrics.density
 
-        if (!BottomBarState.isVisible) {
+        if (!BottomBarState.isVisible || BottomBarState.barHidden) {
             Log.d(
                     "BottomBarService",
                     "Bottom bar hidden, ignoring dynamic overscan request: ${settings.overscan}"
@@ -3327,6 +3335,34 @@ class BottomBarService : LifecycleService() {
         }
     }
 
+    private fun observeBarHidden() {
+        lifecycleScope.launch {
+            snapshotFlow { BottomBarState.barHidden }
+                    .distinctUntilChanged()
+                    .collectLatest { hidden ->
+                        val cv = composeView ?: return@collectLatest
+                        if (hidden) {
+                            // Esconde ao vivo: remove a janela da barra e zera o overscan.
+                            runCatching { mWindowManager?.removeView(cv) }
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                ShizukuUtils.runCommandAndGetOutput(
+                                        arrayOf("wm", "overscan", "0,0,0,0")
+                                )
+                            }
+                        } else if (cv.parent == null &&
+                                        android.provider.Settings.canDrawOverlays(
+                                                this@BottomBarService
+                                        )
+                        ) {
+                            // Mostra ao vivo: re-adiciona a janela e reaplica o overscan do app atual.
+                            runCatching { mWindowManager?.addView(cv, params) }
+                            cv.requestLayout()
+                            updateBarVisibility(BottomBarState.isVisible)
+                        }
+                    }
+        }
+    }
+
     private fun launchDashboardActivity() {
         try {
             startActivity(
@@ -3388,6 +3424,20 @@ class BottomBarService : LifecycleService() {
     }
 
     private fun restoreDashboardAfterProjectionHandoff(reason: String) {
+        // Não subir o dashboard sozinho se: o usuário desligou isso (pref, default OFF) OU a barra
+        // está oculta (nesse modo o dashboard só abre pelo atalho do volante). Sem isto, no boot a
+        // projeção sobe no cluster em rajada e o dashboard fica insistindo por cima dos apps.
+        val prefs =
+                br.com.redesurftank.App.getDeviceProtectedContext()
+                        .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+        if (BottomBarState.barHidden ||
+                        !prefs.getBoolean(
+                                SharedPreferencesKeys.DASHBOARD_AUTO_OPEN_ON_PROJECTION.key,
+                                false
+                        )
+        ) {
+            return
+        }
         if (!shouldAutoOpenDashboardAfterProjectionHandoffForTest(
                         isVisible = BottomBarState.isVisible,
                         isDashboardExpanded = BottomBarState.isDashboardExpanded
@@ -3447,6 +3497,14 @@ class BottomBarService : LifecycleService() {
         val wm = mWindowManager ?: return
         val cv = composeView ?: return
         val lp = params ?: return
+
+        if (BottomBarState.barHidden) {
+            // Barra oculta: nunca empurra a tela nem cria zona-gatilho; garante overscan 0.
+            lifecycleScope.launch(Dispatchers.IO) {
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("wm", "overscan", "0,0,0,0"))
+            }
+            return
+        }
 
         val density = resources.displayMetrics.density
 
@@ -3660,7 +3718,15 @@ class BottomBarService : LifecycleService() {
                             }
                         }
 
-        if (android.provider.Settings.canDrawOverlays(this)) {
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            stopSelf()
+        } else if (BottomBarState.barHidden) {
+            // Barra oculta (dashboard pelo atalho do volante): o serviço segue vivo p/ o atalho + os
+            // monitores; só não desenha o overlay nem empurra a tela. Zera overscan de sessão anterior.
+            lifecycleScope.launch(Dispatchers.IO) {
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("wm", "overscan", "0,0,0,0"))
+            }
+        } else {
             try {
                 mWindowManager?.addView(composeView, params)
                 val settings =
@@ -3699,8 +3765,6 @@ class BottomBarService : LifecycleService() {
                 Log.e("BottomBarService", "Error adding views", e)
                 stopSelf()
             }
-        } else {
-            stopSelf()
         }
     }
 

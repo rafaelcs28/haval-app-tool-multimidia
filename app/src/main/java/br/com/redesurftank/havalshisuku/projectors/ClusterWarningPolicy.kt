@@ -6,6 +6,10 @@ internal object ClusterWarningPolicy {
     val visualOnlyWarningKeys =
             setOf(
                     CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value,
+                    // Indicador de cinto: visual-only, nunca toma o cluster. Classificado aqui
+                    // por corretude defensiva (se esta chave chegar ao fluxo crítico por qualquer
+                    // caminho, não dispara takeover). Espelha o comportamento do fork netseek.
+                    CarConstants.CAR_IPK_LIGHT_SEAT_BELT_WARNING_INDICATOR.value,
                     CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQLEFT.value,
                     CarConstants.CAR_IPK_INFO_BSD_LCA_WARNING_REQRIGHT.value,
                     CarConstants.CAR_IPK_INFO_WARNING_TTS_NOTIFY.value,

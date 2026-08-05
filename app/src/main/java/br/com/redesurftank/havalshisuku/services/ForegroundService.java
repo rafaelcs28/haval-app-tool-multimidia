@@ -60,7 +60,9 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     private static final long SHIZUKU_BINDER_RECEIVE_TIMEOUT_MS = 15000L;
     private static final int SHIZUKU_BINDER_TIMEOUTS_BEFORE_RESTART = 3;
     private static final String CARPLAY_PATCH_VERSION_KEY = "carPlayPatchAutoMountPatchVersion";
-    private static final String CARPLAY_HVAC_FOCUS_PATCH_VERSION = "app_visual_d0_focus_service_conditional_camera_native1904x704_v13";
+    // v14: cache-buster do PR #115 — força remount dos MESMOS APKs patchados no deploy que adota o
+    // VERIFY_ONLY (garante reload limpo do dex patchado). MD5 dos APKs NÃO muda entre v13/v14.
+    private static final String CARPLAY_HVAC_FOCUS_PATCH_VERSION = "app_visual_d0_focus_service_conditional_camera_native1904x704_v14";
 
     private HandlerThread handlerThread;
     private Handler backgroundHandler;
@@ -724,6 +726,12 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             Log.e(TAG, "Error starting HotRouter: " + e.getMessage(), e);
         }
 
+        try {
+            br.com.redesurftank.havalshisuku.managers.WifiPriorityManager.getInstance().onServicesReady();
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting WifiPriority: " + e.getMessage(), e);
+        }
+
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction("com.beantechs.intelligentvehiclecontrol.INIT_COMPLETED");
 
@@ -803,6 +811,15 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
         // Diagnóstico: por que o serviço morreu (recriação reseta o cluster e faz o tema
         // piscar o velocímetro por cima do AA). Correlacionar com trim_memory/binder_dead.
         ClusterPersistentEventLogger.logText("foreground_service_on_destroy", "isServiceRunning=" + isServiceRunning);
+        // Solta nossos callbacks nos serviços do carro antes de morrer, senão o ClusterService/
+        // InputService seguem despachando pra um binder morto (DeadObjectException do lado deles, e
+        // os reports de card podem parar de chegar no próximo processo). (netseek 7ed87d8/e17269d)
+        try {
+            ServiceManager.getInstance().releaseClusterCallback();
+            ServiceManager.getInstance().releaseInputListener();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to release car-service callbacks on destroy", e);
+        }
         if (handlerThread != null) {
             handlerThread.quitSafely();
         }

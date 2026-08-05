@@ -39,6 +39,9 @@ public class HotRouterManager {
     public static final String MODE_WLAN = "WLAN";
     public static final String MODE_4G = "4G";
     public static final String MODE_ERROR = "ERROR";
+    // Se o statefile não é reescrito há mais que isto, o daemon está vivo mas travado (loop pendurado):
+    // trata como ERRO em vez de mostrar o último modo congelado. O daemon reescreve a cada ~5s.
+    private static final long STALE_STATE_MAX_AGE_SEC = 30L;
 
     public static class Status {
         public final String mode;
@@ -225,6 +228,12 @@ public class HotRouterManager {
                 return new Status(MODE_STARTING, epoch);
             }
             if (MODE_WLAN.equals(mode) || MODE_4G.equals(mode)) {
+                // Ligado != funcionando: se a última escrita do statefile é muito antiga, o daemon
+                // travou (vivo mas sem iterar) -> reporta ERRO em vez do modo congelado.
+                long ageSec = (System.currentTimeMillis() / 1000L) - epoch;
+                if (epoch > 0L && ageSec > STALE_STATE_MAX_AGE_SEC) {
+                    return new Status(MODE_ERROR, epoch);
+                }
                 return new Status(mode, epoch);
             }
             return new Status(MODE_STARTING, epoch);
@@ -272,6 +281,18 @@ public class HotRouterManager {
                 if (end > q + 7) {
                     String v = out.substring(q + 7, end).trim();
                     if (!v.isEmpty()) return v;
+                }
+            }
+            // 4) Neste head unit iw/wpa_cli/iwconfig voltam vazio; o Android reporta a rede WiFi
+            //    conectada no netstats como networkId="<nome>" (a wlan0 ativa). Fonte confiavel aqui.
+            out = ShizukuUtils.runCommandAndGetOutput(
+                    new String[]{"sh", "-c", "dumpsys netstats 2>/dev/null | grep -m1 networkId"});
+            int n = out.indexOf("networkId=\"");
+            if (n >= 0) {
+                int end2 = out.indexOf('"', n + 11);
+                if (end2 > n + 11) {
+                    String v2 = out.substring(n + 11, end2).trim();
+                    if (!v2.isEmpty()) return v2;
                 }
             }
         } catch (Exception e) {

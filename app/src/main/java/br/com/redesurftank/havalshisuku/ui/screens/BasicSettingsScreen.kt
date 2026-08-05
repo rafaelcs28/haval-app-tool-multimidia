@@ -29,6 +29,7 @@ import br.com.redesurftank.havalshisuku.managers.HotRouterManager
 import br.com.redesurftank.havalshisuku.managers.SeatbeltVoiceReminder
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -451,6 +452,11 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.BOTTOM_BAR_AUTO_HIDE.key, false)
                 )
         }
+        var barHiddenEnabled by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.BOTTOM_BAR_HIDDEN.key, false)
+                )
+        }
         var showStartPicker by remember { mutableStateOf(false) }
         var showEndPicker by remember { mutableStateOf(false) }
         var enableSpeedAdjustment by remember {
@@ -530,8 +536,437 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.ENABLE_HOT_ROUTER.key, false)
                 )
         }
+        var wifiPriorityEnabled by remember {
+                mutableStateOf(
+                        prefs.getBoolean(SharedPreferencesKeys.WIFI_PRIORITY_ENABLED.key, false)
+                )
+        }
+        var dashboardAutoOpen by remember {
+                mutableStateOf(
+                        prefs.getBoolean(
+                                SharedPreferencesKeys.DASHBOARD_AUTO_OPEN_ON_PROJECTION.key,
+                                false
+                        )
+                )
+        }
+
+        // ===== Controle de dados móveis do carro (master + regras) =====
+        val mdm = br.com.redesurftank.havalshisuku.managers.MobileDataManager
+        var mobileControlEnabled by remember { mutableStateOf(mdm.isControlEnabled()) }
+        var mobileManualBlock by remember { mutableStateOf(mdm.isManualBlock()) }
+        var mobileAutoblock by remember { mutableStateOf(mdm.isAutoblockEnabled()) }
+        var mobileBlockOnWifi by remember { mutableStateOf(mdm.isBlockOnWifi()) }
+        var mobileBlockOnProjection by remember { mutableStateOf(mdm.isBlockOnProjection()) }
+        var mobileDataCycleDay by remember {
+                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.MOBILE_DATA_CYCLE_DAY.key, 1).coerceIn(1, 31))
+        }
+        var mobileDataAutoblockCapMb by remember {
+                mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, 2048).coerceIn(512, 8192))
+        }
+        var blockDatatrack by remember { mutableStateOf(mdm.isDatatrackBlocked()) }
+        // Debloat: desativar apps do sistema (OEM) que rodam e consomem RAM/CPU (default OFF).
+        var disableNativeNavigation by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.key, false))
+        }
+        var disableNativeVoice by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.key, false))
+        }
+        var disableNativeWeather by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.key, false))
+        }
+        var mobileDataUsedMb by remember { mutableStateOf(0L) }
+        var mobileBlockReason by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(mobileControlEnabled, mobileDataCycleDay) {
+                while (true) {
+                        val ctx = br.com.redesurftank.App.getContext()
+                        mobileDataUsedMb = withContext(Dispatchers.IO) {
+                                mdm.getMobileUsedMbThisCycle(ctx, System.currentTimeMillis())
+                        }
+                        mobileBlockReason = withContext(Dispatchers.IO) { mdm.blockReason(ctx) }
+                        delay(10000)
+                }
+        }
+
+        // A tela OBSERVA a SharedPreferences (fonte de verdade): um comando remoto (provider.call do
+        // EcoTrip) grava a pref e este listener recarrega o estado, então os toggles/limite refletem a
+        // mudança NA HORA, sem sair e voltar da tela. Sem isto, a UI mostrava o valor antigo enquanto a
+        // lógica já obedecia o novo (a tela "mentia"). Todos os setters gravam pref -> este listener pega.
+        val connScope = rememberCoroutineScope()
+        DisposableEffect(prefs) {
+                val listener =
+                        SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                                when (key) {
+                                        SharedPreferencesKeys.WIFI_PRIORITY_ENABLED.key ->
+                                                wifiPriorityEnabled = sp.getBoolean(SharedPreferencesKeys.WIFI_PRIORITY_ENABLED.key, false)
+                                        SharedPreferencesKeys.MOBILE_DATA_CONTROL_ENABLED.key ->
+                                                mobileControlEnabled = mdm.isControlEnabled()
+                                        SharedPreferencesKeys.BLOCK_CAR_MOBILE_DATA.key ->
+                                                mobileManualBlock = mdm.isManualBlock()
+                                        SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK.key ->
+                                                mobileAutoblock = mdm.isAutoblockEnabled()
+                                        SharedPreferencesKeys.MOBILE_DATA_BLOCK_ON_WIFI.key ->
+                                                mobileBlockOnWifi = mdm.isBlockOnWifi()
+                                        SharedPreferencesKeys.MOBILE_DATA_BLOCK_ON_PROJECTION.key ->
+                                                mobileBlockOnProjection = mdm.isBlockOnProjection()
+                                        SharedPreferencesKeys.MOBILE_DATA_CYCLE_DAY.key ->
+                                                mobileDataCycleDay = sp.getInt(SharedPreferencesKeys.MOBILE_DATA_CYCLE_DAY.key, 1).coerceIn(1, 31)
+                                        SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key ->
+                                                mobileDataAutoblockCapMb = sp.getInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, 2048).coerceIn(512, 8192)
+                                        else -> return@OnSharedPreferenceChangeListener
+                                }
+                                // uma regra mudou -> o cabeçalho "4G agora:" pode mudar: recomputa o motivo na hora
+                                connScope.launch {
+                                        val ctx = br.com.redesurftank.App.getContext()
+                                        mobileBlockReason = withContext(Dispatchers.IO) { mdm.blockReason(ctx) }
+                                }
+                        }
+                prefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+
+        var hideLeftNavPane by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.HIDE_LEFT_NAV_PANE.key, false))
+        }
+        var autoMoveProjectionToCluster by remember {
+                mutableStateOf(
+                        prefs.getBoolean(
+                                SharedPreferencesKeys.AUTO_MOVE_PROJECTION_TO_CLUSTER.key,
+                                true
+                        )
+                )
+        }
+        var swipeUpCustomApp by remember {
+                mutableStateOf(
+                        prefs.getString(SharedPreferencesKeys.BOTTOM_BAR_SWIPE_UP_ACTION.key, null) ==
+                                br.com.redesurftank.havalshisuku.models.BottomBarState.SwipeUpAction
+                                        .CUSTOM_APP.key
+                )
+        }
+        var swipeUpPackage by remember {
+                mutableStateOf(
+                        prefs.getString(SharedPreferencesKeys.BOTTOM_BAR_SWIPE_UP_PACKAGE.key, "")
+                                ?: ""
+                )
+        }
 
         val settingsList = mutableListOf<SettingItem>()
+
+        // Card MÃE — controle de dados móveis (master). As 4 regras só aparecem/valem com ele ligado.
+        settingsList.add(
+                SettingItem(
+                        title = "Controle de dados móveis",
+                        description =
+                                "Liga o gerenciamento do 4G da multimídia. Com ele ligado, escolha abaixo QUANDO cortar o 4G. Desligado = 4G livre (nada é bloqueado).",
+                        group = SettingsGroups.FEATURES,
+                        checked = mobileControlEnabled,
+                        onCheckedChange = {
+                                mobileControlEnabled = it
+                                mdm.setControlEnabled(it)
+                        },
+                        customContent = {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                        val reason = mobileBlockReason
+                                        Text(
+                                                if (reason != null) "4G agora: BLOQUEADO ($reason)" else "4G agora: LIBERADO",
+                                                color = if (reason != null) androidx.compose.ui.graphics.Color(0xFFE53935) else androidx.compose.ui.graphics.Color(0xFF34C759),
+                                                fontSize = 15.sp
+                                        )
+                                        Text(
+                                                String.format("Multimídia (esta tela): %.2f GB neste ciclo", mobileDataUsedMb / 1024f),
+                                                color = AppColors.TextSecondary,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                        )
+
+                                        // (a) manual
+                                        Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                        ) {
+                                                Text("Bloquear manualmente agora", color = AppColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                                androidx.compose.material3.Switch(
+                                                        checked = mobileManualBlock,
+                                                        onCheckedChange = { mobileManualBlock = it; mdm.setManualBlock(it) }
+                                                )
+                                        }
+                                        Text("Corta o 4G na hora, independente do resto.", color = AppColors.TextSecondary, fontSize = 12.sp)
+
+                                        // (b) por consumo
+                                        Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                        ) {
+                                                Text("Bloquear conforme o gasto", color = AppColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                                androidx.compose.material3.Switch(
+                                                        checked = mobileAutoblock,
+                                                        onCheckedChange = { mobileAutoblock = it; mdm.setAutoblockEnabled(it) }
+                                                )
+                                        }
+                                        if (mobileAutoblock) {
+                                                val usedGb = mobileDataUsedMb / 1024f
+                                                val capGb = mobileDataAutoblockCapMb / 1024f
+                                                val remainingGb = (capGb - usedGb).coerceAtLeast(0f)
+                                                Text(
+                                                        String.format("Bloquear ao passar de %.1f GB — faltam %.2f GB", capGb, remainingGb),
+                                                        color = AppColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)
+                                                )
+                                                Slider(
+                                                        value = (mobileDataAutoblockCapMb / 1024f).coerceIn(0.5f, 8f),
+                                                        onValueChange = {
+                                                                val gb = Math.round(it * 2f) / 2f
+                                                                mobileDataAutoblockCapMb = (gb * 1024).toInt().coerceIn(512, 8192)
+                                                        },
+                                                        onValueChangeFinished = {
+                                                                prefs.edit { putInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, mobileDataAutoblockCapMb) }
+                                                        },
+                                                        valueRange = 0.5f..8f,
+                                                        steps = 14
+                                                )
+                                                Text("Zera a contagem no dia $mobileDataCycleDay do mês", color = AppColors.TextSecondary, fontSize = 12.sp)
+                                                Slider(
+                                                        value = mobileDataCycleDay.toFloat(),
+                                                        onValueChange = { mobileDataCycleDay = it.toInt().coerceIn(1, 31) },
+                                                        onValueChangeFinished = {
+                                                                prefs.edit { putInt(SharedPreferencesKeys.MOBILE_DATA_CYCLE_DAY.key, mobileDataCycleDay) }
+                                                        },
+                                                        valueRange = 1f..31f,
+                                                        steps = 29
+                                                )
+                                        } else {
+                                                Text("Bloqueia sozinho só quando a tela atinge o teto (GB) no ciclo.", color = AppColors.TextSecondary, fontSize = 12.sp)
+                                        }
+
+                                        // (c) no WiFi
+                                        Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                        ) {
+                                                Text("Bloquear quando conectado ao WiFi", color = AppColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                                androidx.compose.material3.Switch(
+                                                        checked = mobileBlockOnWifi,
+                                                        onCheckedChange = { mobileBlockOnWifi = it; mdm.setBlockOnWifi(it) }
+                                                )
+                                        }
+                                        Text("Com WiFi/Starlink no ar, desliga o 4G; volta quando o WiFi cai.", color = AppColors.TextSecondary, fontSize = 12.sp)
+
+                                        // (d) no Android Auto/CarPlay
+                                        Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                        ) {
+                                                Text("Bloquear no Android Auto/CarPlay", color = AppColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                                androidx.compose.material3.Switch(
+                                                        checked = mobileBlockOnProjection,
+                                                        onCheckedChange = { mobileBlockOnProjection = it; mdm.setBlockOnProjection(it) }
+                                                )
+                                        }
+                                        Text("Enquanto o celular estiver projetando, o 4G do carro fica desligado.", color = AppColors.TextSecondary, fontSize = 12.sp)
+
+                                        Text(
+                                                "A fatura da linha é maior: inclui o TBOX (não passa pela tela e não é medido aqui).",
+                                                color = AppColors.TextSecondary,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.padding(top = 12.dp)
+                                        )
+                                }
+                        }
+                )
+        )
+
+        // Card 3 — congelar telemetria OEM (privacidade + WiFi/Starlink)
+        settingsList.add(
+                SettingItem(
+                        title = "Bloquear telemetria (DataTrack → nuvem)",
+                        description =
+                                "Congela o serviço OEM que manda telemetria pra nuvem (com.beantechs.datatrackservice). Reversível; não mexe no comando remoto. Não derruba o gasto do TBOX na fatura — ajuda na privacidade e no WiFi/Starlink.",
+                        group = SettingsGroups.FEATURES,
+                        checked = blockDatatrack,
+                        onCheckedChange = {
+                                blockDatatrack = it
+                                br.com.redesurftank.havalshisuku.managers.MobileDataManager.setDatatrackBlocked(it)
+                        }
+                )
+        )
+
+        // ===== Debloat: desativar apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
+        // Reversível (reabilita ao desligar) e reaplicado no boot. Não mexe em AA/CarPlay/Waze.
+        settingsList.add(
+                SettingItem(
+                        title = "Desativar navegador GPS nativo (Neusoft)",
+                        description =
+                                "Remove pro usuário o app de navegação nativo (com.neusoft.na.navigation), que fica rodando e consome RAM/CPU da multimídia. Não afeta Android Auto / CarPlay / Waze. Reversível e reaplicado no boot.",
+                        group = SettingsGroups.FEATURES,
+                        checked = disableNativeNavigation,
+                        onCheckedChange = {
+                                disableNativeNavigation = it
+                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.key, it).apply()
+                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
+                        }
+                )
+        )
+        settingsList.add(
+                SettingItem(
+                        title = "Desativar assistente de voz nativo (iFlyTek)",
+                        description =
+                                "Remove pro usuário o assistente de voz nativo (com.iflytek.cutefly.speechclient.hmi + com.beantechs.voiceclient), que fica rodando e consome RAM/CPU. Você perde o comando de voz OEM (\"Olá Haval\"). Reversível e reaplicado no boot.",
+                        group = SettingsGroups.FEATURES,
+                        checked = disableNativeVoice,
+                        onCheckedChange = {
+                                disableNativeVoice = it
+                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.key, it).apply()
+                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
+                        }
+                )
+        )
+        settingsList.add(
+                SettingItem(
+                        title = "Desativar previsão do tempo (OEM)",
+                        description =
+                                "Remove pro usuário o serviço de previsão do tempo (com.beantechs.weatherservice), que fica rodando e consome RAM/CPU. Reversível e reaplicado no boot.",
+                        group = SettingsGroups.FEATURES,
+                        checked = disableNativeWeather,
+                        onCheckedChange = {
+                                disableNativeWeather = it
+                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.key, it).apply()
+                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
+                        }
+                )
+        )
+
+        // Card — prioridade de redes WiFi (troca automática pela preferida disponível)
+        settingsList.add(
+                SettingItem(
+                        title = "Prioridade de redes WiFi",
+                        description =
+                                "Quando uma rede de prioridade MAIOR aparece no alcance, o carro pula sozinho pra ela (resolve o \"gruda no hotspot\"). Só sobe de prioridade, com histerese; cada troca pisca o WiFi ~10s. Precisa da localização ligada (pro carro enxergar as redes ao redor).",
+                        group = SettingsGroups.FEATURES,
+                        checked = wifiPriorityEnabled,
+                        onCheckedChange = {
+                                wifiPriorityEnabled = it
+                                // setFeatureEnabled: persiste a pref + aplica + avisa o EcoTrip (mudança
+                                // local também sincroniza o outro app, pra ele não forçar o valor velho).
+                                br.com.redesurftank.havalshisuku.managers.WifiPriorityManager
+                                        .getInstance()
+                                        .setFeatureEnabled(it)
+                        },
+                        customContent =
+                                if (wifiPriorityEnabled) {
+                                        { WifiPriorityEditor(prefs) }
+                                } else null
+                )
+        )
+
+        // Dashboard: não subir sozinho por cima dos apps na projeção (default OFF)
+        settingsList.add(
+                SettingItem(
+                        title = "Abrir o dashboard sozinho na projeção",
+                        description =
+                                "Quando o Android Auto/CarPlay vai pro cluster, reabre o dashboard na tela principal. Desligado (padrão): a tela principal fica no app que você deixou; o dashboard só abre pelo atalho do volante. Desligado resolve o dashboard \"insistindo\" por cima dos apps no boot.",
+                        group = SettingsGroups.DISPLAY,
+                        checked = dashboardAutoOpen,
+                        onCheckedChange = {
+                                dashboardAutoOpen = it
+                                prefs.edit {
+                                        putBoolean(
+                                                SharedPreferencesKeys
+                                                        .DASHBOARD_AUTO_OPEN_ON_PROJECTION
+                                                        .key,
+                                                it
+                                        )
+                                }
+                        }
+                )
+        )
+
+        // Ocultar o painel lateral esquerdo (navegação do sistema) — via immersive policy_control (netseek).
+        settingsList.add(
+                SettingItem(
+                        title = "Ocultar painel lateral esquerdo",
+                        description =
+                                "Esconde a navegação do sistema (o painel à esquerda) via modo imersivo, liberando a largura da tela. Reversível.",
+                        group = SettingsGroups.DISPLAY,
+                        checked = hideLeftNavPane,
+                        onCheckedChange = {
+                                hideLeftNavPane = it
+                                prefs.edit {
+                                        putBoolean(SharedPreferencesKeys.HIDE_LEFT_NAV_PANE.key, it)
+                                }
+                                applyLeftNavPaneVisibility(it)
+                        }
+                )
+        )
+
+        // Mover a projeção (AA/CarPlay) pro cluster automaticamente (netseek autoMove).
+        settingsList.add(
+                SettingItem(
+                        title = "Mover projeção pro cluster automaticamente",
+                        description =
+                                "Ligado (padrão): o Android Auto / CarPlay pode ir pro painel do motorista (cluster). Desligado: a projeção fica só na tela central.",
+                        group = SettingsGroups.DISPLAY,
+                        checked = autoMoveProjectionToCluster,
+                        onCheckedChange = {
+                                autoMoveProjectionToCluster = it
+                                prefs.edit {
+                                        putBoolean(
+                                                SharedPreferencesKeys
+                                                        .AUTO_MOVE_PROJECTION_TO_CLUSTER.key,
+                                                it
+                                        )
+                                }
+                        }
+                )
+        )
+
+        // Swipe-up na barra: default abre o Dashboard; ligado abre um app escolhido (netseek swipe-up).
+        settingsList.add(
+                SettingItem(
+                        title = "Swipe-up na barra abre um app",
+                        description =
+                                "Desligado: deslizar a barra pra cima abre o Dashboard (padrão). Ligado: abre o app que você escolher abaixo.",
+                        group = SettingsGroups.DISPLAY,
+                        checked = swipeUpCustomApp,
+                        onCheckedChange = {
+                                swipeUpCustomApp = it
+                                val action =
+                                        if (it)
+                                                br.com.redesurftank.havalshisuku.models
+                                                        .BottomBarState.SwipeUpAction.CUSTOM_APP
+                                        else
+                                                br.com.redesurftank.havalshisuku.models
+                                                        .BottomBarState.SwipeUpAction.DASHBOARD
+                                prefs.edit {
+                                        putString(
+                                                SharedPreferencesKeys
+                                                        .BOTTOM_BAR_SWIPE_UP_ACTION.key,
+                                                action.key
+                                        )
+                                }
+                                br.com.redesurftank.havalshisuku.models.BottomBarState
+                                        .swipeUpAction = action.key
+                        },
+                        customContent = {
+                                if (swipeUpCustomApp) {
+                                        AppSelectorField(
+                                                packageName = swipeUpPackage,
+                                                onPackageSelected = { pkg ->
+                                                        swipeUpPackage = pkg
+                                                        prefs.edit {
+                                                                putString(
+                                                                        SharedPreferencesKeys
+                                                                                .BOTTOM_BAR_SWIPE_UP_PACKAGE
+                                                                                .key,
+                                                                        pkg
+                                                                )
+                                                        }
+                                                        br.com.redesurftank.havalshisuku.models
+                                                                .BottomBarState.swipeUpPackage = pkg
+                                                },
+                                                label = "App a abrir no swipe-up"
+                                        )
+                                }
+                        }
+                )
+        )
 
         settingsList.add(
                 SettingItem(
@@ -760,7 +1195,7 @@ fun BasicSettingsTab() {
         if (isAdvancedUse && !selfInstallationCheck) {
                 settingsList.add(
                         SettingItem(
-                                title = "Bypass de Verificação",
+                                title = "Ignorar verificação de integridade",
                                 description =
                                         SharedPreferencesKeys
                                                 .BYPASS_SELF_INSTALLATION_INTEGRITY_CHECK
@@ -1726,6 +2161,82 @@ fun BasicSettingsTab() {
                                                                                         12.dp
                                                                                 )
                                                                 )
+
+                                                                Row(
+                                                                        modifier =
+                                                                                Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement =
+                                                                                Arrangement
+                                                                                        .SpaceBetween,
+                                                                        verticalAlignment =
+                                                                                Alignment
+                                                                                        .CenterVertically
+                                                                ) {
+                                                                        Column(
+                                                                                modifier =
+                                                                                        Modifier.weight(
+                                                                                                1f
+                                                                                        )
+                                                                        ) {
+                                                                                Text(
+                                                                                        "Manter barra escondida",
+                                                                                        color =
+                                                                                                Color.White,
+                                                                                        fontSize =
+                                                                                                16.sp
+                                                                                )
+                                                                                Text(
+                                                                                        "A barra some de vez; abra o dashboard pelo atalho do volante (\"Alternar dashboard Impulse\").",
+                                                                                        color =
+                                                                                                Color.Gray,
+                                                                                        fontSize =
+                                                                                                12.sp
+                                                                                )
+                                                                        }
+                                                                        Switch(
+                                                                                checked =
+                                                                                        barHiddenEnabled,
+                                                                                onCheckedChange = {
+                                                                                        barHiddenEnabled =
+                                                                                                it
+                                                                                        prefs.edit()
+                                                                                                .putBoolean(
+                                                                                                        SharedPreferencesKeys
+                                                                                                                .BOTTOM_BAR_HIDDEN
+                                                                                                                .key,
+                                                                                                        it
+                                                                                                )
+                                                                                                .apply()
+                                                                                        BottomBarState
+                                                                                                .barHidden =
+                                                                                                it
+                                                                                },
+                                                                                modifier =
+                                                                                        Modifier.scale(
+                                                                                                0.9f
+                                                                                        ),
+                                                                                colors =
+                                                                                        SwitchDefaults
+                                                                                                .colors(
+                                                                                                        checkedThumbColor =
+                                                                                                                br.com
+                                                                                                                        .redesurftank
+                                                                                                                        .havalshisuku
+                                                                                                                        .ui
+                                                                                                                        .components
+                                                                                                                        .AppColors
+                                                                                                                        .TextPrimary,
+                                                                                                        checkedTrackColor =
+                                                                                                                br.com
+                                                                                                                        .redesurftank
+                                                                                                                        .havalshisuku
+                                                                                                                        .ui
+                                                                                                                        .components
+                                                                                                                        .AppColors
+                                                                                                                        .Primary
+                                                                                                )
+                                                                        )
+                                                                }
                                                         }
                                                 }
                                         } else null
@@ -1819,7 +2330,7 @@ fun BasicSettingsTab() {
                                 }
                         ),
                         SettingItem(
-                                title = "Ligar ventilação do banco do motorisca com A/C ligado",
+                                title = "Ligar ventilação do banco do motorista com A/C ligado",
                                 description =
                                         SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON
                                                 .description,
@@ -2030,6 +2541,11 @@ fun BasicSettingsTab() {
                                                         var statusEpoch by remember {
                                                                 mutableStateOf(0L)
                                                         }
+                                                        // Hotspot do carro REALMENTE no ar (carrier do wlan2). O daemon reporta
+                                                        // WLAN/4G mesmo com o hotspot desligado; sem isto o status dava "Ativo" à toa.
+                                                        var hotspotOnAir by remember {
+                                                                mutableStateOf(true)
+                                                        }
 
                                                         LaunchedEffect(Unit) {
                                                                 while (true) {
@@ -2043,23 +2559,34 @@ fun BasicSettingsTab() {
                                                                                 }
                                                                         statusMode = s.mode
                                                                         statusEpoch = s.epochSeconds
+                                                                        hotspotOnAir =
+                                                                                withContext(Dispatchers.IO) {
+                                                                                        try {
+                                                                                                ServiceManager.getInstance().isHotspotOnAir()
+                                                                                        } catch (t: Throwable) {
+                                                                                                true
+                                                                                        }
+                                                                                }
                                                                         delay(3000)
                                                                 }
                                                         }
 
                                                         val label =
-                                                                when (statusMode) {
-                                                                        HotRouterManager.MODE_OFF ->
+                                                                when {
+                                                                        statusMode == HotRouterManager.MODE_OFF ->
                                                                                 "Desligado"
-                                                                        HotRouterManager
-                                                                                .MODE_STARTING ->
+                                                                        statusMode == HotRouterManager.MODE_STARTING ->
                                                                                 "Iniciando…"
-                                                                        HotRouterManager.MODE_WLAN ->
-                                                                                "Ativo (WLAN)"
-                                                                        HotRouterManager.MODE_4G ->
-                                                                                "Ativo (4G)"
-                                                                        HotRouterManager.MODE_ERROR ->
+                                                                        statusMode == HotRouterManager.MODE_ERROR ->
                                                                                 "Erro"
+                                                                        // Daemon rodando (WLAN/4G) mas hotspot do carro fora do ar:
+                                                                        // não há o que rotear -> não é "Ativo".
+                                                                        !hotspotOnAir ->
+                                                                                "Ligado (sem hotspot)"
+                                                                        statusMode == HotRouterManager.MODE_WLAN ->
+                                                                                "Ativo (WLAN)"
+                                                                        statusMode == HotRouterManager.MODE_4G ->
+                                                                                "Ativo (4G)"
                                                                         else -> "—"
                                                                 }
 
@@ -2985,6 +3512,173 @@ private fun SteeringWheelClimateCommandDropdown(
         }
 }
 
+// Oculta/mostra o painel lateral esquerdo (navegação do sistema) via immersive policy_control (Shizuku).
+// Portado do fork netseek. Ligado -> "settings put global policy_control immersive.navigation=*";
+// desligado -> apaga a policy. O valor fica em settings global (persiste entre reboots).
+private fun applyLeftNavPaneVisibility(hidden: Boolean) {
+        Thread {
+                        try {
+                                val command =
+                                        if (hidden)
+                                                arrayOf("settings", "put", "global", "policy_control", "immersive.navigation=*")
+                                        else arrayOf("settings", "delete", "global", "policy_control")
+                                val result =
+                                        br.com.redesurftank.havalshisuku.utils.ShizukuUtils
+                                                .runCommandAndGetOutput(command)
+                                android.util.Log.w("BasicSettingsScreen", "[NAV_PANE] hidden=$hidden result=$result")
+                        } catch (t: Throwable) {
+                                android.util.Log.e("BasicSettingsScreen", "applyLeftNavPaneVisibility failed", t)
+                        }
+                }
+                .start()
+}
+
 private fun formatHms(epochSeconds: Long): String {
         return SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(epochSeconds * 1000L))
+}
+
+private fun loadWifiPriority(prefs: SharedPreferences): List<String> {
+        return try {
+                val arr =
+                        org.json.JSONArray(
+                                prefs.getString(SharedPreferencesKeys.WIFI_PRIORITY_LIST.key, "[]")
+                        )
+                (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
+        } catch (t: Throwable) {
+                emptyList()
+        }
+}
+
+@Composable
+private fun WifiPriorityEditor(prefs: SharedPreferences) {
+        var savedNets by remember { mutableStateOf<List<String>>(emptyList()) }
+        var priority by remember { mutableStateOf(loadWifiPriority(prefs)) }
+
+        LaunchedEffect(Unit) {
+                savedNets =
+                        withContext(Dispatchers.IO) {
+                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance()
+                                        .listSavedWifi()
+                                        .map { it.substringAfter('|') }
+                                        .filter { it.isNotBlank() }
+                                        .distinct()
+                        }
+        }
+
+        var diagTrigger by remember { mutableStateOf(0) }
+        var diagReport by remember { mutableStateOf("") }
+        var diagBusy by remember { mutableStateOf(false) }
+        LaunchedEffect(diagTrigger) {
+                if (diagTrigger > 0) {
+                        diagBusy = true
+                        diagReport = "Verificando…"
+                        diagReport =
+                                withContext(Dispatchers.IO) {
+                                        try {
+                                                br.com.redesurftank.havalshisuku.managers
+                                                        .WifiPriorityManager.getInstance()
+                                                        .forceCheckNow()
+                                        } catch (t: Throwable) {
+                                                "Erro no diagnóstico: ${t.message ?: t}"
+                                        }
+                                }
+                        diagBusy = false
+                }
+        }
+
+        fun persist(newList: List<String>) {
+                priority = newList
+                prefs.edit()
+                        .putString(
+                                SharedPreferencesKeys.WIFI_PRIORITY_LIST.key,
+                                org.json.JSONArray(newList).toString()
+                        )
+                        .apply()
+        }
+
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text("Ordem de prioridade (1 = preferida):", color = Color.Gray, fontSize = 12.sp)
+                if (priority.isEmpty()) {
+                        Text(
+                                "Nenhuma rede priorizada. Adicione abaixo (precisa de 2+ pra valer).",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                        )
+                }
+                priority.forEachIndexed { idx, ssid ->
+                        Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                        ) {
+                                Text(
+                                        "${idx + 1}. $ssid",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                        onClick = {
+                                                if (idx > 0)
+                                                        persist(
+                                                                priority.toMutableList().also {
+                                                                        it.add(idx - 1, it.removeAt(idx))
+                                                                }
+                                                        )
+                                        },
+                                        enabled = idx > 0
+                                ) { Text("↑", fontSize = 16.sp) }
+                                TextButton(
+                                        onClick = {
+                                                if (idx < priority.size - 1)
+                                                        persist(
+                                                                priority.toMutableList().also {
+                                                                        it.add(idx + 1, it.removeAt(idx))
+                                                                }
+                                                        )
+                                        },
+                                        enabled = idx < priority.size - 1
+                                ) { Text("↓", fontSize = 16.sp) }
+                                TextButton(onClick = { persist(priority.filterNot { it == ssid }) }) {
+                                        Text("remover", fontSize = 11.sp, color = Color(0xFFE24B4A))
+                                }
+                        }
+                }
+                val available = savedNets.filter { it !in priority }
+                if (available.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Adicionar rede salva:", color = Color.Gray, fontSize = 12.sp)
+                        available.forEach { ssid ->
+                                Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                ) {
+                                        Text(
+                                                ssid,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                maxLines = 1,
+                                                modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(onClick = { persist(priority + ssid) }) {
+                                                Text("+ adicionar", fontSize = 12.sp)
+                                        }
+                                }
+                        }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                        onClick = { if (!diagBusy) diagTrigger++ },
+                        enabled = !diagBusy
+                ) {
+                        Text(
+                                if (diagBusy) "Verificando…" else "Verificar agora",
+                                fontSize = 13.sp
+                        )
+                }
+                if (diagReport.isNotEmpty()) {
+                        Text(diagReport, color = Color.Gray, fontSize = 11.sp)
+                }
+        }
 }

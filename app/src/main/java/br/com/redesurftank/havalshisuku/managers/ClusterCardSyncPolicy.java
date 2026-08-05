@@ -37,6 +37,19 @@ public final class ClusterCardSyncPolicy {
             return true;
         }
 
+        // O card 1 (menu) é o card DEFAULT do cluster do OEM — é onde projetamos o menu. Quando o
+        // mapa/nav fica ocioso, o OEM volta pro default sozinho (native_cluster_card_changed 0->1) e
+        // a persistência abaixo então PRENDE o menu sobre o mapa (o menu "insiste em voltar" — bug
+        // confirmado no log persistente: subida espontânea com sinceInputMs de minutos, seguida de
+        // dezenas de "from=1 to=0" ignorados). O menu só deve subir por AÇÃO DO USUÁRIO: sem toque
+        // LEFT/RIGHT recente (nem nav sintética recente, já tratada acima), IGNORA a subida
+        // espontânea pro menu. Assim o mapa continua vencendo; o menu que o usuário abre segue
+        // honrado (pela janela sintética/de input).
+        if (nextCard == MAIN_MENU_CARD
+                && !isRecentClusterCardNavigationInput(lastInputKeyCode, sinceInputMs)) {
+            return true;
+        }
+
         if (nextCard != 0) return false;
         if (previousCard != MAIN_MENU_CARD) return false;
         return !isRecentClusterCardNavigationInput(lastInputKeyCode, sinceInputMs);

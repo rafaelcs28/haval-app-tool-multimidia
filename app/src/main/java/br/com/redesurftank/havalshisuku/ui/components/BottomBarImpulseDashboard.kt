@@ -747,7 +747,6 @@ private fun DashboardHeader(
         onShortcutButtonSelected: (Int) -> Unit,
         onShowNativeMenu: () -> Unit
 ) {
-        val markerContext = LocalContext.current
         Row(
                 modifier = Modifier.fillMaxWidth().height(62.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -783,28 +782,41 @@ private fun DashboardHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                        // Indicador do HotRouter: PRIMEIRO chip (à esquerda dos demais). Só aparece
-                        // quando a feature está ligada (mode != OFF). Verde quando roteando por uma
-                        // WLAN externa (mostra o SSID); cinza no fallback 4G / iniciando / erro.
-                        if (snapshot.hotRouterMode != HotRouterManager.MODE_OFF) {
-                                val routingWlan =
-                                        snapshot.hotRouterMode == HotRouterManager.MODE_WLAN
+                        // Card ÚNICO de conectividade: roteamento do hotspot (Starlink/WiFi/4G) + estado
+                        // do 4G, numa frase só. A lógica de texto/cor/ícone vem do ConnectivityStatusManager
+                        // — a MESMA fonte que o EcoTrip puxa via ContentProvider (nada é recapturado lá).
+                        val mcState = rememberMobileControlState()
+                        val conn = br.com.redesurftank.havalshisuku.managers.ConnectivityStatusManager
+                                .buildStatus(
+                                        snapshot.hotRouterMode,
+                                        snapshot.hotRouterWifiName ?: mcState.headUnitWifiName,
+                                        mcState.controlEnabled,
+                                        mcState.blockReason,
+                                        mcState.hotspotActive,
+                                        mcState.headUnitOnWifi
+                                )
+                        conn.displayText?.let { connText ->
                                 DashboardStatusChip(
-                                        icon = Icons.Default.SatelliteAlt,
-                                        text =
-                                                when {
-                                                        routingWlan ->
-                                                                snapshot.hotRouterWifiName
-                                                                        ?.takeIf { it.isNotBlank() }
-                                                                        ?: "Wi-Fi"
-                                                        snapshot.hotRouterMode ==
-                                                                HotRouterManager.MODE_4G -> "4G"
-                                                        else -> "…"
+                                        icon =
+                                                when (conn.displayIcon) {
+                                                        "satellite" -> Icons.Default.SatelliteAlt
+                                                        "wifi" -> Icons.Default.Wifi
+                                                        "cell_off" -> Icons.Default.SignalCellularOff
+                                                        "loader" -> Icons.Default.Sync
+                                                        "alert" -> Icons.Default.WarningAmber
+                                                        else -> Icons.Default.SignalCellularAlt
                                                 },
-                                        accent = if (routingWlan) Color(0xFF78E08F) else null
+                                        text = connText,
+                                        accent =
+                                                when (conn.displayLevel) {
+                                                        "good" -> Color(0xFF78E08F)
+                                                        "warn" -> Color(0xFFF0A93A)
+                                                        "bad" -> Color(0xFFE24B4A)
+                                                        else -> null
+                                                }
                                 )
                         }
-                        // Uso de recursos do head unit (CPU / RAM total / RAM do nosso app).
+                        // Uso de recursos do head unit (CPU / RAM total).
                         // GPU nao entra: o hypervisor nao expoe contador de GPU nesta VM convidada
                         // (ver HeadUnitResourceSampler).
                         rememberHeadUnitResourceText()?.let { resourceText ->
@@ -827,25 +839,6 @@ private fun DashboardHeader(
                                 text = if (layoutEditMode) "Pronto" else "Layout",
                                 active = layoutEditMode,
                                 onClick = onToggleLayoutEditMode
-                        )
-                        // Botão de diagnóstico do TEMA: toque quando o velocímetro/tema errado piscar
-                        // durante a projeção no cluster — crava um marcador + snapshot no log
-                        // (cluster-events) pra confirmar a causa/o fix. (Os marcadores de A/C e
-                        // CarPlay-preto foram removidos — bugs resolvidos/OEM.)
-                        DashboardHeaderControlButton(
-                                icon = Icons.Default.Palette,
-                                text = "Tema",
-                                active = false,
-                                onClick = {
-                                        ServiceManager.getInstance()
-                                                .logClusterDiagMarker("tema_velocimetro_errado")
-                                        android.widget.Toast.makeText(
-                                                        markerContext,
-                                                        "Marcado ✓ (bug tema)",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                )
-                                                .show()
-                                }
                         )
                         DashboardShortcutSelectorButton(
                                 selectedButton = shortcutSelectedButton,
@@ -890,16 +883,55 @@ private fun rememberHeadUnitResourceText(): String? {
                                                         if (isNotEmpty()) append("  ")
                                                         append("RAM ").append(it).append('%')
                                                 }
-                                                snapshot.appRamMb?.let {
-                                                        if (isNotEmpty()) append("  ")
-                                                        append("App ").append(it).append("MB")
-                                                }
                                         }
                                         .takeIf { it.isNotEmpty() }
                         delay(HEADER_RESOURCE_SAMPLE_INTERVAL_MS)
                 }
         }
         return text
+}
+
+/**
+ * Estado do controle de dados móveis (master + motivo do bloqueio) pro card unificado de conectividade.
+ * Vive só enquanto o header está composto (barra aberta) — sem poll de repouso. Fora da main thread.
+ * Devolve controle/motivo/hotspot + se a TELA está no WiFi (e o SSID); o ConnectivityStatusManager combina com o HotRouter.
+ */
+private data class MobileControlSnapshot(
+        val controlEnabled: Boolean,
+        val blockReason: String?,
+        val hotspotActive: Boolean,
+        val headUnitOnWifi: Boolean,
+        val headUnitWifiName: String?
+)
+
+@Composable
+private fun rememberMobileControlState(): MobileControlSnapshot {
+        var state by remember { mutableStateOf(MobileControlSnapshot(false, null, false, false, null)) }
+        LaunchedEffect(Unit) {
+                while (true) {
+                        state = withContext(Dispatchers.IO) {
+                                val mdm = br.com.redesurftank.havalshisuku.managers.MobileDataManager
+                                val ctx = br.com.redesurftank.App.getContext()
+                                val onWifi = mdm.isWifiConnected(ctx)
+                                // SSID da tela só quando ela está no WiFi (evita shell à toa no 4G).
+                                val wifiName = if (onWifi) {
+                                        try {
+                                                br.com.redesurftank.havalshisuku.managers.HotRouterManager
+                                                        .getInstance().readRoutedWifiNameBlocking()
+                                        } catch (t: Throwable) { null }
+                                } else null
+                                MobileControlSnapshot(
+                                        mdm.isControlEnabled(),
+                                        mdm.blockReason(ctx),
+                                        br.com.redesurftank.havalshisuku.managers.ConnectivityStatusManager.isHotspotActive(ctx),
+                                        onWifi,
+                                        wifiName
+                                )
+                        }
+                        delay(HEADER_RESOURCE_SAMPLE_INTERVAL_MS)
+                }
+        }
+        return state
 }
 
 @Composable

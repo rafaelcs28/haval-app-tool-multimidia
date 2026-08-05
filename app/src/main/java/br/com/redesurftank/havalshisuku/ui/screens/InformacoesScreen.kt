@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -97,6 +98,16 @@ fun InformacoesTab() {
         var showUpdateCheckDialog by remember { mutableStateOf(false) }
         var updateCheckResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
         var isCheckingUpdates by remember { mutableStateOf(false) }
+        // DIAG TEMP — teste do mecanismo de prioridade de WiFi (lista redes salvas + pula na escolhida).
+        var showWifiTestDialog by remember { mutableStateOf(false) }
+        val wifiTestLog = remember { mutableStateListOf<String>() }
+        var wifiSavedNets by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+        var wifiTestBusy by remember { mutableStateOf(false) }
+        val wifiMainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+        // Diagnóstico de rede (4G pelo cabo): despeja interfaces + testa internet por cada uma.
+        var showNetDiagDialog by remember { mutableStateOf(false) }
+        var netDiagReport by remember { mutableStateOf("") }
+        var netDiagBusy by remember { mutableStateOf(false) }
         var showBetaUpdates by remember {
                 mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.SHOW_BETA_UPDATES.key, false))
         }
@@ -407,6 +418,272 @@ fun InformacoesTab() {
                                 }
 
                                 HorizontalDivider(color = ImpTokens.Hairline)
+
+                                // DIAG TEMP — teste do mecanismo de prioridade de WiFi. REMOVER após validar.
+                                Button(
+                                        onClick = {
+                                                wifiTestLog.clear()
+                                                wifiSavedNets = emptyList()
+                                                wifiTestLog.add("Lendo redes salvas…")
+                                                showWifiTestDialog = true
+                                                scope.launch(Dispatchers.IO) {
+                                                        val nets =
+                                                                ServiceManager.getInstance()
+                                                                        .listSavedWifi()
+                                                                        .mapNotNull { e ->
+                                                                                val i = e.indexOf('|')
+                                                                                if (i > 0)
+                                                                                        e.substring(0, i)
+                                                                                                .toIntOrNull()
+                                                                                                ?.let {
+                                                                                                        it to
+                                                                                                                e.substring(
+                                                                                                                        i + 1
+                                                                                                                )
+                                                                                                }
+                                                                                else null
+                                                                        }
+                                                        wifiMainHandler.post {
+                                                                wifiSavedNets = nets
+                                                                wifiTestLog.clear()
+                                                                wifiTestLog.add(
+                                                                        if (nets.isEmpty())
+                                                                                "Nenhuma rede salva encontrada (Shizuku ok?)."
+                                                                        else
+                                                                                "Toque na rede pra o carro pular nela:"
+                                                                )
+                                                        }
+                                                }
+                                        },
+                                        modifier = Modifier.height(48.dp),
+                                        colors =
+                                                ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF6B4EA8)
+                                                ),
+                                        shape =
+                                                RoundedCornerShape(
+                                                        AppDimensions.ButtonCornerRadius
+                                                )
+                                ) {
+                                        Icon(
+                                                Icons.Default.Wifi,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                                "Testar prioridade de WiFi (diag)",
+                                                fontSize = 14.sp
+                                        )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                // Diagnóstico de rede: mostra por onde a multimídia conecta e se o
+                                // celular no cabo (CarPlay/AA) expõe uma interface USB com internet.
+                                Button(
+                                        onClick = {
+                                                netDiagReport = ""
+                                                netDiagBusy = true
+                                                showNetDiagDialog = true
+                                                scope.launch(Dispatchers.IO) {
+                                                        val r =
+                                                                try {
+                                                                        br.com.redesurftank
+                                                                                .havalshisuku
+                                                                                .managers
+                                                                                .NetworkDiagnostics
+                                                                                .run()
+                                                                } catch (t: Throwable) {
+                                                                        "Falhou: ${t.message}"
+                                                                }
+                                                        wifiMainHandler.post {
+                                                                netDiagReport = r
+                                                                netDiagBusy = false
+                                                        }
+                                                }
+                                        },
+                                        modifier = Modifier.height(48.dp),
+                                        colors =
+                                                ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF2E7D6B)
+                                                ),
+                                        shape =
+                                                RoundedCornerShape(
+                                                        AppDimensions.ButtonCornerRadius
+                                                )
+                                ) {
+                                        Icon(
+                                                Icons.Default.Wifi,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                                "Diagnóstico de rede (4G pelo cabo)",
+                                                fontSize = 14.sp
+                                        )
+                                }
+
+                                if (showNetDiagDialog) {
+                                        AlertDialog(
+                                                onDismissRequest = {
+                                                        if (!netDiagBusy) showNetDiagDialog = false
+                                                },
+                                                confirmButton = {
+                                                        TextButton(
+                                                                onClick = {
+                                                                        if (!netDiagBusy)
+                                                                                showNetDiagDialog =
+                                                                                        false
+                                                                }
+                                                        ) { Text("Fechar") }
+                                                },
+                                                title = { Text("Diagnóstico de rede") },
+                                                text = {
+                                                        Column(
+                                                                modifier =
+                                                                        Modifier.heightIn(
+                                                                                        max = 420.dp
+                                                                                )
+                                                                                .verticalScroll(
+                                                                                        rememberScrollState()
+                                                                                )
+                                                        ) {
+                                                                Text(
+                                                                        if (netDiagBusy)
+                                                                                "Rodando… (pings de ~2s por interface — plugue o celular e aguarde)"
+                                                                        else
+                                                                                netDiagReport.ifBlank {
+                                                                                        "(sem resultado)"
+                                                                                },
+                                                                        fontSize = 12.sp,
+                                                                        fontFamily =
+                                                                                FontFamily.Monospace,
+                                                                        color = Color.White
+                                                                )
+                                                        }
+                                                },
+                                                containerColor = ImpTokens.Container
+                                        )
+                                }
+
+                                if (showWifiTestDialog) {
+                                        AlertDialog(
+                                                onDismissRequest = {
+                                                        if (!wifiTestBusy)
+                                                                showWifiTestDialog = false
+                                                },
+                                                confirmButton = {
+                                                        TextButton(
+                                                                onClick = {
+                                                                        if (!wifiTestBusy)
+                                                                                showWifiTestDialog =
+                                                                                        false
+                                                                }
+                                                        ) { Text("Fechar") }
+                                                },
+                                                title = { Text("Prioridade de WiFi (teste)") },
+                                                text = {
+                                                        Column(
+                                                                modifier =
+                                                                        Modifier.heightIn(
+                                                                                        max = 360.dp
+                                                                                )
+                                                                                .verticalScroll(
+                                                                                        rememberScrollState()
+                                                                                )
+                                                        ) {
+                                                                Text(
+                                                                        "Toque numa rede pra o carro pular nela (força a troca). O WiFi pode piscar ~10s e volta.",
+                                                                        fontSize = 11.sp,
+                                                                        color =
+                                                                                AppColors
+                                                                                        .TextSecondary
+                                                                )
+                                                                Spacer(
+                                                                        modifier =
+                                                                                Modifier.height(8.dp)
+                                                                )
+                                                                wifiSavedNets.forEach { (netId, ssid)
+                                                                        ->
+                                                                        Button(
+                                                                                onClick = {
+                                                                                        if (!wifiTestBusy
+                                                                                        ) {
+                                                                                                wifiTestBusy =
+                                                                                                        true
+                                                                                                wifiTestLog
+                                                                                                        .clear()
+                                                                                                wifiTestLog
+                                                                                                        .add(
+                                                                                                                "Pulando para \"$ssid\" (netId $netId)…"
+                                                                                                        )
+                                                                                                ServiceManager
+                                                                                                        .getInstance()
+                                                                                                        .switchWifiToSink(
+                                                                                                                context,
+                                                                                                                netId
+                                                                                                        ) { line
+                                                                                                                ->
+                                                                                                                wifiMainHandler
+                                                                                                                        .post {
+                                                                                                                                wifiTestLog
+                                                                                                                                        .add(
+                                                                                                                                                line
+                                                                                                                                        )
+                                                                                                                                if (line.contains(
+                                                                                                                                                "== fim =="
+                                                                                                                                        )
+                                                                                                                                )
+                                                                                                                                        wifiTestBusy =
+                                                                                                                                                false
+                                                                                                                        }
+                                                                                                        }
+                                                                                        }
+                                                                                },
+                                                                                enabled =
+                                                                                        !wifiTestBusy,
+                                                                                modifier =
+                                                                                        Modifier.fillMaxWidth()
+                                                                                                .padding(
+                                                                                                        vertical =
+                                                                                                                2.dp
+                                                                                                ),
+                                                                                shape =
+                                                                                        RoundedCornerShape(
+                                                                                                AppDimensions
+                                                                                                        .ButtonCornerRadius
+                                                                                        )
+                                                                        ) {
+                                                                                Text(
+                                                                                        "$ssid   ·   netId $netId",
+                                                                                        fontSize =
+                                                                                                13.sp
+                                                                                )
+                                                                        }
+                                                                }
+                                                                if (wifiTestLog.isNotEmpty()) {
+                                                                        Spacer(
+                                                                                modifier =
+                                                                                        Modifier.height(
+                                                                                                10.dp
+                                                                                        )
+                                                                        )
+                                                                        wifiTestLog.forEach {
+                                                                                Text(
+                                                                                        it,
+                                                                                        fontSize =
+                                                                                                11.sp,
+                                                                                        color =
+                                                                                                AppColors
+                                                                                                        .TextSecondary
+                                                                                )
+                                                                        }
+                                                                }
+                                                        }
+                                                }
+                                        )
+                                }
 
                                 Row(
                                         modifier = Modifier.fillMaxWidth(),
