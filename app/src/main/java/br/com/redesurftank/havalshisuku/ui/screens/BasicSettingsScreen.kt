@@ -564,16 +564,6 @@ fun BasicSettingsTab() {
                 mutableIntStateOf(prefs.getInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, 2048).coerceIn(512, 8192))
         }
         var blockDatatrack by remember { mutableStateOf(mdm.isDatatrackBlocked()) }
-        // Debloat: desativar apps do sistema (OEM) que rodam e consomem RAM/CPU (default OFF).
-        var disableNativeNavigation by remember {
-                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.key, false))
-        }
-        var disableNativeVoice by remember {
-                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.key, false))
-        }
-        var disableNativeWeather by remember {
-                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.key, false))
-        }
         var mobileDataUsedMb by remember { mutableStateOf(0L) }
         var mobileBlockReason by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(mobileControlEnabled, mobileDataCycleDay) {
@@ -784,51 +774,6 @@ fun BasicSettingsTab() {
                         onCheckedChange = {
                                 blockDatatrack = it
                                 br.com.redesurftank.havalshisuku.managers.MobileDataManager.setDatatrackBlocked(it)
-                        }
-                )
-        )
-
-        // ===== Debloat: desativar apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
-        // Reversível (reabilita ao desligar) e reaplicado no boot. Não mexe em AA/CarPlay/Waze.
-        settingsList.add(
-                SettingItem(
-                        title = "Desativar navegador GPS nativo (Neusoft)",
-                        description =
-                                "Remove pro usuário o app de navegação nativo (com.neusoft.na.navigation), que fica rodando e consome RAM/CPU da multimídia. Não afeta Android Auto / CarPlay / Waze. Reversível e reaplicado no boot.",
-                        group = SettingsGroups.FEATURES,
-                        checked = disableNativeNavigation,
-                        onCheckedChange = {
-                                disableNativeNavigation = it
-                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION.key, it).apply()
-                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
-                        }
-                )
-        )
-        settingsList.add(
-                SettingItem(
-                        title = "Desativar assistente de voz nativo (iFlyTek)",
-                        description =
-                                "Remove pro usuário o assistente de voz nativo (com.iflytek.cutefly.speechclient.hmi + com.beantechs.voiceclient), que fica rodando e consome RAM/CPU. Você perde o comando de voz OEM (\"Olá Haval\"). Reversível e reaplicado no boot.",
-                        group = SettingsGroups.FEATURES,
-                        checked = disableNativeVoice,
-                        onCheckedChange = {
-                                disableNativeVoice = it
-                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_VOICE.key, it).apply()
-                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
-                        }
-                )
-        )
-        settingsList.add(
-                SettingItem(
-                        title = "Desativar previsão do tempo (OEM)",
-                        description =
-                                "Remove pro usuário o serviço de previsão do tempo (com.beantechs.weatherservice), que fica rodando e consome RAM/CPU. Reversível e reaplicado no boot.",
-                        group = SettingsGroups.FEATURES,
-                        checked = disableNativeWeather,
-                        onCheckedChange = {
-                                disableNativeWeather = it
-                                prefs.edit().putBoolean(SharedPreferencesKeys.DISABLE_NATIVE_WEATHER.key, it).apply()
-                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance().ensureDebloatedSystemApps()
                         }
                 )
         )
