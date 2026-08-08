@@ -2391,8 +2391,9 @@ public class ServiceManager {
                     // Ao ligar o carro, reaplica o % de bateria do HEV Prioritario (o carro costuma resetar).
                     applyHevSocTargetIfActive("POWER_ON");
                 }
-            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+            } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false) || sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false))) {
                 syncDriverSeatVentilationWithHvac(value, "HVAC_POWER_EVENT");
+                syncPassengerSeatVentilationWithHvac(value, "HVAC_POWER_EVENT");
             } else if (key.equals(CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_MAX_AC_ON_UNLOCK.getKey(), false)) {
                 if (isMaxAcActive) updateMaxAcSmoothing();
             } else if (key.equals(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue())) {
@@ -2824,6 +2825,7 @@ public class ServiceManager {
         restoreBluetoothIfWasDisabled("STARTUP_RECONCILE");
         restoreWifiTetherIfWasDisabled();
         syncDriverSeatVentilationWithHvac(hvacPowerMode, "STARTUP_RECONCILE");
+        syncPassengerSeatVentilationWithHvac(hvacPowerMode, "STARTUP_RECONCILE");
     }
 
     private void syncDriverSeatVentilationWithHvac(String hvacPowerMode, String reason) {
@@ -2858,6 +2860,42 @@ public class ServiceManager {
                 )
         );
         updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), targetLevel);
+    }
+
+    private void syncPassengerSeatVentilationWithHvac(String hvacPowerMode, String reason) {
+        if (sharedPreferences == null ||
+                !sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_PASSENGER_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
+            return;
+        }
+
+        String targetLevel;
+        if ("1".equals(hvacPowerMode)) {
+            targetLevel = "3";
+        } else if ("0".equals(hvacPowerMode)) {
+            targetLevel = "0";
+        } else {
+            logPersistentClusterEvent(
+                    "seat_ventilation_auto_skipped",
+                    persistentEventDetails(
+                            "reason", reason,
+                            "seat", "passenger",
+                            "hvacPowerMode", hvacPowerMode,
+                            "cause", "unknown_hvac_power_mode"
+                    )
+            );
+            return;
+        }
+
+        logPersistentClusterEvent(
+                "seat_ventilation_auto_command",
+                persistentEventDetails(
+                        "reason", reason,
+                        "seat", "passenger",
+                        "hvacPowerMode", hvacPowerMode,
+                        "targetLevel", targetLevel
+                )
+        );
+        updateData(CarConstants.CAR_COMFORT_SETTING_PASSENGER_SEAT_VENTILATION_LEVEL.getValue(), targetLevel);
     }
 
     public void disableWifiTether() {
