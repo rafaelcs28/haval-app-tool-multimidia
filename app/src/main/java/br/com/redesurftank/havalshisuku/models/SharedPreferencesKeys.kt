@@ -404,5 +404,13 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     DATATRACK_DISABLED_BY_APP("datatrackDisabledByApp", "Controle interno: DataTrack desabilitado por este app"),
     MOBILE_DATA_TRAFFIC_ACCUM_BYTES("mobileDataTrafficAccumBytes", "Acumulado de bytes móveis no ciclo (fallback TrafficStats)"),
     MOBILE_DATA_TRAFFIC_LAST_READING("mobileDataTrafficLastReading", "Última leitura do TrafficStats móvel (controle interno)"),
-    MOBILE_DATA_TRAFFIC_CYCLE_TAG("mobileDataTrafficCycleTag", "Ciclo atual do acumulador de bytes (controle interno)")
+    MOBILE_DATA_TRAFFIC_CYCLE_TAG("mobileDataTrafficCycleTag", "Ciclo atual do acumulador de bytes (controle interno)"),
+    ENABLE_SEATBELT_VOICE(
+            "enableSeatbeltVoice",
+            "Aviso de voz quando alguém está sem cinto com o carro em movimento"
+    ),
+    SEATBELT_VOICE_MIN_VOLUME_PCT(
+            "seatbeltVoiceMinVolumePct",
+            "Volume mínimo (% do volume de mídia) forçado enquanto o aviso de cinto toca"
+    )
 }
