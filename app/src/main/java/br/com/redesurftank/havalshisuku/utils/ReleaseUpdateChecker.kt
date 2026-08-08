@@ -11,8 +11,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object ReleaseUpdateChecker {
+    // Aponta pro NOSSO fork (rafaelcs28): as releases oficiais do bobaoapae falham por assinatura
+    // diferente (nossa build usa a chave do user). Assim o "Buscar atualizacao" (Informacoes) instala
+    // as NOSSAS preview releases via OTA.
     private const val RELEASES_URL =
-            "https://api.github.com/repos/bobaoapae/haval-app-tool-multimidia/releases"
+            "https://api.github.com/repos/rafaelcs28/haval-app-tool-multimidia/releases"
 
     suspend fun getAllReleaseInfo(): UpdateCheckResult {
         return withContext(Dispatchers.IO) {
