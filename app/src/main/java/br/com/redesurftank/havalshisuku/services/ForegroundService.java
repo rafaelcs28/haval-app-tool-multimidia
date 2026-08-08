@@ -715,6 +715,12 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             Log.e(TAG, "Error starting HotRouter: " + e.getMessage(), e);
         }
 
+        try {
+            br.com.redesurftank.havalshisuku.managers.WifiPriorityManager.getInstance().onServicesReady();
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting WifiPriority: " + e.getMessage(), e);
+        }
+
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction("com.beantechs.intelligentvehiclecontrol.INIT_COMPLETED");
 

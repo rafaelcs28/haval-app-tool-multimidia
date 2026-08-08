@@ -3810,4 +3810,127 @@ public class ServiceManager {
             Log.w(TAG, "registerMobileDataTetherReceiver: " + t.getMessage());
         }
     }
+
+    // ===== Controle de WiFi (WifiPriorityManager / EcoTrip) =====
+    // Lista as redes WiFi salvas (netId + SSID) via dumpsys (shell). Saída: "netId|SSID" por item.
+    // Pro botão de teste montar a lista dinâmica (sem chumbar netId).
+    public java.util.List<String> listSavedWifi() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        try {
+            String raw = ShizukuUtils.runCommandAndGetOutput(new String[]{"sh", "-c", "dumpsys wifi | grep '^ID:'"});
+            if (raw != null) {
+                for (String line : raw.split("\n")) {
+                    int idIdx = line.indexOf("ID:");
+                    int ssidIdx = line.indexOf("SSID:");
+                    if (idIdx < 0 || ssidIdx <= idIdx) continue;
+                    String idPart = line.substring(idIdx + 3, ssidIdx).trim();
+                    String rest = line.substring(ssidIdx + 5).trim();
+                    String ssid;
+                    if (rest.startsWith("\"")) {
+                        int end = rest.indexOf('"', 1);
+                        ssid = end > 0 ? rest.substring(1, end) : rest;
+                    } else {
+                        int sp = rest.indexOf(' ');
+                        ssid = sp > 0 ? rest.substring(0, sp) : rest;
+                    }
+                    try {
+                        Integer.parseInt(idPart);
+                        out.add(idPart + "|" + ssid);
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
+    }
+
+    // Troca (força) o WiFi pra netId e re-habilita as outras (fallback). Retorna true se o
+    // enableNetwork principal deu certo. BLOCKING (Shizuku + sleep) -> chamar FORA da main thread.
+    // Reutilizado pelo WifiPriorityManager (troca automática por prioridade).
+    public boolean switchWifiToNetwork(int netId) {
+        try {
+            IBinder raw = getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.IWifiManager wifi =
+                    android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+            String pkg = App.getContext().getPackageName();
+            if (wifi.getWifiEnabledState() != 3) return false; // WiFi não ENABLED -> aborta
+            // Conecta em netId e DESABILITA as outras -> fica grudado na preferida.
+            // NÃO re-habilita as outras aqui: re-habilitar deixava o auto-join do Android voltar pra
+            // rede de sinal mais forte (a de prioridade MENOR) ~8-10s depois (o "volta pro outro").
+            // As outras ficam desabilitadas enquanto o vigia mantém a preferida; enableAllSavedWifi()
+            // restaura o pool (fallback quando a preferida cai / desconectado / recurso desligado).
+            return wifi.enableNetwork(netId, true, pkg);
+        } catch (Throwable t) {
+            Log.e(TAG, "switchWifiToNetwork failed", t);
+            return false;
+        }
+    }
+
+    /** Re-habilita TODAS as redes salvas (desfaz o disableOthers do switch). Pro fallback quando a
+     *  preferida cai e pra restaurar o comportamento normal quando o recurso de prioridade é desligado. */
+    public void enableAllSavedWifi() {
+        try {
+            IBinder raw = getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.IWifiManager wifi =
+                    android.net.wifi.IWifiManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+            String pkg = App.getContext().getPackageName();
+            for (String e : listSavedWifi()) {
+                try {
+                    int id = Integer.parseInt(e.substring(0, e.indexOf('|')));
+                    wifi.enableNetwork(id, false, pkg);
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "enableAllSavedWifi failed", t);
+        }
+    }
+
+    /** Cadastra (ou atualiza) uma rede WiFi com SSID+senha e devolve o netId (-1 se falhar). NÃO conecta
+     *  (use switchWifiToNetwork depois). Senha vazia/null = rede aberta; senão WPA/WPA2-PSK. Via
+     *  WifiManager do app (precisa CHANGE_WIFI_STATE). Pro comando remoto "conectar em rede nova". */
+    public int addWifiNetwork(String ssid, String password) {
+        try {
+            WifiManager wm = (WifiManager) App.getContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null || ssid == null || ssid.isEmpty()) return -1;
+            android.net.wifi.WifiConfiguration wc = new android.net.wifi.WifiConfiguration();
+            wc.SSID = "\"" + ssid + "\"";
+            if (password == null || password.isEmpty()) {
+                wc.allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.NONE);
+            } else {
+                wc.preSharedKey = "\"" + password + "\"";
+                wc.allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK);
+            }
+            // se já existe salva com esse SSID, atualiza (mantém o netId em vez de duplicar)
+            for (String e : listSavedWifi()) {
+                int bar = e.indexOf('|');
+                if (bar > 0 && e.substring(bar + 1).equals(ssid)) {
+                    try { wc.networkId = Integer.parseInt(e.substring(0, bar)); } catch (Throwable ignored) {}
+                    break;
+                }
+            }
+            int netId = wm.addNetwork(wc);
+            if (netId >= 0) {
+                try { wm.saveConfiguration(); } catch (Throwable ignored) {}
+            }
+            return netId;
+        } catch (Throwable t) {
+            Log.e(TAG, "addWifiNetwork failed", t);
+            return -1;
+        }
+    }
+
+    /** Liga/desliga o WiFi do carro via `svc wifi` (Shizuku). ATENÇÃO: desligar pode CORTAR o canal
+     *  remoto se o carro só tem internet pelo WiFi (o EcoTrip fica sem MQTT). Retorna true se rodou. */
+    public boolean setCarWifiEnabled(boolean enabled) {
+        try {
+            ShizukuUtils.runCommandAndGetOutput(new String[]{"svc", "wifi", enabled ? "enable" : "disable"});
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "setCarWifiEnabled failed", t);
+            return false;
+        }
+    }
+
 }

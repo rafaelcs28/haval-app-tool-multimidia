@@ -25,6 +25,8 @@ public class HotRouterManager {
     private static final String PIDFILE = BASE + "/hotrouter.pid";
     private static final String STATEFILE = BASE + "/hotrouter.state";
     private static final String ASSET_NAME = "hotrouter.sh";
+    // Interface WLAN externa que o daemon roteia (mesma do hotrouter.sh: WLAN_IF="wlan0").
+    private static final String WLAN_IF = "wlan0";
 
     private static final long WATCHDOG_INTERVAL_MS = 60000L;
     private static final long START_GRACE_MS = 20000L;
@@ -296,5 +298,61 @@ public class HotRouterManager {
             return new Status(MODE_STARTING, 0L);
         }
         return new Status(MODE_ERROR, 0L);
+    }
+
+    /**
+     * Nome (SSID) da rede Wi-Fi externa (wlan0) que o HotRouter está roteando. Lê via shell (Shizuku)
+     * com fallback entre ferramentas (iw -> wpa_cli -> iwconfig); parse em Java pra evitar escaping.
+     * Retorna null se não conseguir determinar. Chamar OFF da main thread.
+     */
+    public String readRoutedWifiNameBlocking() {
+        try {
+            // 1) iw dev wlan0 link  ->  linha "\tSSID: <nome>"
+            String out = ShizukuUtils.runCommandAndGetOutput(
+                    new String[]{"sh", "-c", "iw dev " + WLAN_IF + " link 2>/dev/null"});
+            for (String line : out.split("\n")) {
+                int i = line.indexOf("SSID:");
+                if (i >= 0) {
+                    String v = line.substring(i + 5).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 2) wpa_cli -i wlan0 status  ->  "ssid=<nome>"
+            out = ShizukuUtils.runCommandAndGetOutput(
+                    new String[]{"sh", "-c", "wpa_cli -i " + WLAN_IF + " status 2>/dev/null"});
+            for (String line : out.split("\n")) {
+                String t = line.trim();
+                if (t.startsWith("ssid=")) {
+                    String v = t.substring(5).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 3) iwconfig wlan0  ->  ESSID:"<nome>"
+            out = ShizukuUtils.runCommandAndGetOutput(
+                    new String[]{"sh", "-c", "iwconfig " + WLAN_IF + " 2>/dev/null"});
+            int q = out.indexOf("ESSID:\"");
+            if (q >= 0) {
+                int end = out.indexOf('"', q + 7);
+                if (end > q + 7) {
+                    String v = out.substring(q + 7, end).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 4) Neste head unit iw/wpa_cli/iwconfig voltam vazio; o Android reporta a rede WiFi
+            //    conectada no netstats como networkId="<nome>" (a wlan0 ativa). Fonte confiavel aqui.
+            out = ShizukuUtils.runCommandAndGetOutput(
+                    new String[]{"sh", "-c", "dumpsys netstats 2>/dev/null | grep -m1 networkId"});
+            int n = out.indexOf("networkId=\"");
+            if (n >= 0) {
+                int end2 = out.indexOf('"', n + 11);
+                if (end2 > n + 11) {
+                    String v2 = out.substring(n + 11, end2).trim();
+                    if (!v2.isEmpty()) return v2;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "readRoutedWifiNameBlocking failed", e);
+        }
+        return null;
     }
 }
