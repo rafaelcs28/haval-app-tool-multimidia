@@ -10,8 +10,13 @@ import kotlin.math.max
  *
  * The Android host can receive several CAN changes inside one display frame. Keeping only the
  * latest value for these gauges lets the projector deliver one JavaScript batch per frame instead
- * of queueing multiple evaluateJavascript calls ahead of steering-wheel input. Contract
- * subscriptions remain outside this policy and continue through the normal bridge path.
+ * of queueing multiple evaluateJavascript calls ahead of steering-wheel input.
+ *
+ * These 5 gauge keys are batched even when a theme SUBSCRIBES to them via the contract bridge: the
+ * projector flush pushes the coalesced value on BOTH channels (legacy control + bridge
+ * pushOnDataChanged) once per ~30 fps frame. Analogico V2 (Sport) subscribes to speed/rpm/power,
+ * and per-CAN-sample bridge pushes were saturating the app process (~80% CPU), making the whole
+ * cluster + menu navigation lag. 30 fps is imperceptible for a needle, so batching is safe here.
  */
 internal object SportTelemetryBatchPolicy {
     const val FRAME_INTERVAL_MS = 33L
@@ -33,11 +38,16 @@ internal object SportTelemetryBatchPolicy {
 
     fun isBatchable(key: String): Boolean = key in batchableKeys
 
+    // Batch the 5 high-frequency gauge keys whenever a Sport theme is active — including when the
+    // theme subscribes to them via the contract bridge. The flush pushes the coalesced value on
+    // both channels (legacy control + bridge), so subscribers still get it, just rate-limited to
+    // ~30 fps instead of once per CAN sample. hasThemeSubscription is kept for API/callsite
+    // compatibility but is intentionally no longer a gate (subscribed gauges were the flood).
     inline fun shouldBatch(
         isSportTheme: Boolean,
         key: String,
-        hasThemeSubscription: () -> Boolean
-    ): Boolean = isSportTheme && isBatchable(key) && !hasThemeSubscription()
+        @Suppress("UNUSED_PARAMETER") hasThemeSubscription: () -> Boolean
+    ): Boolean = isSportTheme && isBatchable(key)
 
     fun buildControlUpdates(
         values: Map<String, String>,

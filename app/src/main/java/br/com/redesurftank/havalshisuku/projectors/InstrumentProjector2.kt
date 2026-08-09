@@ -1728,6 +1728,25 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         batteryVoltage = result.batteryVoltage
         batteryCurrent = result.batteryCurrent
         batchEvaluateLegacyControlStrings(webView, result.controlUpdates)
+
+        // Contract bridge (coalesced): themes that SUBSCRIBE to these high-frequency gauge keys
+        // now get one push per ~30 fps frame here, instead of one per CAN sample in
+        // handleDataChanged. Mirrors that immediate bridge push, just rate-limited — this is what
+        // removes the ~80% app CPU on Analogico V2 (Sport subscribes to speed/rpm/power, which
+        // previously bypassed this batch and flooded pushOnDataChanged per CAN message).
+        val bridge = themeBridge
+        if (bridge != null) {
+            for ((key, value) in values) {
+                val themeKey =
+                    br.com.redesurftank.havalshisuku.bridge.BridgeContractTranslator
+                        .translateCanonicalToThemeKey(key)
+                if (subscribedKeys.contains(themeKey)) {
+                    bridge.pushOnDataChanged(themeKey, value)
+                } else if (subscribedKeys.contains(key)) {
+                    bridge.pushOnDataChanged(key, value)
+                }
+            }
+        }
     }
 
     private fun clearPendingSportTelemetryBatch() {
