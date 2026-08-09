@@ -3,6 +3,7 @@ package br.com.redesurftank.havalshisuku.diagnostics
 import android.content.Context
 import br.com.redesurftank.havalshisuku.BuildConfig
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,7 +38,10 @@ object ProblemReportBuilder {
     private const val LOG_DIRECTORY_NAME = "cluster-diagnostics"
     private const val LOG_FILE_PREFIX = "cluster-events-"
     private const val LOG_FILE_SUFFIX = ".log"
-    private const val MAX_PERSISTENT_LOG_CHARS = 1_500_000
+    // Cauda do log persistente do cluster anexada ao relatorio. So os ultimos minutos importam
+    // pra um bug; numa viagem longa o arquivo do dia passa de 40 MB, entao mantemos leve.
+    // (~400 K chars ~= 2 min no ritmo tipico desse log.)
+    private const val MAX_PERSISTENT_LOG_CHARS = 400_000
     private const val MAX_LOGCAT_CHARS = 20_000
     private const val MAX_LOG_EXCERPT_CHARS = 60_000
     private const val LOGCAT_LINE_LIMIT = 220
@@ -137,7 +141,7 @@ object ProblemReportBuilder {
             )
             appendLine("- Arquivo existe: ${yesNo(captureStatus.fileExists)}")
             appendLine("- Tamanho do arquivo: ${captureStatus.fileSizeBytes} bytes")
-            appendLine("- Observacao: o app anexa somente o log persistente do dia atual para manter o envio leve.")
+            appendLine("- Observacao: o app anexa somente a CAUDA (ultimos minutos) do log persistente do dia para manter o envio leve.")
             appendLine()
             if (persistentLogText.isNullOrBlank()) {
                 appendLine("Log do dia nao encontrado ou vazio.")
@@ -167,7 +171,27 @@ object ProblemReportBuilder {
 
     private fun readLogTail(file: File, maxChars: Int): String? {
         if (!file.isFile) return null
-        return runCatching { trimToLastChars(file.readText(Charsets.UTF_8), maxChars) }.getOrNull()
+        return runCatching {
+            val length = file.length()
+            // Le SOMENTE a cauda do arquivo com seek. Antes usava readText(), que carregava o
+            // arquivo do dia INTEIRO (dezenas de MB numa viagem longa) pra so depois cortar ->
+            // OutOfMemoryError -> getOrNull() engolia e a secao do relatorio caia vazia.
+            val maxBytes = maxChars.toLong().coerceAtLeast(0L)
+            val start = (length - maxBytes).coerceAtLeast(0L)
+            val bytes =
+                    RandomAccessFile(file, "r").use { raf ->
+                        raf.seek(start)
+                        val len = (length - start).toInt()
+                        ByteArray(len).also { raf.readFully(it) }
+                    }
+            var text = String(bytes, Charsets.UTF_8)
+            // Se cortou no meio de uma linha, descarta a primeira linha parcial.
+            if (start > 0L) {
+                val nl = text.indexOf('\n')
+                if (nl in 0 until text.length - 1) text = text.substring(nl + 1)
+            }
+            trimToLastChars(text, maxChars)
+        }.getOrNull()
     }
 
     private fun readLogcatSnapshot(): String {
