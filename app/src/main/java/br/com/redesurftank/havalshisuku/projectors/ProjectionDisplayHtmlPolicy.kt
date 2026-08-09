@@ -32,6 +32,9 @@ internal object ProjectionDisplayHtmlPolicy {
         "transition:x1 80ms linear,y1 80ms linear,x2 80ms linear,y2 80ms linear"
     private const val SPORT_GAUGE_NEW_SPEED_TRANSITION =
         "transition:x1 34ms linear,y1 34ms linear,x2 34ms linear,y2 34ms linear"
+    // Analogico V2 needle interpolator (eD) self-throttle: ~30 fps -> ~20 fps.
+    private const val SPORT_GAUGE_NEEDLE_THROTTLE_30FPS = "t-eR<33"
+    private const val SPORT_GAUGE_NEEDLE_THROTTLE_20FPS = "t-eR<50"
     private const val SPORT_HIDDEN_CANVAS_LOOP_START =
         "!function A(){let r,n;s.clearRect(0,0,500,500),"
     private const val SPORT_VISIBLE_CANVAS_LOOP_START =
@@ -374,6 +377,18 @@ internal object ProjectionDisplayHtmlPolicy {
         return html.replace(SPORT_HIDDEN_CANVAS_LOOP_START, SPORT_VISIBLE_CANVAS_LOOP_START) to true
     }
 
+    /**
+     * Analogico V2's needle interpolator (eD) already self-throttles to ~30 fps (`t-eR<33`). On the
+     * heavy Sport gauges that still saturates the WebView compositor, so the whole display AND the
+     * cluster menu navigation lag. Drop it to ~20 fps (`t-eR<50`), cutting roughly a third of the
+     * per-frame compositor work — imperceptible for a needle. Fail-closed: patch only the exact,
+     * unique 30 fps guard and leave any other/updated bundle untouched.
+     */
+    private fun reduceLegacySportNeedleFrameRate(html: String): String {
+        if (html.countOccurrences(SPORT_GAUGE_NEEDLE_THROTTLE_30FPS) != 1) return html
+        return html.replace(SPORT_GAUGE_NEEDLE_THROTTLE_30FPS, SPORT_GAUGE_NEEDLE_THROTTLE_20FPS)
+    }
+
     fun preserveUserDisplaySelection(html: String, themeName: String? = null): Result {
         var removedOverrides = 0
         val displayPatchedHtml = legacySportProjectionDisplayOverride.replace(html) { match ->
@@ -431,15 +446,21 @@ internal object ProjectionDisplayHtmlPolicy {
             } else {
                 motionPatchedHtml to false
             }
+        val needlePatchedHtml =
+            if (isKnownSportTheme && hasKnownSportStructure) {
+                reduceLegacySportNeedleFrameRate(runtimePatchedHtml)
+            } else {
+                runtimePatchedHtml
+            }
         val shouldInjectSportVisualPolish =
             isKnownSportTheme &&
                 hasKnownSportStructure &&
-                !runtimePatchedHtml.contains(SPORT_VISUAL_POLISH_STYLE_MARKER)
+                !needlePatchedHtml.contains(SPORT_VISUAL_POLISH_STYLE_MARKER)
         val fullyPatchedHtml =
             if (shouldInjectSportVisualPolish) {
-                injectBeforeClosingHead(runtimePatchedHtml, sportVisualPolishStyle)
+                injectBeforeClosingHead(needlePatchedHtml, sportVisualPolishStyle)
             } else {
-                runtimePatchedHtml
+                needlePatchedHtml
             }
 
         return Result(
