@@ -13,6 +13,7 @@ import br.com.redesurftank.havalshisuku.models.CommandListener;
 import moe.shizuku.server.IRemoteProcess;
 import moe.shizuku.server.IShizukuService;
 import rikka.shizuku.Shizuku;
+import br.com.redesurftank.havalshisuku.diagnostics.SpawnRateDiagnostics;
 
 public class ShizukuUtils {
 
@@ -23,6 +24,7 @@ public class ShizukuUtils {
     }
 
     public static String runCommandAndGetOutput(String[] command) {
+        SpawnRateDiagnostics.recordSpawn(command); // instrumentacao: spawns/min por categoria
         IBinder binder = Shizuku.getBinder();
         if (binder == null) {
             Log.e(TAG, "Shizuku binder is null. Is Shizuku running?");
@@ -141,6 +143,7 @@ public class ShizukuUtils {
     }
 
     public static String runCommandAndWaitForString(String[] command, String... targetStrings) {
+        SpawnRateDiagnostics.recordSpawn(command); // instrumentacao: spawns/min por categoria
         IBinder binder = Shizuku.getBinder();
         if (binder == null) {
             Log.e(TAG, "Shizuku binder is null. Is Shizuku running?");
@@ -272,6 +275,7 @@ public class ShizukuUtils {
     }
 
     public static void runCommandOnBackground(String[] command, CommandListener listener) {
+        SpawnRateDiagnostics.recordSpawn(command); // instrumentacao: spawns/min por categoria
         IBinder binder = Shizuku.getBinder();
         if (binder == null) {
             Log.e(TAG, "Shizuku binder is null. Is Shizuku running?");

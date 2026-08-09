@@ -24,6 +24,10 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import br.com.redesurftank.havalshisuku.diagnostics.BugMarker
+import br.com.redesurftank.havalshisuku.diagnostics.BugReportUploader
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.remember
@@ -2774,6 +2778,7 @@ private fun DashboardHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                        DashboardBugMarkButton()
                         DashboardStatusChip(
                                 icon = Icons.Default.DeviceThermostat,
                                 text = "Cabine ${formatTemperature(snapshot.insideTemp)}"
@@ -2837,6 +2842,92 @@ private fun DashboardHeaderControlButton(
                         )
                 }
         }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DashboardBugMarkButton() {
+        val context = LocalContext.current
+        val red = Color(0xFFE53935)
+        var showTokenDialog by remember { mutableStateOf(false) }
+        Surface(
+                modifier = Modifier
+                        .height(44.dp)
+                        .combinedClickable(
+                                onClick = { BugMarker.mark(context) },
+                                onLongClick = { showTokenDialog = true }
+                        ),
+                color = red.copy(alpha = 0.20f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, red.copy(alpha = 0.55f))
+        ) {
+                Row(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                        Icon(
+                                Icons.Default.BugReport,
+                                contentDescription = "Marcar bug",
+                                tint = red,
+                                modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                                text = "Bug",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontFamily = DashboardReadableFont,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                        )
+                }
+        }
+        if (showTokenDialog) {
+                DashboardBugTokenDialog(onDismiss = { showTokenDialog = false })
+        }
+}
+
+@Composable
+private fun DashboardBugTokenDialog(onDismiss: () -> Unit) {
+        val context = LocalContext.current
+        val prefs = remember {
+                context.getSharedPreferences(BugReportUploader.PREFS_NAME, Context.MODE_PRIVATE)
+        }
+        var token by remember {
+                mutableStateOf(prefs.getString(BugReportUploader.TOKEN_PREF_KEY, "").orEmpty())
+        }
+        AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Token do GitHub (repo de bugs)") },
+                text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                        "Cole um token fine-grained com Contents: write no repositório " +
+                                                "${BugReportUploader.REPO}. Fica salvo só no carro; " +
+                                                "o botão Bug usa ele pra subir o relatório.",
+                                        fontSize = 12.sp,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                )
+                                OutlinedTextField(
+                                        value = token,
+                                        onValueChange = { token = it },
+                                        singleLine = true,
+                                        label = { Text("github_pat_...") },
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                        }
+                },
+                confirmButton = {
+                        TextButton(onClick = {
+                                prefs.edit()
+                                        .putString(BugReportUploader.TOKEN_PREF_KEY, token.trim())
+                                        .apply()
+                                Toast.makeText(context, "Token salvo", Toast.LENGTH_SHORT).show()
+                                onDismiss()
+                        }) { Text("Salvar") }
+                },
+                dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        )
 }
 
 @Composable
