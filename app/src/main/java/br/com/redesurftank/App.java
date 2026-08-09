@@ -40,6 +40,12 @@ public class App extends Application {
                 "app_start",
                 "versionCode=" + BuildConfig.VERSION_CODE + " versionName=" + BuildConfig.VERSION_NAME
         );
+        // Diagnóstico de viagem (só -preview): spawns/min do Shizuku + logcat rotativo em
+        // /data/local/tmp/impulse-trip pra ler por telnet DEPOIS da viagem.
+        if (BuildConfig.IMPULSE_REPORT_DIAGNOSTICS_ENABLED) {
+            br.com.redesurftank.havalshisuku.diagnostics.SpawnRateDiagnostics.start(this);
+            br.com.redesurftank.havalshisuku.diagnostics.TripLogcatCapture.start();
+        }
         br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher.ensureDefaultDesktopShortcuts();
 
         // Before ForegroundService / cluster projector start: if the active theme is
