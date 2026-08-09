@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.platform.LocalContext
+import br.com.redesurftank.havalshisuku.diagnostics.BugMarker
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.remember
@@ -2774,6 +2776,7 @@ private fun DashboardHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                        DashboardBugMarkButton()
                         DashboardStatusChip(
                                 icon = Icons.Default.DeviceThermostat,
                                 text = "Cabine ${formatTemperature(snapshot.insideTemp)}"
@@ -2829,6 +2832,40 @@ private fun DashboardHeaderControlButton(
                         )
                         Text(
                                 text = text,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontFamily = DashboardReadableFont,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                        )
+                }
+        }
+}
+
+@Composable
+private fun DashboardBugMarkButton() {
+        val context = LocalContext.current
+        val red = Color(0xFFE53935)
+        Surface(
+                onClick = { BugMarker.mark(context) },
+                modifier = Modifier.height(44.dp),
+                color = red.copy(alpha = 0.20f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, red.copy(alpha = 0.55f))
+        ) {
+                Row(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                        Icon(
+                                Icons.Default.BugReport,
+                                contentDescription = "Marcar bug",
+                                tint = red,
+                                modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                                text = "Bug",
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontFamily = DashboardReadableFont,
