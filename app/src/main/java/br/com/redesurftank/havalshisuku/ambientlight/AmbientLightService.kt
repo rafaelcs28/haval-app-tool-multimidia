@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
+import br.com.redesurftank.App
 
 class AmbientLightService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -26,10 +28,14 @@ class AmbientLightService : Service() {
     private var driveModeListenerRegistered = false
     private var currentDriveMode = DriveMode.UNKNOWN
 
+    private var ambientAlertActive = false
+
     private val driveModeListener =
         IDataChanged { key, value ->
-            if (key == CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value) {
-                handleDriveModeChanged(value)
+            when (key) {
+                CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value -> handleDriveModeChanged(value)
+                CarConstants.CAR_BASIC_DOOR_STATUS.value,
+                CarConstants.CAR_BASIC_GEAR_STATUS.value -> evaluateAmbientAlert()
             }
         }
 
@@ -231,6 +237,39 @@ class AmbientLightService : Service() {
             return
         }
         animationController.applyDriveMode(mode)
+    }
+
+    // Alerta simples na fita: porta aberta (qualquer) OU ré engatada -> pisca vermelho; some -> restaura
+    // o modo. Gated por ENABLE_AMBIENT_ALERT (default OFF) e pela luz ambiente conectada.
+    private fun evaluateAmbientAlert() {
+        val settings = AmbientLightSettings.load()
+        val alertOn =
+            App.getDeviceProtectedContext()
+                .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+                .getBoolean(SharedPreferencesKeys.ENABLE_AMBIENT_ALERT.key, false)
+        if (!settings.enabled || settings.deviceAddress.isNullOrBlank() || !alertOn) {
+            if (ambientAlertActive) {
+                ambientAlertActive = false
+                animationController.applyDriveMode(currentDriveMode)
+            }
+            return
+        }
+        val sm = ServiceManager.getInstance()
+        val doorRaw = sm.getData(CarConstants.CAR_BASIC_DOOR_STATUS.value)
+        val gearRaw = sm.getData(CarConstants.CAR_BASIC_GEAR_STATUS.value)
+        val doorOpen =
+            doorRaw?.replace("{", "")?.replace("}", "")?.split(",")?.any { it.trim() == "1" } == true
+        val reverse = gearRaw?.trim() == "4"
+        val shouldAlert = doorOpen || reverse
+        if (shouldAlert && !ambientAlertActive) {
+            ambientAlertActive = true
+            Log.i(TAG, "ambient alert ON door=$doorOpen reverse=$reverse")
+            animationController.triggerAlertAnimation()
+        } else if (!shouldAlert && ambientAlertActive) {
+            ambientAlertActive = false
+            Log.i(TAG, "ambient alert OFF")
+            animationController.applyDriveMode(currentDriveMode)
+        }
     }
 
     private fun stopAmbientLight() {
