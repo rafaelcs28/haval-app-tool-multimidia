@@ -165,6 +165,17 @@ internal object ProjectionDisplayHtmlPolicy {
             0 2px 8px rgba(0, 0, 0, 0.98),
             0 0 18px rgba(0, 0, 0, 0.78) !important;
         }
+        .dashboard-ev-mode[data-haval-submode]:not([data-haval-submode=""])::after {
+          content: attr(data-haval-submode) !important;
+          display: block !important;
+          margin-top: 2px !important;
+          font-size: 0.5em !important;
+          font-weight: 500 !important;
+          line-height: 1 !important;
+          letter-spacing: 0.4px !important;
+          color: rgba(235, 240, 248, 0.82) !important;
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9) !important;
+        }
         #app.display-analogico-v2 .g20-v2-bottom-bar {
           isolation: isolate !important;
           overflow: visible !important;

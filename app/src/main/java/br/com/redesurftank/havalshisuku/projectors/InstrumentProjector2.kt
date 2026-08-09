@@ -1514,6 +1514,11 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     }
                     CarConstants.CAR_EV_INFO_CUR_BATTERY_POWER_PERCENTAGE.value -> {
                         evaluateJsIfReady(webView, "control('batteryPercent', '$value')")
+                        // Atualiza a % na sub-linha do submodo HEV (Sport) ao vivo.
+                        pushEvSubmodeSublineAttr(
+                                ServiceManager.getInstance()
+                                        .getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
+                        )
                     }
                     CarConstants.CAR_EV_INFO_FUEL_MODE_REMAIN_ODOMETER.value -> {
                         evaluateJsIfReady(webView, "control('fuelRange', '$value')")
@@ -1554,10 +1559,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                         )
                     }
                     CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value -> {
-                        evaluateJsIfReady(
-                                webView,
-                                "control('evMode', '${evModeLabelWithSubmode(value)}')"
-                        )
+                        pushEvModeCluster(value)
                     }
                     CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value,
                     CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.value -> {
@@ -1568,10 +1570,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                         val evModeVal =
                                 ServiceManager.getInstance()
                                         .getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
-                        evaluateJsIfReady(
-                                webView,
-                                "control('evMode', '${evModeLabelWithSubmode(evModeVal)}')"
-                        )
+                        pushEvModeCluster(evModeVal)
                     }
                     CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value -> {
                         val label = MainMenu.DrivingModeOptions.getLabel(value)
@@ -2100,6 +2099,52 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         return base
     }
 
+    /**
+     * Sub-linha do submodo HEV pro cabeçalho do tema Sport: "Inteligente NN%" / "Prioridade NN%"
+     * (NN = % ATUAL da bateria). Vazia fora do HEV. Renderizada em fonte menor (metade) via CSS
+     * (.dashboard-ev-mode::after), injetada junto com o sportVisualPolish.
+     */
+    private fun evSubmodeSublineText(evModeValue: String?): String {
+        if (evModeValue?.trim() != "0") return "" // só HEV
+        val sm = ServiceManager.getInstance()
+        val reserve = sm.getData(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value)?.trim()
+        val submode = if (reserve == "2") "Prioridade" else "Inteligente"
+        val batt =
+            sm.getData(CarConstants.CAR_EV_INFO_CUR_BATTERY_POWER_PERCENTAGE.value)
+                ?.trim()
+                ?.toFloatOrNull()
+                ?.toInt()
+        return if (batt != null) "$submode $batt%" else submode
+    }
+
+    private fun pushEvSubmodeSublineAttr(evModeValue: String?) {
+        if (!isSportThemeActive()) return
+        val sub = evSubmodeSublineText(evModeValue).replace("'", "")
+        evaluateJsIfReady(
+            webView,
+            "document.querySelectorAll('.dashboard-ev-mode')" +
+                    ".forEach(function(e){e.setAttribute('data-haval-submode','$sub')})"
+        )
+    }
+
+    /**
+     * Empurra o modo de força pro cluster. No tema Sport: rótulo principal LIMPO ("HEV"/"EV"/"EVP")
+     * + a sub-linha menor (submodo + % da bateria) via data-attr. Fora do Sport: rótulo completo
+     * (evModeLabelWithSubmode), preservando o comportamento antigo.
+     */
+    private fun pushEvModeCluster(evModeValue: String?) {
+        if (isSportThemeActive()) {
+            val base = MainMenu.EvModeOptions.getLabel(evModeValue).replace("'", "")
+            evaluateJsIfReady(webView, "control('evMode', '$base')")
+            pushEvSubmodeSublineAttr(evModeValue)
+        } else {
+            evaluateJsIfReady(
+                webView,
+                "control('evMode', '${evModeLabelWithSubmode(evModeValue).replace("'", "")}')"
+            )
+        }
+    }
+
     private fun updateCardEntryValuesWebView(cardId: Int) {
         val sm = ServiceManager.getInstance()
         val updates = mutableMapOf<String, String>()
@@ -2122,7 +2167,10 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             }
             ClusterCardIds.MAIN_MENU_CARD -> {
                 val evMode = sm.getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
-                updates["evMode"] = evModeLabelWithSubmode(evMode)
+                updates["evMode"] =
+                        if (isSportThemeActive()) MainMenu.EvModeOptions.getLabel(evMode)
+                        else evModeLabelWithSubmode(evMode)
+                pushEvSubmodeSublineAttr(evMode)
 
                 val drivingMode = sm.getData(CarConstants.CAR_DRIVE_SETTING_DRIVE_MODE.value)
                 val drivingModeLabel = MainMenu.DrivingModeOptions.getLabel(drivingMode)
