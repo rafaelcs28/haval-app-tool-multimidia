@@ -70,8 +70,25 @@ class AmbientLightAnimationController(
             }
     }
 
+    // Alerta: pisca a fita inteira em vermelho enquanto a condição estiver ativa (porta aberta / ré).
+    // Roda em loop até applyDriveMode()/cancel() cancelar o animationJob (o AmbientLightService restaura
+    // o modo normal quando a condição some).
     fun triggerAlertAnimation() {
-        Log.i(TAG, "animation: ALERT_PLACEHOLDER")
+        val settings = settingsProvider()
+        if (!settings.enabled || settings.deviceAddress.isNullOrBlank()) return
+        animationJob?.cancel()
+        animationJob =
+            scope.launch {
+                Log.i(TAG, "animation: ALERT")
+                val alert = AmbientLightProtocol.RED
+                val dim = LedColor(40, 0, 0)
+                while (scope.coroutineContext.isActive) {
+                    sendColor(alert)
+                    delay(280)
+                    sendColor(dim)
+                    delay(280)
+                }
+            }
     }
 
     fun cancel() {

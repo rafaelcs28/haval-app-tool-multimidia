@@ -418,6 +418,9 @@ fun BasicSettingsTab() {
                         )
                 )
         }
+        var enableAmbientAlert by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.ENABLE_AMBIENT_ALERT.key, false))
+        }
         var enableCustomSteeringWheelButtons by remember {
                 mutableStateOf(
                         prefs.getBoolean(
@@ -2444,6 +2447,18 @@ fun BasicSettingsTab() {
                                                                 .key,
                                                         it
                                                 )
+                                        }
+                                }
+                        ),
+                        SettingItem(
+                                title = "Alerta na fita LED (porta aberta / ré)",
+                                group = SettingsGroups.SAFETY,
+                                description = SharedPreferencesKeys.ENABLE_AMBIENT_ALERT.description,
+                                checked = enableAmbientAlert,
+                                onCheckedChange = {
+                                        enableAmbientAlert = it
+                                        prefs.edit {
+                                                putBoolean(SharedPreferencesKeys.ENABLE_AMBIENT_ALERT.key, it)
                                         }
                                 }
                         ),
