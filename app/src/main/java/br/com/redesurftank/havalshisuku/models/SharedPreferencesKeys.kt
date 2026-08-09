@@ -406,5 +406,17 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     MOBILE_DATA_TRAFFIC_LAST_READING("mobileDataTrafficLastReading", "Última leitura do TrafficStats móvel (controle interno)"),
     MOBILE_DATA_TRAFFIC_CYCLE_TAG("mobileDataTrafficCycleTag", "Ciclo atual do acumulador de bytes (controle interno)"),
     WIFI_PRIORITY_ENABLED("wifiPriorityEnabled", "Trocar de WiFi sozinho pela rede de maior prioridade disponível"),
-    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)")
+    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)"),
+    ENABLE_SEATBELT_VOICE(
+            "enableSeatbeltVoice",
+            "Aviso de voz quando alguém está sem cinto com o carro em movimento"
+    ),
+    SEATBELT_VOICE_MIN_VOLUME_PCT(
+            "seatbeltVoiceMinVolumePct",
+            "Volume mínimo (% do volume de mídia) forçado enquanto o aviso de cinto toca"
+    ),
+    SEATBELT_VOICE_DUCK_MUSIC(
+            "seatbeltVoiceDuckMusic",
+            "Abaixa (duck) a música enquanto o aviso de cinto toca, via audio focus transitório"
+    )
 }

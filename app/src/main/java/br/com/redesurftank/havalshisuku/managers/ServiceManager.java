@@ -1136,6 +1136,7 @@ public class ServiceManager {
             ensureSystemApps();
             ensureDebloatedSystemApps();
             TripConsistencyManager.Companion.getInstance().initialize();
+            SeatbeltVoiceReminder.initialize();
         } catch (RemoteException e) {
             Log.e(TAG, "Error during initialization", e);
             return false;
