@@ -275,6 +275,20 @@ object MobileDataManager {
      */
     fun getAutoblockThresholdMb(): Int = getAutoblockCapMb()
 
+    /** Altera o teto do auto-bloqueio (MB) — reavalia na hora e avisa o EcoTrip. Pro comando remoto. */
+    fun setAutoblockCapMb(mb: Int) {
+        prefs().edit().putInt(SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK_CAP_MB.key, mb.coerceAtLeast(0)).apply()
+        recomputeAndApply(App.getContext())
+        ConnectivityStatusManager.notifyChanged(App.getContext())
+    }
+
+    /** Altera o dia de renovação do ciclo (1-31) — reavalia e avisa o EcoTrip. */
+    fun setCycleDay(day: Int) {
+        prefs().edit().putInt(SharedPreferencesKeys.MOBILE_DATA_CYCLE_DAY.key, day.coerceIn(1, 31)).apply()
+        recomputeAndApply(App.getContext())
+        ConnectivityStatusManager.notifyChanged(App.getContext())
+    }
+
     // ================= Ciclo (dia de renovação configurável) =================
     /** Início do ciclo atual (dia de renovação, 00:00), em millis. */
     fun getCycleStartMillis(nowMillis: Long): Long {

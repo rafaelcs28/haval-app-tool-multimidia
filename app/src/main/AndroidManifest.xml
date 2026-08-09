@@ -202,6 +202,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Estado + comando de conectividade (4G/dados + WiFi) exposto pro EcoTrip.
+             Acesso restrito pelo guard de pacote (getCallingPackage) dentro do provider. -->
+        <provider
+            android:name=".providers.ConnectivityStatusProvider"
+            android:authorities="br.com.redesurftank.havalshisuku.status"
+            android:enabled="true"
+            android:exported="true" />
     </application>
 
 </manifest>
