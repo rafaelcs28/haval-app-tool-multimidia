@@ -853,6 +853,9 @@ fun BasicSettingsTab() {
         var enableHotRouter by remember {
                 mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.ENABLE_HOT_ROUTER.key, false))
         }
+        var wifiPriorityEnabled by remember {
+                mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.WIFI_PRIORITY_ENABLED.key, false))
+        }
         // ===== Controle de dados móveis do carro (master + regras) =====
         val mdm = br.com.redesurftank.havalshisuku.managers.MobileDataManager
         var mobileControlEnabled by remember { mutableStateOf(mdm.isControlEnabled()) }
@@ -887,6 +890,29 @@ fun BasicSettingsTab() {
         }
 
         val settingsList = mutableListOf<SettingItem>()
+
+        // Card — prioridade de redes WiFi (troca automática pela preferida disponível)
+        settingsList.add(
+                SettingItem(
+                        title = "Prioridade de redes WiFi",
+                        description =
+                                "Quando uma rede de prioridade MAIOR aparece no alcance, o carro pula sozinho pra ela (resolve o \"gruda no hotspot\"). Só sobe de prioridade, com histerese; cada troca pisca o WiFi ~10s. Precisa da localização ligada (pro carro enxergar as redes ao redor).",
+                        group = SettingsGroups.FEATURES,
+                        checked = wifiPriorityEnabled,
+                        onCheckedChange = {
+                                wifiPriorityEnabled = it
+                                // setFeatureEnabled: persiste a pref + aplica + avisa o EcoTrip (mudança
+                                // local também sincroniza o outro app, pra ele não forçar o valor velho).
+                                br.com.redesurftank.havalshisuku.managers.WifiPriorityManager
+                                        .getInstance()
+                                        .setFeatureEnabled(it)
+                        },
+                        customContent =
+                                if (wifiPriorityEnabled) {
+                                        { WifiPriorityEditor(prefs) }
+                                } else null
+                )
+        )
 
         // HotRouter: roteia o hotspot pela WLAN externa (Starlink) com fallback pro 4G.
         settingsList.add(
@@ -3405,6 +3431,152 @@ private fun SteeringWheelClimateCommandDropdown(
                                         onClick = { onCommandSelected(command) }
                                 )
                         }
+                }
+        }
+}
+
+private fun loadWifiPriority(prefs: SharedPreferences): List<String> {
+        return try {
+                val arr =
+                        org.json.JSONArray(
+                                prefs.getString(SharedPreferencesKeys.WIFI_PRIORITY_LIST.key, "[]")
+                        )
+                (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
+        } catch (t: Throwable) {
+                emptyList()
+        }
+}
+
+@Composable
+private fun WifiPriorityEditor(prefs: SharedPreferences) {
+        var savedNets by remember { mutableStateOf<List<String>>(emptyList()) }
+        var priority by remember { mutableStateOf(loadWifiPriority(prefs)) }
+
+        LaunchedEffect(Unit) {
+                savedNets =
+                        withContext(Dispatchers.IO) {
+                                br.com.redesurftank.havalshisuku.managers.ServiceManager.getInstance()
+                                        .listSavedWifi()
+                                        .map { it.substringAfter('|') }
+                                        .filter { it.isNotBlank() }
+                                        .distinct()
+                        }
+        }
+
+        var diagTrigger by remember { mutableStateOf(0) }
+        var diagReport by remember { mutableStateOf("") }
+        var diagBusy by remember { mutableStateOf(false) }
+        LaunchedEffect(diagTrigger) {
+                if (diagTrigger > 0) {
+                        diagBusy = true
+                        diagReport = "Verificando…"
+                        diagReport =
+                                withContext(Dispatchers.IO) {
+                                        try {
+                                                br.com.redesurftank.havalshisuku.managers
+                                                        .WifiPriorityManager.getInstance()
+                                                        .forceCheckNow()
+                                        } catch (t: Throwable) {
+                                                "Erro no diagnóstico: ${t.message ?: t}"
+                                        }
+                                }
+                        diagBusy = false
+                }
+        }
+
+        fun persist(newList: List<String>) {
+                priority = newList
+                prefs.edit()
+                        .putString(
+                                SharedPreferencesKeys.WIFI_PRIORITY_LIST.key,
+                                org.json.JSONArray(newList).toString()
+                        )
+                        .apply()
+        }
+
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text("Ordem de prioridade (1 = preferida):", color = Color.Gray, fontSize = 12.sp)
+                if (priority.isEmpty()) {
+                        Text(
+                                "Nenhuma rede priorizada. Adicione abaixo (precisa de 2+ pra valer).",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                        )
+                }
+                priority.forEachIndexed { idx, ssid ->
+                        Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                        ) {
+                                Text(
+                                        "${idx + 1}. $ssid",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                        onClick = {
+                                                if (idx > 0)
+                                                        persist(
+                                                                priority.toMutableList().also {
+                                                                        it.add(idx - 1, it.removeAt(idx))
+                                                                }
+                                                        )
+                                        },
+                                        enabled = idx > 0
+                                ) { Text("↑", fontSize = 16.sp) }
+                                TextButton(
+                                        onClick = {
+                                                if (idx < priority.size - 1)
+                                                        persist(
+                                                                priority.toMutableList().also {
+                                                                        it.add(idx + 1, it.removeAt(idx))
+                                                                }
+                                                        )
+                                        },
+                                        enabled = idx < priority.size - 1
+                                ) { Text("↓", fontSize = 16.sp) }
+                                TextButton(onClick = { persist(priority.filterNot { it == ssid }) }) {
+                                        Text("remover", fontSize = 11.sp, color = Color(0xFFE24B4A))
+                                }
+                        }
+                }
+                val available = savedNets.filter { it !in priority }
+                if (available.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Adicionar rede salva:", color = Color.Gray, fontSize = 12.sp)
+                        available.forEach { ssid ->
+                                Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                ) {
+                                        Text(
+                                                ssid,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                maxLines = 1,
+                                                modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(onClick = { persist(priority + ssid) }) {
+                                                Text("+ adicionar", fontSize = 12.sp)
+                                        }
+                                }
+                        }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                        onClick = { if (!diagBusy) diagTrigger++ },
+                        enabled = !diagBusy
+                ) {
+                        Text(
+                                if (diagBusy) "Verificando…" else "Verificar agora",
+                                fontSize = 13.sp
+                        )
+                }
+                if (diagReport.isNotEmpty()) {
+                        Text(diagReport, color = Color.Gray, fontSize = 11.sp)
                 }
         }
 }
