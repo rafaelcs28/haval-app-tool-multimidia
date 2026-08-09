@@ -2,6 +2,7 @@ package br.com.redesurftank.havalshisuku.managers
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.util.Log
@@ -126,6 +127,7 @@ object SeatbeltVoiceReminder {
     private const val FOCUS_RETRY_MS = 15_000L
     private const val DIAG_EVENT = "seatbelt_voice"
     const val DEFAULT_MIN_VOLUME_PCT = 60
+    const val DEFAULT_DUCK_MUSIC = true
 
     private val scope =
         CoroutineScope(
@@ -261,9 +263,10 @@ object SeatbeltVoiceReminder {
                                 "mode" to if (multi) "multi" else "por_assento"
                             )
                         )
-                        // NÃO pega audio focus: a rádio/mídia do OEM PAUSA no focus-loss e NÃO volta
-                        // sozinha depois (o app da rádio não trata o refoco). Tocamos MIXADO por cima
-                        // (o volume mínimo garante que dá pra ouvir), então a rádio nunca para.
+                        // withBoostedVolume: (1) DUCK via audio focus transitório -> a música abaixa
+                        // durante a fala e volta depois (sem se misturar); (2) volume mínimo garante
+                        // audibilidade. Escape se a rádio do OEM não retomar: pref
+                        // SEATBELT_VOICE_DUCK_MUSIC=false (volta ao mix puro por cima).
                         withBoostedVolume {
                             if (multi) {
                                 playAwait { setMultiSource(it) }
@@ -279,8 +282,9 @@ object SeatbeltVoiceReminder {
 
     // USAGE_MEDIA = canal de mídia (os alto-falantes principais, no volume de mídia). O
     // NAVIGATION_GUIDANCE anterior pode sair mudo neste head unit OEM (canal de TTS separado).
-    // NÃO pedimos audio focus (mixa por cima da rádio/mídia sem pausá-la — a rádio do OEM não
-    // volta sozinha após o focus-loss); o volume mínimo garante a audibilidade.
+    // Estas mesmas attrs alimentam o pedido de foco TRANSITÓRIO "may duck" (withBoostedVolume):
+    // a música abaixa durante a fala e volta ao soltarmos. Escape p/ o mix puro antigo (caso a
+    // rádio do OEM não retome após o focus-loss): pref SEATBELT_VOICE_DUCK_MUSIC=false.
     private val audioAttrs =
         AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -305,14 +309,41 @@ object SeatbeltVoiceReminder {
             .getInt(SharedPreferencesKeys.SEATBELT_VOICE_MIN_VOLUME_PCT.key, DEFAULT_MIN_VOLUME_PCT)
             .coerceIn(0, 100)
 
-    // Garante um volume MÍNIMO no canal de mídia durante a fala (mesmo no mudo) e RESTAURA depois.
-    // pct=0 desliga o boost (respeita o volume atual, inclusive mudo). Restaura no finally, então
-    // um cancelamento no meio da fala também devolve o volume original.
+    private fun duckMusicEnabled(): Boolean =
+        App.getDeviceProtectedContext()
+            .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+            .getBoolean(SharedPreferencesKeys.SEATBELT_VOICE_DUCK_MUSIC.key, DEFAULT_DUCK_MUSIC)
+
+    // Foco TRANSITÓRIO "may duck": pede pras outras fontes ABAIXAREM (não pausarem) enquanto a fala
+    // toca; elas voltam sozinhas quando soltamos. willPauseWhenDucked=false => ninguém precisa pausar.
+    private fun buildDuckRequest(): AudioFocusRequest =
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(audioAttrs)
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener { /* no-op: só queremos o duck transitório */ }
+            .build()
+
+    // Prepara o áudio do alerta e RESTAURA tudo no finally:
+    //  (1) DUCK: foco transitório may-duck -> a música ABAIXA durante a fala e volta depois (some a
+    //      mistura com a música). Desliga com o pref SEATBELT_VOICE_DUCK_MUSIC=false.
+    //  (2) BOOST: garante um volume MÍNIMO no canal de mídia durante a fala (mesmo no mudo); pct=0
+    //      desliga o boost. Um cancelamento no meio da fala também devolve volume+foco (finally).
     private suspend fun withBoostedVolume(block: suspend () -> Unit) {
         val am = runCatching { audioManager() }.getOrNull()
         var restoreTo = -1
         var restoreMuted = false
+        var duckReq: AudioFocusRequest? = null
         if (am != null) {
+            // (1) DUCK — abaixa a música (Spotify/CarPlay/AA respeitam o foco e voltam sozinhas).
+            if (duckMusicEnabled()) {
+                duckReq = runCatching {
+                    val req = buildDuckRequest()
+                    val res = am.requestAudioFocus(req)
+                    ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("duck" to "request", "res" to res))
+                    req
+                }.onFailure { Log.e(TAG, "duck (audio focus) falhou", it) }.getOrNull()
+            }
+            // (2) BOOST — volume mínimo do nosso alerta.
             runCatching {
                 val pct = minVolumePct()
                 if (pct > 0) {
@@ -338,14 +369,18 @@ object SeatbeltVoiceReminder {
         try {
             block()
         } finally {
-            if (am != null && restoreTo >= 0) {
-                runCatching {
-                    am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0)
-                    // Re-muta se estava mudo antes (o usuário deixou no mudo de propósito).
-                    if (restoreMuted) {
-                        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+            if (am != null) {
+                if (restoreTo >= 0) {
+                    runCatching {
+                        am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0)
+                        // Re-muta se estava mudo antes (o usuário deixou no mudo de propósito).
+                        if (restoreMuted) {
+                            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+                        }
                     }
                 }
+                // Solta o foco -> as outras fontes voltam ao volume normal.
+                duckReq?.let { req -> runCatching { am.abandonAudioFocusRequest(req) } }
             }
         }
     }

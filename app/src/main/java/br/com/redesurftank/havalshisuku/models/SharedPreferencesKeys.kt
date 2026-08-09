@@ -412,5 +412,9 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     SEATBELT_VOICE_MIN_VOLUME_PCT(
             "seatbeltVoiceMinVolumePct",
             "Volume mínimo (% do volume de mídia) forçado enquanto o aviso de cinto toca"
+    ),
+    SEATBELT_VOICE_DUCK_MUSIC(
+            "seatbeltVoiceDuckMusic",
+            "Abaixa (duck) a música enquanto o aviso de cinto toca, via audio focus transitório"
     )
 }
