@@ -1514,6 +1514,15 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     }
                     CarConstants.CAR_EV_INFO_CUR_BATTERY_POWER_PERCENTAGE.value -> {
                         evaluateJsIfReady(webView, "control('batteryPercent', '$value')")
+                        // A % da bateria agora entra no rótulo do modo (HEV) -> re-empurra pra
+                        // atualizar ao vivo conforme a carga muda.
+                        val evModeVal =
+                                ServiceManager.getInstance()
+                                        .getData(CarConstants.CAR_EV_SETTING_POWER_MODEL_CONFIG.value)
+                        evaluateJsIfReady(
+                                webView,
+                                "control('evMode', '${evModeLabelWithSubmode(evModeVal)}')"
+                        )
                     }
                     CarConstants.CAR_EV_INFO_FUEL_MODE_REMAIN_ODOMETER.value -> {
                         evaluateJsIfReady(webView, "control('fuelRange', '$value')")
@@ -2084,18 +2093,14 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         if (evModeValue?.trim() == "0") { // HEV
             val sm = ServiceManager.getInstance()
             val reserve = sm.getData(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value)
-            return if (reserve?.trim() == "2") {
-                // Prioritário: mostra o % alvo (mesma fonte da barra estendida).
-                val pct =
-                        sm.getData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.value)
-                                ?.trim()
-                                ?.toIntOrNull()
-                                ?.coerceIn(20, 80)
-                                ?: 50
-                "$base Prioridade $pct%"
-            } else {
-                "$base Inteligente"
-            }
+            val submode = if (reserve?.trim() == "2") "Prioridade" else "Inteligente"
+            // % ATUAL da bateria (pedido do usuário) anexada ao submodo, para os dois modos.
+            val batt =
+                    sm.getData(CarConstants.CAR_EV_INFO_CUR_BATTERY_POWER_PERCENTAGE.value)
+                            ?.trim()
+                            ?.toFloatOrNull()
+                            ?.toInt()
+            return if (batt != null) "$base $submode $batt%" else "$base $submode"
         }
         return base
     }
