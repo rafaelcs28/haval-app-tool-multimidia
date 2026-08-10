@@ -430,5 +430,9 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     HOTROUTER_CARD_VERBOSE(
             "hotRouterCardVerbose",
             "Card de conectividade da barra mostra o texto completo (toque longo alterna com só ícone)"
+    ),
+    AA_CLUSTER_BLACK_RECOVERY(
+            "aaClusterBlackRecovery",
+            "Recuperar tela preta do AA no cluster (surface válida mas decoder travado) ciclando o serviço de projeção"
     )
 }
