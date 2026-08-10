@@ -1857,7 +1857,12 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                     override fun onConsoleMessage(
                                             consoleMessage: ConsoleMessage?
                                     ): Boolean {
-                                        if (consoleMessage != null) {
+                                        // Não persiste o trace de alta frequência do tema (uma linha
+                                        // por atualização de CAN): inflava o log do dia p/ dezenas de
+                                        // MB e afogava o relatório de bug. É puro ruído de dado.
+                                        if (consoleMessage != null &&
+                                                consoleMessage.message()?.contains("onDataChanged_TRACE") != true
+                                        ) {
                                             ClusterPersistentEventLogger.log(
                                                     "webview_console",
                                                     mapOf(

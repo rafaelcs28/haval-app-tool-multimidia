@@ -83,7 +83,11 @@ object BugMarker {
                 ShizukuUtils.runCommandAndGetOutput(
                     arrayOf(
                         "logcat", "-d", "-b", "main,system,crash",
-                        "-v", "threadtime", "-t", RAW_LOGCAT_LINES
+                        "-v", "threadtime", "-t", RAW_LOGCAT_LINES,
+                        // Silencia o spam de CAN da OEM (Its_IntelligentVehicleControlService) que
+                        // domina o buffer, pra as 4000 linhas renderem MUITO mais historico util
+                        // (AA/VideoPlayer/projecao/erros) em vez de gastar com propriedade de CAN.
+                        "Its_IntelligentVehicleControlService:S", "*:V"
                     )
                 )
             }.getOrDefault("").ifBlank { "(logcat completo indisponivel)" }
