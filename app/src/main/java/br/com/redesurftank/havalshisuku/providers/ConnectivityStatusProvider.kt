@@ -193,6 +193,31 @@ class ConnectivityStatusProvider : ContentProvider() {
                     }
                     return res // resposta enxuta: sem o snapshot de conectividade
                 }
+                // ---------- Canais virtuais (passa-a-diante do VirtualTelemetry: navegação do AA etc.) ----------
+                // Genérico: o consumidor pede uma key app.* e recebe {ok, key, json, updatedAtMs}.
+                // updatedAtMs = carimbo da última atualização do canal (crítico pra descartar dado velho).
+                // "navDirections" é o atalho tipado equivalente a virtualValue(app.navigation.directions).
+                "virtualValue", "navDirections" -> {
+                    val key = if (method == "navDirections") "app.navigation.directions"
+                              else (extras?.getString("key") ?: arg)?.trim().orEmpty()
+                    if (!key.startsWith("app.")) {
+                        res.putBoolean("ok", false)
+                        res.putString("error", "key nao permitida (use app.*): '$key'")
+                    } else {
+                        val json = try {
+                            br.com.redesurftank.havalshisuku.bridge.VirtualTelemetryManager.getVirtualValue(ctx, key)
+                        } catch (_: Throwable) { "" }
+                        val updatedAtMs =
+                            if (key == "app.navigation.directions")
+                                br.com.redesurftank.havalshisuku.bridge.AndroidAutoNavManager.getDirectionsUpdatedAtMs()
+                            else System.currentTimeMillis()
+                        res.putBoolean("ok", true)
+                        res.putString("key", key)
+                        res.putString("json", json)
+                        res.putLong("updatedAtMs", updatedAtMs)
+                    }
+                    return res // resposta enxuta: sem snapshot de conectividade
+                }
                 else -> { res.putBoolean("ok", false); res.putString("error", "metodo desconhecido: $method") }
             }
         } catch (t: Throwable) {

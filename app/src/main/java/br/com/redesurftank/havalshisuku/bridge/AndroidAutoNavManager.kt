@@ -71,6 +71,7 @@ object AndroidAutoNavManager {
     private var destTimeSeconds = 0L
 
     @Volatile private var directionsJson: String = EMPTY
+    @Volatile private var updatedAtMs: Long = 0L
 
     /** Toggle (default ON — captura passiva e aditiva). */
     fun isEnabled(): Boolean {
@@ -85,6 +86,14 @@ object AndroidAutoNavManager {
 
     /** JSON snapshot consumido pelo sink `app.navigation.directions`. */
     fun getDirectionsJson(): String = if (isEnabled()) directionsJson else EMPTY
+
+    /**
+     * Instante (System.currentTimeMillis) da última atualização do snapshot pelo host.
+     * 0 = sem navegação ativa (snapshot zerado). Consumidores externos (EcoTrip) usam isto
+     * pra descartar ETA/distância obsoletos: o host só emite em MUDANÇA, então sem carimbo
+     * um snapshot velho seria indistinguível de um atual.
+     */
+    fun getDirectionsUpdatedAtMs(): Long = if (isEnabled()) updatedAtMs else 0L
 
     /**
      * Diagnóstico best-effort: espelha o último snapshot em `filesDir/nav-directions.json`.
@@ -175,12 +184,13 @@ object AndroidAutoNavManager {
             nextMeters = 0; nextValue = null; nextUnit = 0; nextTimeSeconds = 0L
             destMeters = 0; destValue = null; destUnit = 0; destEta = null; destTimeSeconds = 0L
             directionsJson = EMPTY
+            updatedAtMs = 0L
         }
     }
 
     /** Recompõe o JSON a partir do estado retido. Deve ser chamado sob [lock]. */
     private fun rebuild() {
-        if (!active) { directionsJson = EMPTY; return }
+        if (!active) { directionsJson = EMPTY; updatedAtMs = 0L; return }
         try {
             val o = JSONObject()
             o.put("active", true)
@@ -215,6 +225,7 @@ object AndroidAutoNavManager {
                 o.put("next", n)
             }
             directionsJson = o.toString()
+            updatedAtMs = System.currentTimeMillis()
             writeDiagnostic(directionsJson)
         } catch (e: Exception) {
             Log.e(TAG, "rebuild failed", e)
