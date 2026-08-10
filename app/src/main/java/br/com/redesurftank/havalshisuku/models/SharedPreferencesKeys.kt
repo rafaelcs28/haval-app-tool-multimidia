@@ -434,5 +434,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     AA_CLUSTER_BLACK_RECOVERY(
             "aaClusterBlackRecovery",
             "Recuperar tela preta do AA no cluster (surface válida mas decoder travado) ciclando o serviço de projeção"
+    ),
+    // ===== Captura de navegação do Android Auto (ETA/km/manobra) para o painel =====
+    ENABLE_AA_NAV_CAPTURE(
+            "enableAaNavCapture",
+            "Capturar navegação (ETA, km, próxima manobra) do Android Auto para o painel"
     )
 }
