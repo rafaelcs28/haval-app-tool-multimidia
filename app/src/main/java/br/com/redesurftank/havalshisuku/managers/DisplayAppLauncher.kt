@@ -164,6 +164,9 @@ object DisplayAppLauncher {
     private const val ANDROID_AUTO_LINK_COMMAND_BIND_STALE_MS = 2_500L
     private const val ANDROID_AUTO_LINK_COMMAND_RECONNECT_COOLDOWN_MS = 4_000L
     private const val ANDROID_AUTO_NATIVE_PLAYBACK_SETTLE_MS = 520L
+    // Settle p/ o VÍDEO do host de AA (relançado do patch) começar a renderizar antes de reprojetar no
+    // cluster. Sem isso a projeção ia com o link ativo mas o vídeo ainda não pronto -> cluster preto.
+    private const val ANDROID_AUTO_FIRST_PROJECTION_VIDEO_SETTLE_MS = 2_000L
     private const val ANDROID_AUTO_MEDIA_COMMAND_FOCUS_SETTLE_MS = 90L
     private const val ANDROID_AUTO_AUDIO_PLAYBACK_EVIDENCE_CACHE_MS = 3_000L
     private const val ANDROID_AUTO_MEDIA_CONTROL_ACTIVE_CACHE_MS = 1_500L
@@ -920,6 +923,17 @@ object DisplayAppLauncher {
         return findTaskMatching { packageName, _ ->
             isAndroidAutoLikePackage(packageName)
         } != null
+    }
+
+    // AA tem uma task visual ativa em QUALQUER display (SEM o guard de rádio nativo). Usado pelo mount
+    // do patch pra NÃO dar force-stop numa sessão de AA em andamento (que escureceria a tela — bug de
+    // ligar o carro com o celular já cabeado: o AA sobe, o app monta o patch e o force-stop mata a sessão).
+    fun hasAndroidAutoVisualTaskAnywhere(): Boolean {
+        return try {
+            findTaskMatching { packageName, _ -> isAndroidAutoLikePackage(packageName) } != null
+        } catch (t: Throwable) {
+            false
+        }
     }
 
     fun isProjectionMirrorOnDisplay(displayId: Int): Boolean {
@@ -2441,6 +2455,12 @@ object DisplayAppLauncher {
 
         rememberAndroidAutoDisplayTarget(displayId, reason)
         AndroidAutoPatchManager.ensureMounted()
+        if (displayId == 3 && AndroidAutoPatchManager.ensureAppPatchLoadedForCluster()) {
+            // App estava STOCK (o boot pula o force-stop p/ não escurecer a multimídia) -> no cluster
+            // renderizava preto. Acabamos de force-stopar p/ recarregar o patcheado; espera encerrar
+            // antes de relançar patcheado no cluster logo abaixo.
+            delay(ANDROID_AUTO_FIRST_PROJECTION_VIDEO_SETTLE_MS)
+        }
         configureAndroidAutoProjection(reason)
 
         if (displayId != 0) {
