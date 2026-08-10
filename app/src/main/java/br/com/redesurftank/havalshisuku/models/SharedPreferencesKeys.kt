@@ -406,5 +406,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     MOBILE_DATA_TRAFFIC_LAST_READING("mobileDataTrafficLastReading", "Última leitura do TrafficStats móvel (controle interno)"),
     MOBILE_DATA_TRAFFIC_CYCLE_TAG("mobileDataTrafficCycleTag", "Ciclo atual do acumulador de bytes (controle interno)"),
     WIFI_PRIORITY_ENABLED("wifiPriorityEnabled", "Trocar de WiFi sozinho pela rede de maior prioridade disponível"),
-    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)")
+    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)"),
+    // ===== Captura de navegação do Android Auto (ETA/km/manobra) para o painel =====
+    ENABLE_AA_NAV_CAPTURE(
+            "enableAaNavCapture",
+            "Capturar navegação (ETA, km, próxima manobra) do Android Auto para o painel"
+    )
 }
