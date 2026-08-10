@@ -86,6 +86,18 @@ object AndroidAutoNavManager {
     /** JSON snapshot consumido pelo sink `app.navigation.directions`. */
     fun getDirectionsJson(): String = if (isEnabled()) directionsJson else EMPTY
 
+    /**
+     * Diagnóstico best-effort: espelha o último snapshot em `filesDir/nav-directions.json`.
+     * Permite validação HEADLESS no carro (`cat` do arquivo) enquanto nenhum tema renderiza o canal.
+     */
+    private fun writeDiagnostic(json: String) {
+        try {
+            java.io.File(App.getContext().filesDir, "nav-directions.json").writeText(json)
+        } catch (e: Exception) {
+            // best-effort — nunca quebra a captura por causa do diagnóstico
+        }
+    }
+
     /** Binder que registramos no host via `LinkCommand.addLinkCallback`. */
     val callbackBinder: IBinder by lazy { NavLinkCallback() }
 
@@ -203,6 +215,7 @@ object AndroidAutoNavManager {
                 o.put("next", n)
             }
             directionsJson = o.toString()
+            writeDiagnostic(directionsJson)
         } catch (e: Exception) {
             Log.e(TAG, "rebuild failed", e)
         }
