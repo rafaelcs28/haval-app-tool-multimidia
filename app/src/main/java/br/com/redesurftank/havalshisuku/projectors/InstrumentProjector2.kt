@@ -2093,14 +2093,19 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         if (evModeValue?.trim() == "0") { // HEV
             val sm = ServiceManager.getInstance()
             val reserve = sm.getData(CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.value)
-            val submode = if (reserve?.trim() == "2") "Prioridade" else "Inteligente"
-            // % ATUAL da bateria (pedido do usuário) anexada ao submodo, para os dois modos.
-            val batt =
-                    sm.getData(CarConstants.CAR_EV_INFO_CUR_BATTERY_POWER_PERCENTAGE.value)
-                            ?.trim()
-                            ?.toFloatOrNull()
-                            ?.toInt()
-            return if (batt != null) "$base $submode $batt%" else "$base $submode"
+            if (reserve?.trim() == "2") {
+                // Prioritário: mostra o % ALVO ("Save" configurado no modo prioritário) —
+                // CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG. NÃO é o SOC atual da bateria (coisa
+                // diferente). Se não der pra ler, mostra "Prioridade" sem %.
+                val target =
+                        sm.getData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.value)
+                                ?.trim()
+                                ?.toFloatOrNull()
+                                ?.toInt()
+                return if (target != null) "$base Prioridade $target%" else "$base Prioridade"
+            }
+            // Inteligente: sem % (só a palavra).
+            return "$base Inteligente"
         }
         return base
     }
