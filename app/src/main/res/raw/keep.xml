@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mantém TODAS as vozes do aviso de cinto no APK release.
+
+  As variantes (seatbelt_voice_seatN_2 .. _9 e multi_2 .. _9) são resolvidas por NOME em runtime
+  (getIdentifier) pra o sorteio de vozes — NÃO têm referência estática em R.raw. Com
+  shrinkResources ligado, o encolhedor de recursos as remove em silêncio (sobrariam só as 6 bases,
+  que têm ref estática), e o card passa a tocar SEMPRE a mesma voz.
+
+  tools:keep marca todas como usadas -> ficam no APK e o getIdentifier volta a achá-las.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/seatbelt_voice_*" />

@@ -2,7 +2,6 @@ package br.com.redesurftank.havalshisuku.managers
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.util.Log
@@ -128,6 +127,8 @@ object SeatbeltVoiceReminder {
     private const val DIAG_EVENT = "seatbelt_voice"
     const val DEFAULT_MIN_VOLUME_PCT = 60
     const val DEFAULT_DUCK_MUSIC = true
+    // Duck MANUAL: a música (STREAM_MUSIC) desce pra este % do máximo enquanto a fala toca; restaura depois.
+    private const val DUCK_MUSIC_PCT = 20
 
     private val scope =
         CoroutineScope(
@@ -280,14 +281,13 @@ object SeatbeltVoiceReminder {
             }
     }
 
-    // USAGE_MEDIA = canal de mídia (os alto-falantes principais, no volume de mídia). O
-    // NAVIGATION_GUIDANCE anterior pode sair mudo neste head unit OEM (canal de TTS separado).
-    // Estas mesmas attrs alimentam o pedido de foco TRANSITÓRIO "may duck" (withBoostedVolume):
-    // a música abaixa durante a fala e volta ao soltarmos. Escape p/ o mix puro antigo (caso a
-    // rádio do OEM não retome após o focus-loss): pref SEATBELT_VOICE_DUCK_MUSIC=false.
+    // A fala toca em STREAM_ALARM (USAGE_ALARM), stream SEPARADO da música (STREAM_MUSIC). Assim o
+    // duck manual (withBoostedVolume) ABAIXA a música SEM abaixar a fala — e SEM audio-focus, que
+    // nesta pilha OEM PAUSA a mídia e não retoma. (USAGE_MEDIA colava a fala no mesmo stream da
+    // música; NAVIGATION_GUIDANCE saía mudo no canal de TTS do OEM — por isso ALARM.)
     private val audioAttrs =
         AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 
@@ -314,73 +314,57 @@ object SeatbeltVoiceReminder {
             .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
             .getBoolean(SharedPreferencesKeys.SEATBELT_VOICE_DUCK_MUSIC.key, DEFAULT_DUCK_MUSIC)
 
-    // Foco TRANSITÓRIO "may duck": pede pras outras fontes ABAIXAREM (não pausarem) enquanto a fala
-    // toca; elas voltam sozinhas quando soltamos. willPauseWhenDucked=false => ninguém precisa pausar.
-    private fun buildDuckRequest(): AudioFocusRequest =
-        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            .setAudioAttributes(audioAttrs)
-            .setWillPauseWhenDucked(false)
-            .setOnAudioFocusChangeListener { /* no-op: só queremos o duck transitório */ }
-            .build()
-
     // Prepara o áudio do alerta e RESTAURA tudo no finally:
-    //  (1) DUCK: foco transitório may-duck -> a música ABAIXA durante a fala e volta depois (some a
-    //      mistura com a música). Desliga com o pref SEATBELT_VOICE_DUCK_MUSIC=false.
-    //  (2) BOOST: garante um volume MÍNIMO no canal de mídia durante a fala (mesmo no mudo); pct=0
-    //      desliga o boost. Um cancelamento no meio da fala também devolve volume+foco (finally).
+    //  (1) DUCK MANUAL: abaixa a MÚSICA (STREAM_MUSIC) enquanto a fala toca — SEM audio-focus, que
+    //      nesta pilha OEM PAUSA a mídia e não retoma. A fala toca em STREAM_ALARM (stream separado),
+    //      então NÃO é abaixada junto. Desliga com o pref SEATBELT_VOICE_DUCK_MUSIC=false.
+    //  (2) BOOST: garante um volume MÍNIMO no stream do alerta (STREAM_ALARM); pct=0 desliga o boost.
+    //      Um cancelamento no meio da fala também devolve os dois volumes (finally).
     private suspend fun withBoostedVolume(block: suspend () -> Unit) {
         val am = runCatching { audioManager() }.getOrNull()
-        var restoreTo = -1
-        var restoreMuted = false
-        var duckReq: AudioFocusRequest? = null
+        var restoreMusicTo = -1
+        var restoreAlarmTo = -1
         if (am != null) {
-            // (1) DUCK — abaixa a música (Spotify/CarPlay/AA respeitam o foco e voltam sozinhas).
+            // (1) DUCK MANUAL da música (sem foco -> não pausa a fonte).
             if (duckMusicEnabled()) {
-                duckReq = runCatching {
-                    val req = buildDuckRequest()
-                    val res = am.requestAudioFocus(req)
-                    ClusterPersistentEventLogger.log(DIAG_EVENT, mapOf("duck" to "request", "res" to res))
-                    req
-                }.onFailure { Log.e(TAG, "duck (audio focus) falhou", it) }.getOrNull()
+                runCatching {
+                    val musicMax = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val musicCur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    val duckTo = Math.floor(DUCK_MUSIC_PCT / 100.0 * musicMax).toInt().coerceIn(0, musicCur)
+                    if (duckTo < musicCur) {
+                        am.setStreamVolume(AudioManager.STREAM_MUSIC, duckTo, 0)
+                        restoreMusicTo = musicCur
+                        ClusterPersistentEventLogger.log(
+                            DIAG_EVENT,
+                            mapOf("duckMusic" to "$musicCur->$duckTo", "max" to musicMax)
+                        )
+                    }
+                }.onFailure { Log.e(TAG, "duck manual da música falhou", it) }
             }
-            // (2) BOOST — volume mínimo do nosso alerta.
+            // (2) BOOST — volume mínimo do stream do alerta (STREAM_ALARM, onde a fala toca).
             runCatching {
                 val pct = minVolumePct()
                 if (pct > 0) {
-                    val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                    val cur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-                    // No MUDO, getStreamVolume devolve o volume de ANTES do mudo (não 0), então
-                    // checar só cur<target deixava passar o caso mudo. Checa isStreamMute explícito.
-                    val muted = runCatching { am.isStreamMute(AudioManager.STREAM_MUSIC) }.getOrDefault(false)
+                    val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                    val cur = am.getStreamVolume(AudioManager.STREAM_ALARM)
                     val target = Math.ceil(pct / 100.0 * max).toInt().coerceIn(1, max)
-                    if (muted || cur < target) {
-                        // setStreamVolume com valor positivo já des-muta o canal.
-                        am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-                        restoreTo = cur
-                        restoreMuted = muted
+                    if (cur < target) {
+                        am.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
+                        restoreAlarmTo = cur
                         ClusterPersistentEventLogger.log(
                             DIAG_EVENT,
-                            mapOf("volBoost" to "$cur->$target", "max" to max, "pct" to pct, "wasMuted" to muted)
+                            mapOf("alarmBoost" to "$cur->$target", "max" to max, "pct" to pct)
                         )
                     }
                 }
-            }.onFailure { Log.e(TAG, "boost de volume falhou", it) }
+            }.onFailure { Log.e(TAG, "boost do alerta falhou", it) }
         }
         try {
             block()
         } finally {
             if (am != null) {
-                if (restoreTo >= 0) {
-                    runCatching {
-                        am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreTo, 0)
-                        // Re-muta se estava mudo antes (o usuário deixou no mudo de propósito).
-                        if (restoreMuted) {
-                            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-                        }
-                    }
-                }
-                // Solta o foco -> as outras fontes voltam ao volume normal.
-                duckReq?.let { req -> runCatching { am.abandonAudioFocusRequest(req) } }
+                if (restoreMusicTo >= 0) runCatching { am.setStreamVolume(AudioManager.STREAM_MUSIC, restoreMusicTo, 0) }
+                if (restoreAlarmTo >= 0) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, restoreAlarmTo, 0) }
             }
         }
     }
