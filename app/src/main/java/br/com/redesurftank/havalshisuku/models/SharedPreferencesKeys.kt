@@ -426,5 +426,9 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     SEATBELT_VOICE_DUCK_MUSIC(
             "seatbeltVoiceDuckMusic",
             "Abaixa (duck) a música enquanto o aviso de cinto toca, via audio focus transitório"
+    ),
+    HOTROUTER_CARD_VERBOSE(
+            "hotRouterCardVerbose",
+            "Card de conectividade da barra mostra o texto completo (toque longo alterna com só ícone)"
     )
 }
