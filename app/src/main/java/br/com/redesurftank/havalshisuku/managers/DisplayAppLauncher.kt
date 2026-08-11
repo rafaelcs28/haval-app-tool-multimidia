@@ -193,6 +193,8 @@ object DisplayAppLauncher {
     // como "preto".
     private const val ANDROID_AUTO_BLACK_RECOVERY_COOLDOWN_MS = 8_000L
     private const val ANDROID_AUTO_VIDEO_DECODER_ERROR_THRESHOLD = 12
+    // Intervalo do monitor periódico do preto do cluster (a recuperação só age quando o AA é o alvo do cluster).
+    private const val ANDROID_AUTO_CLUSTER_HEALTH_INTERVAL_MS = 10_000L
     private const val ANDROID_AUTO_USB_DISCONNECT_CLEANUP_COOLDOWN_MS = 10_000L
     private const val ANDROID_AUTO_STALE_VISUAL_STACK_CLEANUP_GRACE_MS = 30_000L
     private const val ANDROID_AUTO_OEM_INPUT_ECHO_BLOCK_MS = 2_500L
@@ -423,6 +425,7 @@ object DisplayAppLauncher {
     @Volatile private var lastAndroidAutoSurfaceProbeAt = 0L
     @Volatile private var lastAndroidAutoSurfaceVisualRestartAt = 0L
     @Volatile private var lastAndroidAutoBlackRecoveryAt = 0L
+    @Volatile private var androidAutoClusterBlackHealthMonitorStarted = false
     @Volatile private var androidAutoStaleVisualStackFirstSeenAt = 0L
     @Volatile private var lastAndroidAutoNativeRadioFocusBlockLogAt = 0L
     @Volatile private var lastAndroidAutoVisualProjectionEvidenceLogAt = 0L
@@ -2717,6 +2720,34 @@ object DisplayAppLauncher {
         } catch (t: Throwable) {
             true
         }
+
+    // Monitor periódico do "válido-mas-preto" do AA no cluster. O decoder do host (VideoPlayer/MediaCodec)
+    // pode entrar em loop de IllegalState ESPONTANEAMENTE no meio da projeção (não só em troca de stack) —
+    // e aí nenhum gatilho de transição chama a recuperação, sobrava só o replug do USB (bug 2026-08-11 06:58,
+    // capturado no report: ~1200 linhas/s de VideoPlayer.Decode*Thread IllegalState). Loop ÚNICO, gated pela
+    // pref de destino do AA no cluster (leitura in-memory → sem custo quando o AA não é o alvo). A cada tick
+    // chama a recuperação existente, que SÓ age se o death-loop for real (decoderErrorCount >= threshold);
+    // senão é no-op (só uma leitura `logcat -d -t 500`). A cura auto-reporta o resultado no GitHub.
+    fun startAndroidAutoClusterBlackHealthMonitor() {
+        if (androidAutoClusterBlackHealthMonitorStarted) return
+        androidAutoClusterBlackHealthMonitorStarted = true
+        scope.launch {
+            while (true) {
+                delay(ANDROID_AUTO_CLUSTER_HEALTH_INTERVAL_MS)
+                try {
+                    if (!isAndroidAutoClusterBlackRecoveryEnabled()) continue
+                    if (!isAndroidAutoDesiredOnCluster()) continue
+                    recoverAndroidAutoClusterBlackByCyclingProjectionService("PERIODIC_CLUSTER_HEALTH")
+                } catch (t: Throwable) {
+                    Log.e(TAG, "[PERIODIC_CLUSTER_HEALTH] tick falhou", t)
+                }
+            }
+        }
+        Log.w(
+            TAG,
+            "[PERIODIC_CLUSTER_HEALTH] monitor do preto do cluster iniciado (intervalo ${ANDROID_AUTO_CLUSTER_HEALTH_INTERVAL_MS}ms)"
+        )
+    }
 
     // Conta as linhas do loop de erro do decoder do host no logcat recente
     // (com.ts.androidauto...VideoPlayer$Decode(Input|Output)Thread). One-shot via Shizuku, chamado SÓ

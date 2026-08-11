@@ -323,6 +323,8 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     private void startCarPlaySystemUiIconWatchdogSafely(String reason) {
         try {
             DisplayAppLauncher.INSTANCE.startCarPlaySystemUiIconWatchdog();
+            // Monitor do preto do cluster do AA: death-loop do decoder do host -> auto-recupera sem replug de USB.
+            DisplayAppLauncher.INSTANCE.startAndroidAutoClusterBlackHealthMonitor();
         } catch (Exception e) {
             Log.e(TAG, "CarPlay SystemUI icon watchdog scheduling failed (" + reason + "): " + e.getMessage(), e);
         }
