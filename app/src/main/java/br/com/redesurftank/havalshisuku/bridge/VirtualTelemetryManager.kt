@@ -9,6 +9,7 @@ import android.util.Base64
 import android.util.Log
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
+import br.com.redesurftank.havalshisuku.models.BottomBarState
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -82,6 +83,45 @@ object VirtualTelemetryManager {
         return drawableToBase64(info.icon)
     }
 
+    // ---- Mídia tocando agora ----
+    // Fonte central: BottomBarState (a MESMA que alimenta os canais app.media.* do tema). Leitura de
+    // snapshot state, thread-safe. Metadados leves aqui; a capa (pesada) sai à parte em getAlbumArtBase64.
+    fun getNowPlayingJson(): String {
+        return try {
+            val title = BottomBarState.mediaTitle?.takeIf { it.isNotBlank() } ?: return "{}"
+            val o = JSONObject()
+            o.put("isPlaying", BottomBarState.mediaIsPlaying)
+            o.put("isMuted", BottomBarState.mediaIsMuted)
+            o.put("title", title)
+            BottomBarState.mediaArtist?.takeIf { it.isNotBlank() }?.let { o.put("artist", it) }
+            BottomBarState.mediaAlbum?.takeIf { it.isNotBlank() }?.let { o.put("album", it) }
+            BottomBarState.mediaPackageName?.takeIf { it.isNotBlank() }?.let { o.put("app", it) }
+            if (BottomBarState.mediaDurationMs > 0L) o.put("durationMs", BottomBarState.mediaDurationMs)
+            o.put("positionMs", BottomBarState.mediaElapsedMs)
+            if (BottomBarState.mediaProgressUpdatedAtMs > 0L)
+                o.put("positionUpdatedAtMs", BottomBarState.mediaProgressUpdatedAtMs)
+            o.put("canSeek", BottomBarState.mediaCanSeek)
+            o.put("hasAlbumArt", BottomBarState.mediaArtwork != null)
+            o.toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "getNowPlayingJson falhou", e)
+            "{}"
+        }
+    }
+
+    // Capa como data URI JPEG (menor que PNG; foto não precisa de alpha). "" quando não há arte.
+    fun getAlbumArtBase64(): String {
+        val bmp = BottomBarState.mediaArtwork ?: return ""
+        return try {
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e(TAG, "getAlbumArtBase64 falhou", e)
+            ""
+        }
+    }
+
     fun getVirtualValue(context: Context, key: String): String {
         return when (key) {
             "app.display.1.active_app" -> getActiveAppPackage(1)
@@ -92,6 +132,8 @@ object VirtualTelemetryManager {
             "app.display.3.active_app_icon" -> getActiveAppIconBase64(context, 3)
             "app.launcher.apps" -> getLauncherAppsJson(context)
             "app.navigation.directions" -> AndroidAutoNavManager.getDirectionsJson()
+            "app.media.now_playing" -> getNowPlayingJson()
+            "app.media.album_art" -> getAlbumArtBase64()
             else -> ""
         }
     }
