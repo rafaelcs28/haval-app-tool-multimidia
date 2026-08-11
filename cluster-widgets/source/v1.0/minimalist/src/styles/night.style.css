@@ -4157,6 +4157,33 @@ canvas.graph-chart {
   color: var(--dashboard-text-color) !important;
 }
 
+/* HEV com submodo (Inteligente / Prioridade xx%): DUAS LINHAS no estilo do REGEN da barra —
+   "HEV" em cima (mesmo tamanho/peso/fonte do .bottom-regen-label = 17px Khand bold) e o submodo
+   logo embaixo numa fonte menor, empilhado (coluna) e centralizado. EV / EVP / HEV puro NAO ganham
+   a classe .has-ev-submode -> continuam numa parte so (26px). */
+.dashboard-bottom-ev-mode .bottom-ev-label.has-ev-submode {
+  font-size: 17px !important;
+  display: inline-flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+.bottom-ev-label.has-ev-submode .bottom-ev-main {
+  font-family: var(--font-family-primary, Khand, sans-serif);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+.bottom-ev-label.has-ev-submode .bottom-ev-sub {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
 /* 5. Minimalist Gauge Overrides */
 .gauge-top-info {
   display: flex !important;
@@ -5435,4 +5462,15 @@ body.native-mock-enabled .dev-background,
 /* showRpmIcon = false */
 .hide-rpm-icon .dashboard-rpm-container {
   display: none !important;
+}
+
+/* Fix overlap do submodo HEV (has-ev-submode: "HEV Inteligente/Prioritário/Prior. xx%")
+   por cima do REGEN. O WebView do cluster renderiza o texto mais largo que o Chrome do
+   desktop, fechando a folga que existe no preview. Afasta os dois blocos ~38px. 2026-08-11.
+   Ver [[haval-minimalist-theme-edit-deploy]]. */
+.dashboard-bottom-regen {
+  transform: translateX(-24px) !important;
+}
+.dashboard-bottom-ev-mode {
+  transform: translateX(14px) !important;
 }

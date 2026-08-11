@@ -2107,10 +2107,12 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                 ?.trim()
                                 ?.toFloatOrNull()
                                 ?.toInt()
-                return if (target != null) "$base Prioridade $target%" else "$base Prioridade"
+                // Abreviado ("Prior." em vez de "Prioridade") pra caber sem vazar/quebrar nos
+                // temas do cluster (container ~150px) — consistente com o bottom bar. 2026-08-11.
+                return if (target != null) "$base Prior. $target%" else "$base Prior."
             }
-            // Inteligente: sem % (só a palavra).
-            return "$base Inteligente"
+            // Inteligente: sem % (só a palavra) — abreviado p/ caber igual ao Prior.
+            return "$base Intelig."
         }
         return base
     }

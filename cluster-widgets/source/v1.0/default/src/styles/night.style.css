@@ -5042,3 +5042,12 @@ body.display-mapa .mask-panel.right {
 }
 
 /* MAPA_PREVIEW_SYNC_BLOCK_END */
+
+/* Submodo HEV (o app manda "HEV Prior. XX%" / "HEV Intelig."): força UMA linha e não deixa
+   vazar/quebrar no bottom-ev-label. O container do modo EV é ~150px e o slot vertical é apertado
+   (card de temperatura logo abaixo, no display Mapa) → 18px cabe sem tocar o temp. 2026-08-11.
+   Casa só o caso com submodo (data-bottom-ev começa com "HEV "); EV/EVP/HEV-puro intactos. */
+.bottom-ev-label[data-bottom-ev^="HEV "] {
+  font-size: 18px !important;
+  white-space: nowrap;
+}
