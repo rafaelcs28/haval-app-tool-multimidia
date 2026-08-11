@@ -89,16 +89,17 @@ object AndroidAutoNavManager {
 
     /**
      * Debug: incluir a lista inteira de passos (com cueData) no payload, sob a key `steps`.
-     * Default ON — diagnóstico temporário pra localizar o nome do destino no Waze (o host não
-     * popula navigationDestinations). Depois de confirmado o campo certo, flipa pra OFF.
+     * Default OFF — o diagnóstico já rodou (2026-08-11): pro Waze o host manda só a manobra
+     * corrente (1 passo, sem destino) e o cue = nome da via, então o steps[] NÃO recupera o
+     * destino. Fica desligado em produção; ligue a pref pra reinspecionar (ex.: Google Maps).
      */
     private fun isDebugStepsEnabled(): Boolean {
         return try {
             App.getDeviceProtectedContext()
                 .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
-                .getBoolean(SharedPreferencesKeys.ENABLE_AA_NAV_DEBUG_STEPS.key, true)
+                .getBoolean(SharedPreferencesKeys.ENABLE_AA_NAV_DEBUG_STEPS.key, false)
         } catch (e: Exception) {
-            true
+            false
         }
     }
 
@@ -282,7 +283,7 @@ object AndroidAutoNavManager {
                 stepLanes?.let { n.put("lanes", it) }
                 o.put("next", n)
             }
-            // diagnóstico (gated, default ON): lista inteira de passos c/ cueData p/ o dev achar o destino
+            // diagnóstico (gated, default OFF): lista inteira de passos c/ cueData (reinspeção, ex. Google Maps)
             if (isDebugStepsEnabled()) stepsDump?.let { o.put("steps", it) }
             directionsJson = o.toString()
             updatedAtMs = System.currentTimeMillis()
