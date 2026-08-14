@@ -743,6 +743,55 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         logClusterPerfEvent("menu_item_navigation", mapOf("targetItem" to targetItem))
     }
 
+    // Rate-limit da persistência do console do tema. onConsoleMessage roda só na UI
+    // thread, então estado simples sem sincronização basta.
+    private val CONSOLE_LOG_WINDOW_MS = 1_000L
+    private val CONSOLE_LOG_MAX_PER_WINDOW = 5
+    private var consoleLogWindowStartMs = 0L
+    private var consoleLogPersistedInWindow = 0
+    private var consoleLogSuppressedInWindow = 0
+
+    private fun shouldPersistConsoleMessage(msg: ConsoleMessage): Boolean {
+        val level = msg.messageLevel()
+        // Avisos e erros SEMPRE entram — é o que interessa num bug report.
+        if (level == ConsoleMessage.MessageLevel.WARNING ||
+                        level == ConsoleMessage.MessageLevel.ERROR
+        ) {
+            return true
+        }
+        // Trace de alta frequência do tema (onDataChanged...): puro ruído de dado → 0%.
+        // Match tolerante a espaço/underscore/caixa (o filtro antigo por "onDataChanged_TRACE"
+        // exato escapava quando o tema logava "onDataChanged TRACE" com espaço).
+        if (msg.message().orEmpty().contains("onDataChanged", ignoreCase = true)) {
+            return false
+        }
+        // Backstop por TAXA p/ qualquer OUTRO spam de LOG/DEBUG/TIP (robusto a temas
+        // novos): no máximo N/s. O excedente é descartado e contabilizado; um resumo
+        // "webview_console_suppressed" sai 1x/s quando houve corte, pra o volume ficar visível.
+        val now = SystemClock.elapsedRealtime()
+        if (now - consoleLogWindowStartMs >= CONSOLE_LOG_WINDOW_MS) {
+            if (consoleLogSuppressedInWindow > 0) {
+                ClusterPersistentEventLogger.log(
+                        "webview_console_suppressed",
+                        mapOf(
+                                "count" to consoleLogSuppressedInWindow,
+                                "windowMs" to CONSOLE_LOG_WINDOW_MS
+                        )
+                )
+            }
+            consoleLogWindowStartMs = now
+            consoleLogPersistedInWindow = 0
+            consoleLogSuppressedInWindow = 0
+        }
+        return if (consoleLogPersistedInWindow < CONSOLE_LOG_MAX_PER_WINDOW) {
+            consoleLogPersistedInWindow++
+            true
+        } else {
+            consoleLogSuppressedInWindow++
+            false
+        }
+    }
+
     private fun pushLegacySportNavigation(kind: String, target: String, javascript: String) {
         if (!isSportThemeActive()) return
         val activeWebView = webView ?: return
@@ -1857,11 +1906,14 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                     override fun onConsoleMessage(
                                             consoleMessage: ConsoleMessage?
                                     ): Boolean {
-                                        // Não persiste o trace de alta frequência do tema (uma linha
-                                        // por atualização de CAN): inflava o log do dia p/ dezenas de
-                                        // MB e afogava o relatório de bug. É puro ruído de dado.
+                                        // Persistência filtrada do console do tema: WARN/ERROR sempre
+                                        // entram; LOG/DEBUG de alta frequência (ex. trace do tema, ~10/s)
+                                        // inflavam o log do dia p/ dezenas de MB e afogavam o bug report.
+                                        // Cortado por TAXA + match tolerante (ver shouldPersistConsoleMessage),
+                                        // não mais por string exata — que escapava quando o tema logava com
+                                        // espaço ("onDataChanged TRACE") em vez de underscore.
                                         if (consoleMessage != null &&
-                                                consoleMessage.message()?.contains("onDataChanged_TRACE") != true
+                                                shouldPersistConsoleMessage(consoleMessage)
                                         ) {
                                             ClusterPersistentEventLogger.log(
                                                     "webview_console",
@@ -2761,7 +2813,16 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         // AA/CarPlay are intentionally excluded from managed secondary configs (resize/
         // sync paths), but they still need a native-mask hole on D3 — otherwise the
         // opaque d3_mask wallpaper stays on top of the projection.
-        if (appRectOnDisplay3 == null) {
+        //
+        // Gate on projection being ACTIVE (all three flags are hold-aware, so a transient
+        // render blip doesn't count). resolveProjectionDisplay3AppRect() keys off the AA/
+        // CarPlay TASK still existing on D3, which lingers for a moment after AA STOPS
+        // rendering. Without this gate we revealed the theme (mirror=false) yet kept the
+        // mask hole open over the speedometer, exposing the dead/black AA window.
+        // (bug 20260813-184320: "preto no velocímetro sob a sombra esquerda")
+        if (appRectOnDisplay3 == null &&
+                        (carPlayInDash || projectionMirrorInDash || projectionPreparingD3)
+        ) {
             val projectionHole = resolveProjectionDisplay3AppRect()
             if (projectionHole != null) {
                 appRectOnDisplay3 = projectionHole

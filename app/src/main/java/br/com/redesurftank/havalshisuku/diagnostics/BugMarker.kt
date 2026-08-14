@@ -78,19 +78,7 @@ object BugMarker {
             }.getOrElse { "## Coleta curada indisponivel: ${it.message}" }
 
         // Logcat COMPLETO do sistema (root via Shizuku) — a "muita informacao".
-        val rawLogcat =
-            runCatching {
-                ShizukuUtils.runCommandAndGetOutput(
-                    arrayOf(
-                        "logcat", "-d", "-b", "main,system,crash",
-                        "-v", "threadtime", "-t", RAW_LOGCAT_LINES,
-                        // Silencia o spam de CAN da OEM (Its_IntelligentVehicleControlService) que
-                        // domina o buffer, pra as 4000 linhas renderem MUITO mais historico util
-                        // (AA/VideoPlayer/projecao/erros) em vez de gastar com propriedade de CAN.
-                        "Its_IntelligentVehicleControlService:S", "*:V"
-                    )
-                )
-            }.getOrDefault("").ifBlank { "(logcat completo indisponivel)" }
+        val rawLogcat = captureRootLogcat()
 
         val body = buildString {
             appendLine("# Bug #$n")
@@ -111,6 +99,32 @@ object BugMarker {
             appendLine("```")
         }
         return BugReportUploader.upload(context, body, n, stamp)
+    }
+
+    /**
+     * Logcat root via Shizuku com algumas tentativas. O Shizuku pode estar
+     * transitoriamente fora do ar (comum em movimento) e [ShizukuUtils.runCommandAndGetOutput]
+     * devolve "" nesse caso — SEM exceção. Antes, uma única falha virava "(indisponivel)"
+     * sem retry e sem dizer o porquê, deixando o bug cego (ex.: report 20260813-184320).
+     */
+    private fun captureRootLogcat(): String {
+        val cmd =
+            arrayOf(
+                "logcat", "-d", "-b", "main,system,crash",
+                "-v", "threadtime", "-t", RAW_LOGCAT_LINES,
+                // Silencia o spam de CAN da OEM (Its_IntelligentVehicleControlService) que
+                // domina o buffer, pra as 4000 linhas renderem MUITO mais historico util
+                // (AA/VideoPlayer/projecao/erros) em vez de gastar com propriedade de CAN.
+                "Its_IntelligentVehicleControlService:S", "*:V"
+            )
+        repeat(4) { attempt ->
+            val out = runCatching { ShizukuUtils.runCommandAndGetOutput(cmd) }.getOrDefault("")
+            if (out.isNotBlank()) return out
+            if (attempt < 3) runCatching { Thread.sleep(1500) }
+        }
+        // Falhou de novo: registra o PORQUE (Shizuku no ar?) pra proxima ser diagnosticavel.
+        val shizukuUp = runCatching { ShizukuUtils.isShizukuAvailable() }.getOrDefault(false)
+        return "(logcat completo indisponivel — shizukuPingBinder=$shizukuUp apos 4 tentativas)"
     }
 
     private fun describe(n: Int, r: BugReportUploader.Result): String =
