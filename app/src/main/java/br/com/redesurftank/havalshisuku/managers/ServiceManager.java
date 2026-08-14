@@ -267,6 +267,12 @@ public class ServiceManager {
     private IClusterCallback.Stub clusterCallback;
     private boolean servicesInitialized = false;
     private boolean hasRunStartupCurtainAutomation = false;
+    // Cortina automática por horário — guarda "uma vez por ENTRADA na janela" p/ o gatilho em
+    // movimento (senão reabriria/refecharia a cada tick de velocidade). Reseta ao SAIR da janela.
+    private boolean curtainOpenActedThisWindow = false;
+    private boolean curtainCloseActedThisWindow = false;
+    private long lastCurtainScheduleTickMs = 0L;
+    private static final long CURTAIN_SCHEDULE_TICK_MIN_INTERVAL_MS = 30_000L;
     private boolean isFridaInitialized = false;
     private final List<Runnable> pendingTasks = new ArrayList<>();
     private static long timeBootReceived;
@@ -1155,9 +1161,10 @@ public class ServiceManager {
         Log.w(TAG, "Services initialized successfully");
         boolean curtainOnStartEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_OPEN_SUNROOF_CURTAIN_ON_START.getKey(), false);
         traceCurtain("sunroof_curtain_init", "enabled", curtainOnStartEnabled, "hasRun", hasRunStartupCurtainAutomation);
-        if (curtainOnStartEnabled && !hasRunStartupCurtainAutomation) {
+        boolean curtainCloseEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_CLOSE_SUNROOF_CURTAIN_ON_TIME.getKey(), false);
+        if ((curtainOnStartEnabled || curtainCloseEnabled) && !hasRunStartupCurtainAutomation) {
             hasRunStartupCurtainAutomation = true;
-            autoOpenSunroofCurtain(0);
+            evaluateCurtainSchedule("BOOT");
         }
         scheduleStartupReportReconciliations();
         // HEV Prioritário: no boot o carro costuma resetar o % (ex.: 45->80) e o app pode subir
@@ -2374,6 +2381,13 @@ public class ServiceManager {
                     closeWindowDueToeSpeed = false;
                     closeSunroofDueToeSpeed = false;
                 }
+                // Cortina automática por horário: reavalia em movimento p/ pegar a virada da
+                // janela sem desligar/ligar (throttle p/ não rodar a cada update de velocidade).
+                long curtainTickNow = SystemClock.uptimeMillis();
+                if (curtainTickNow - lastCurtainScheduleTickMs >= CURTAIN_SCHEDULE_TICK_MIN_INTERVAL_MS) {
+                    lastCurtainScheduleTickMs = curtainTickNow;
+                    evaluateCurtainSchedule("SPEED_TICK");
+                }
                 if (currentSpeed <= 0 & sharedPreferences.getBoolean(SharedPreferencesKeys.DISABLE_AVM_CAR_STOPPED.getKey(), false) && !getData(CarConstants.CAR_BASIC_GEAR_STATUS.getValue()).equals("4")) {
                     if (!delayNextAVM) dvr.setAVM(0);
                 }
@@ -2658,6 +2672,65 @@ public class ServiceManager {
             traceCurtain("sunroof_curtain_temp_read", "raw", raw, "result", "unparseable");
             return null;
         }
+    }
+
+    /**
+     * Cortina automática do teto por horário (feature unificada "Conforto & conveniência").
+     * Roda no boot e a cada ~30s dirigindo (gatilho de velocidade). Abrir e Fechar têm janelas
+     * próprias e NÃO devem se sobrepor (a UI valida). Cada ação dispara UMA vez por ENTRADA na
+     * janela e rearma ao sair — assim o gatilho em movimento pega a virada do horário sem
+     * desligar/ligar, e um fechamento/abertura manual não fica sendo desfeito a cada tick.
+     * Temperatura condiciona SOMENTE a abertura (dentro de autoOpenSunroofCurtain).
+     */
+    private void evaluateCurtainSchedule(String trigger) {
+        boolean openEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_OPEN_SUNROOF_CURTAIN_ON_START.getKey(), false);
+        boolean closeEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_CLOSE_SUNROOF_CURTAIN_ON_TIME.getKey(), false);
+        if (!openEnabled && !closeEnabled) return;
+
+        Calendar now = Calendar.getInstance();
+        int t = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+
+        boolean inOpen = openEnabled && isTimeInRange(t,
+                sharedPreferences.getInt(SharedPreferencesKeys.OPEN_SUNROOF_CURTAIN_START_HOUR.getKey(), 18),
+                sharedPreferences.getInt(SharedPreferencesKeys.OPEN_SUNROOF_CURTAIN_START_MINUTE.getKey(), 0),
+                sharedPreferences.getInt(SharedPreferencesKeys.OPEN_SUNROOF_CURTAIN_END_HOUR.getKey(), 9),
+                sharedPreferences.getInt(SharedPreferencesKeys.OPEN_SUNROOF_CURTAIN_END_MINUTE.getKey(), 0));
+        boolean inClose = closeEnabled && isTimeInRange(t,
+                sharedPreferences.getInt(SharedPreferencesKeys.CLOSE_SUNROOF_CURTAIN_START_HOUR.getKey(), 9),
+                sharedPreferences.getInt(SharedPreferencesKeys.CLOSE_SUNROOF_CURTAIN_START_MINUTE.getKey(), 0),
+                sharedPreferences.getInt(SharedPreferencesKeys.CLOSE_SUNROOF_CURTAIN_END_HOUR.getKey(), 17),
+                sharedPreferences.getInt(SharedPreferencesKeys.CLOSE_SUNROOF_CURTAIN_END_MINUTE.getKey(), 0));
+
+        // Rearma ao SAIR da janela (permite disparar de novo na próxima entrada).
+        if (!inOpen) curtainOpenActedThisWindow = false;
+        if (!inClose) curtainCloseActedThisWindow = false;
+
+        // Fechar tem precedência se (config equivocada) as janelas casarem — nunca abrir+fechar juntos.
+        if (inClose && !curtainCloseActedThisWindow) {
+            curtainCloseActedThisWindow = true;
+            traceCurtain("curtain_schedule_act", "trigger", trigger, "action", "close", "nowMin", t);
+            autoCloseSunroofCurtain();
+            return;
+        }
+        if (inOpen && !curtainOpenActedThisWindow) {
+            curtainOpenActedThisWindow = true;
+            traceCurtain("curtain_schedule_act", "trigger", trigger, "action", "open", "nowMin", t);
+            autoOpenSunroofCurtain(0);
+        }
+    }
+
+    /** Fecha a cortina do teto (janela já validada em evaluateCurtainSchedule). Idempotente. */
+    private void autoCloseSunroofCurtain() {
+        Log.w(TAG, "Auto-closing sunroof curtain (schedule)");
+        // Pequeno atraso p/ garantir serviços prontos no boot (igual à abertura).
+        backgroundHandler.postDelayed(this::closeSunRoofShade, 2000);
+    }
+
+    /** Janela [sh:sm, eh:em) com virada de meia-noite. Janela vazia (s==e) = nunca. */
+    private boolean isTimeInRange(int t, int sh, int sm, int eh, int em) {
+        int s = sh * 60 + sm, e = eh * 60 + em;
+        if (s == e) return false;
+        return (s < e) ? (t >= s && t < e) : (t >= s || t < e);
     }
 
     public boolean isTurnLightOn() {
