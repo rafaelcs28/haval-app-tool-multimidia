@@ -253,7 +253,7 @@ class ConnectivityStatusProvider : ContentProvider() {
     private fun scanVisible(ctx: Context): List<String> {
         return try {
             val wm = ctx.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return emptyList()
-            try { wm.startScan() } catch (_: Throwable) {}
+            requestScanThrottled(wm)
             (wm.scanResults ?: emptyList<ScanResult>())
                     .filter { !it.SSID.isNullOrBlank() }
                     .groupBy { it.SSID }
@@ -264,6 +264,39 @@ class ConnectivityStatusProvider : ContentProvider() {
         } catch (t: Throwable) {
             emptyList()
         }
+    }
+
+    /**
+     * O Android só aceita ~4 startScan por 2 minutos; além disso ele REJEITA e o framework
+     * registra uma linha "WifiService: Failed to start scan" por chamada. Como este provider é
+     * consultado de fora (EcoTrip), um consumidor em laço transformava cada consulta em uma
+     * tentativa de scan — e um flood de ~130 linhas/s foi observado no carro, afogando o logcat
+     * e queimando CPU no system_server (report 20260817-083131).
+     *
+     * Pedir mais que isto não traz resultado novo: `scanResults` devolve o último scan de
+     * qualquer forma. Contamos as tentativas suprimidas para saber, no próximo relatório, se a
+     * origem do flood somos nós ou outro app.
+     */
+    @Volatile private var lastScanRequestMs = 0L
+    @Volatile private var suppressedScanRequests = 0
+    private val SCAN_MIN_INTERVAL_MS = 30_000L
+
+    private fun requestScanThrottled(wm: WifiManager) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastScanRequestMs < SCAN_MIN_INTERVAL_MS) {
+            val n = ++suppressedScanRequests
+            // Só marca em potências de 10: se aparecer, a taxa é anormal e a origem é nossa.
+            if (n == 10 || n == 100 || n == 1000 || n == 10000) {
+                br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger.log(
+                        "wifi_scan_throttled",
+                        mapOf("suppressed" to n, "windowMs" to SCAN_MIN_INTERVAL_MS)
+                )
+            }
+            return
+        }
+        lastScanRequestMs = now
+        suppressedScanRequests = 0
+        try { wm.startScan() } catch (_: Throwable) {}
     }
 
     private fun isSecured(r: ScanResult): Boolean {
