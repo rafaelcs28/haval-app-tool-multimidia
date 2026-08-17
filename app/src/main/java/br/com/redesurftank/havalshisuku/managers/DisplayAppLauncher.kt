@@ -140,6 +140,11 @@ object DisplayAppLauncher {
     private const val ANDROID_AUTO_LINK_COMMAND_INTERFACE = "com.ts.androidauto.sdk.aidl.LinkCommand"
     private const val ANDROID_AUTO_LINK_COMMAND_CONNECT_TRANSACTION = 0x07
     private const val ANDROID_AUTO_LINK_COMMAND_ADD_CALLBACK_TRANSACTION = 0x01
+    private const val ANDROID_AUTO_LINK_COMMAND_REMOVE_CALLBACK_TRANSACTION = 0x02
+    /** De quanto em quanto o watchdog cobra sinal de vida do registro do callback de nav. */
+    private const val ANDROID_AUTO_NAV_CALLBACK_HEALTH_INTERVAL_MS = 60_000L
+    /** Silêncio acima disto = registro provavelmente órfão; re-registra. */
+    private const val ANDROID_AUTO_NAV_CALLBACK_SILENCE_LIMIT_MS = 90_000L
     private const val ANDROID_AUTO_LINK_COMMAND_SEND_KEY_EVENT_TRANSACTION = 0x0a
     private const val ANDROID_AUTO_LINK_COMMAND_SEND_VEHICLE_INFO_TRANSACTION = 0x0c
     private const val ANDROID_AUTO_LINK_COMMAND_GET_DEVICE_LIST_TRANSACTION = 0x0d
@@ -1939,6 +1944,70 @@ object DisplayAppLauncher {
         } else {
             Log.w(TAG, "[$reason] Falha ao registrar nav callback do Android Auto (retenta no próximo bind)")
         }
+    }
+
+    /**
+     * Re-registra o callback de nav IGNORANDO o flag, removendo antes para não duplicar.
+     *
+     * O registro é feito uma vez por conexão e o flag só zera no onServiceDisconnected — ou seja,
+     * só quando o serviço MORRE. Mas o host limpa a lista interna de callbacks quando a sessão do
+     * Android Auto cai e volta, sem derrubar o serviço: o bind segue vivo, o flag segue dizendo
+     * "registrado" e o host simplesmente para de nos chamar. O canal de navegação congela e nada
+     * percebe. (Sintoma relatado pelo consumidor: o probe de navegação para, o de mídia não —
+     * mídia vem da MediaSession do Android, não deste callback.)
+     */
+    private fun reRegisterAndroidAutoNavCallback(reason: String) {
+        if (!br.com.redesurftank.havalshisuku.bridge.AndroidAutoNavManager.isEnabled()) return
+        val binder = br.com.redesurftank.havalshisuku.bridge.AndroidAutoNavManager.callbackBinder
+        // O remove é best-effort: se o host já esqueceu de nós, ele falha e tudo bem.
+        transactAndroidAutoLinkCommandSync(
+            ANDROID_AUTO_LINK_COMMAND_REMOVE_CALLBACK_TRANSACTION,
+            "${reason}_NAV_CALLBACK_REMOVE"
+        ) { data -> data.writeStrongBinder(binder) }
+        androidAutoNavCallbackRegistered = false
+        registerAndroidAutoNavCallbackIfEnabled(reason)
+    }
+
+    @Volatile private var androidAutoNavCallbackHealthMonitorStarted = false
+
+    /**
+     * Cobra sinal de vida do callback de nav e re-registra quando ele emudece. Sem rota o host
+     * ainda emite eventos de estado, então silêncio prolongado com o binder vivo indica registro
+     * órfão, não "ninguém está navegando".
+     */
+    fun startAndroidAutoNavCallbackHealthMonitor() {
+        if (androidAutoNavCallbackHealthMonitorStarted) return
+        androidAutoNavCallbackHealthMonitorStarted = true
+        scope.launch {
+            while (true) {
+                delay(ANDROID_AUTO_NAV_CALLBACK_HEALTH_INTERVAL_MS)
+                try {
+                    checkAndroidAutoNavCallbackHealth()
+                } catch (t: Throwable) {
+                    Log.e(TAG, "[NAV_CALLBACK_HEALTH] tick falhou", t)
+                }
+            }
+        }
+    }
+
+    private fun checkAndroidAutoNavCallbackHealth() {
+        val nav = br.com.redesurftank.havalshisuku.bridge.AndroidAutoNavManager
+        if (!nav.isEnabled()) return
+        if (!androidAutoNavCallbackRegistered) return // o caminho normal do bind cuida disso
+        val binder = androidAutoLinkCommandBinder ?: return
+        if (!binder.pingBinder()) return // host caiu: o onServiceDisconnected/rebind resolve
+
+        val last = nav.getLastCallbackAtMs()
+        val silentMs = if (last <= 0L) Long.MAX_VALUE
+        else android.os.SystemClock.elapsedRealtime() - last
+        if (silentMs < ANDROID_AUTO_NAV_CALLBACK_SILENCE_LIMIT_MS) return
+
+        Log.w(TAG, "[NAV_CALLBACK_HEALTH] host mudo há ${if (silentMs == Long.MAX_VALUE) "sempre" else "${silentMs}ms"}; re-registrando")
+        br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger.log(
+            "nav_callback_reregister",
+            mapOf("silentMs" to if (silentMs == Long.MAX_VALUE) -1L else silentMs)
+        )
+        reRegisterAndroidAutoNavCallback("NAV_CALLBACK_HEALTH")
     }
 
     private fun transactAndroidAutoLinkCommandInt(

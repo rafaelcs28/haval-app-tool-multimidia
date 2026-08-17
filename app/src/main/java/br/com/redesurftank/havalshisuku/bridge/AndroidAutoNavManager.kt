@@ -75,6 +75,7 @@ object AndroidAutoNavManager {
 
     @Volatile private var directionsJson: String = EMPTY
     @Volatile private var updatedAtMs: Long = 0L
+    @Volatile private var lastCallbackAtMs: Long = 0L
 
     /** Toggle (default ON — captura passiva e aditiva). */
     fun isEnabled(): Boolean {
@@ -113,6 +114,14 @@ object AndroidAutoNavManager {
      * um snapshot velho seria indistinguível de um atual.
      */
     fun getDirectionsUpdatedAtMs(): Long = if (isEnabled()) updatedAtMs else 0L
+
+    /**
+     * Quando o host nos chamou pela última vez (elapsedRealtime), de QUALQUER evento — inclusive
+     * os que dizem "sem rota". Zero = nunca fomos chamados desde o boot. É o sinal que distingue
+     * "não há rota" de "o registro morreu": sem rota o host ainda dá sinais, um registro órfão
+     * não dá nenhum.
+     */
+    fun getLastCallbackAtMs(): Long = lastCallbackAtMs
 
     /**
      * Diagnóstico best-effort: espelha o último snapshot em `filesDir/nav-directions.json`.
@@ -336,6 +345,14 @@ object AndroidAutoNavManager {
         override fun asBinder(): IBinder = this
 
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+            // Sinal de VIDA do registro, separado de updatedAtMs (que só anda com rota ativa).
+            // O host pode limpar a lista de callbacks sem derrubar o serviço — nosso bind
+            // continua vivo e nada percebe que paramos de ser chamados. Ver o watchdog em
+            // DisplayAppLauncher.checkAndroidAutoNavCallbackHealth.
+            if (code == TXN_ON_NOTIFY_NAV_STATE || code == TXN_ON_NAV_STATE ||
+                    code == TXN_ON_NAV_POSITION) {
+                lastCallbackAtMs = android.os.SystemClock.elapsedRealtime()
+            }
             return try {
                 when (code) {
                     TXN_ON_NOTIFY_NAV_STATE -> {
