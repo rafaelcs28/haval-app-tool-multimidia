@@ -112,10 +112,13 @@ object BugMarker {
             arrayOf(
                 "logcat", "-d", "-b", "main,system,crash",
                 "-v", "threadtime", "-t", RAW_LOGCAT_LINES,
-                // Silencia o spam de CAN da OEM (Its_IntelligentVehicleControlService) que
-                // domina o buffer, pra as 4000 linhas renderem MUITO mais historico util
-                // (AA/VideoPlayer/projecao/erros) em vez de gastar com propriedade de CAN.
-                "Its_IntelligentVehicleControlService:S", "*:V"
+                // Silencia os floods que dominam o buffer, pra as 4000 linhas renderem MUITO
+                // mais historico util (AA/VideoPlayer/projecao/erros):
+                //  - Its_IntelligentVehicleControlService: spam de propriedade de CAN da OEM.
+                //  - WifiService "Failed to start scan": ~130 linhas/s continuas no carro do
+                //    usuario; sozinho reduzia as 4000 linhas a uma janela de 10s e apagava
+                //    qualquer rastro do nosso app (report 20260817-083131).
+                "Its_IntelligentVehicleControlService:S", "WifiService:S", "*:V"
             )
         repeat(4) { attempt ->
             val out = runCatching { ShizukuUtils.runCommandAndGetOutput(cmd) }.getOrDefault("")

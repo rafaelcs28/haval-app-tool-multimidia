@@ -186,6 +186,10 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
      */
     private var display3AppRect: android.graphics.Rect? = null
 
+    /** Fecha um buraco especulativo que ficou aberto porque nada chegou ao D3. */
+    private var speculativeHoleExpiryRunnable: Runnable? = null
+    private val SPECULATIVE_HOLE_MAX_MS = 1800L
+
     /**
      * Cached wallpaper × d3_mask composite with no app hole. App-rect changes copy this and
      * CLEAR the hole instead of reloading assets and re-running DST_IN every time.
@@ -951,12 +955,45 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             if (rect != display3AppRect) {
                 display3AppRect = rect
                 Log.w(TAG, "display3AppRect hole prepare reason=$reason rect=$rect")
+                ClusterPersistentEventLogger.log(
+                        "display3_hole_prepare",
+                        mapOf("reason" to reason, "rect" to rect.toShortString())
+                )
                 updateNativeMaskViews()
             } else {
                 // Same rect, but force a redraw in case the mask was rebuilt without the hole.
                 updateNativeMaskViews()
             }
+            scheduleSpeculativeHoleExpiry(reason)
         }
+    }
+
+    /**
+     * The hole above is punched SPECULATIVELY — before the activity is moved to D3 — so the
+     * app's first composed frame is already uncovered. When that app never arrives (the AA host
+     * died, the move failed), the hole is left open over nothing and the driver sees a black
+     * patch where the mask normally shades the dial, until the 5s projection watchdog happens
+     * to close it. This bounds that window: if nothing is on D3 shortly after, close it now.
+     * (bug 20260817-083131, a repeat of 20260813 that the projection-state gate alone missed.)
+     */
+    private fun scheduleSpeculativeHoleExpiry(reason: String) {
+        speculativeHoleExpiryRunnable?.let { handler.removeCallbacks(it) }
+        val runnable = Runnable {
+            speculativeHoleExpiryRunnable = null
+            if (display3AppRect == null) return@Runnable
+            if (isAnyAppOnDisplay3 || isProjectionActive()) return@Runnable
+            Log.w(TAG, "[SPECULATIVE_HOLE_EXPIRY] nothing landed on D3 after $reason; closing hole")
+            ClusterPersistentEventLogger.log(
+                    "display3_hole_expired",
+                    mapOf("reason" to reason, "afterMs" to SPECULATIVE_HOLE_MAX_MS)
+            )
+            updateVirtualClusterVisibility(
+                    reason = "SPECULATIVE_HOLE_EXPIRY",
+                    forceNativeMaskRefresh = true
+            )
+        }
+        speculativeHoleExpiryRunnable = runnable
+        handler.postDelayed(runnable, SPECULATIVE_HOLE_MAX_MS)
     }
 
     private fun logClusterInputKey(keyName: String, keyCode: Int, action: Int) {
@@ -2841,6 +2878,22 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     "display3AppRect hole update reason=$reason rect=$display3AppRect " +
                             "force=$forceNativeMaskRefresh"
             )
+            // Vai para o log persistente (não só o logcat): quando o buraco fica aberto sobre
+            // nada, o resultado é uma mancha preta no cluster, e o logcat do carro rola rápido
+            // demais para explicar o episódio depois. Só em MUDANÇA, não é volume.
+            if (rectChanged) {
+                ClusterPersistentEventLogger.log(
+                        "display3_hole_update",
+                        mapOf(
+                                "reason" to reason,
+                                "rect" to (display3AppRect?.toShortString() ?: "none"),
+                                "carPlayInDash" to carPlayInDash,
+                                "projectionMirrorInDash" to projectionMirrorInDash,
+                                "projectionPreparingD3" to projectionPreparingD3,
+                                "display3Active" to isAnyAppOnDisplay3
+                        )
+                )
+            }
             updateNativeMaskViews()
         }
 
