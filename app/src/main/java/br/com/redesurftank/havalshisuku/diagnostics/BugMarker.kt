@@ -28,6 +28,7 @@ object BugMarker {
     private const val DIR = "/data/local/tmp/impulse-trip"
     private const val MARKS_FILE = "$DIR/bug-marks.txt"
     private const val RAW_LOGCAT_LINES = "4000"
+    private const val APP_LOGCAT_LINES = "1200"
 
     private val counter = AtomicInteger(0)
     private val fmt = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
@@ -79,6 +80,12 @@ object BugMarker {
 
         // Logcat COMPLETO do sistema (root via Shizuku) — a "muita informacao".
         val rawLogcat = captureRootLogcat()
+        // ...e o nosso proprio rastro, isolado por PID. O buffer cru e uma corrida: qualquer
+        // app em laco (ja aconteceu: ~130 linhas/s de WifiService) empurra as nossas linhas
+        // para fora e o relatorio chega cego. Filtrar por PID garante o rastro do app
+        // independentemente do que mais esteja gritando no log.
+        val ownPid = android.os.Process.myPid()
+        val appLogcat = captureAppLogcat(ownPid)
 
         val body = buildString {
             appendLine("# Bug #$n")
@@ -97,6 +104,13 @@ object BugMarker {
             append(rawLogcat)
             appendLine()
             appendLine("```")
+            appendLine()
+            appendLine("## Logcat SO DO APP (filtrado por PID $ownPid, ultimas $APP_LOGCAT_LINES linhas)")
+            appendLine()
+            appendLine("```text")
+            append(appLogcat)
+            appendLine()
+            appendLine("```")
         }
         return BugReportUploader.upload(context, body, n, stamp)
     }
@@ -107,6 +121,25 @@ object BugMarker {
      * devolve "" nesse caso — SEM exceção. Antes, uma única falha virava "(indisponivel)"
      * sem retry e sem dizer o porquê, deixando o bug cego (ex.: report 20260813-184320).
      */
+    /**
+     * Rastro do PROPRIO app, isolado por PID. Sobrevive a qualquer flood de terceiros — o
+     * buffer cru e disputado e um app em laco apaga as nossas linhas dele (ver [captureRootLogcat]).
+     * Sem root da tambem certo: o processo sempre pode ler o proprio log.
+     */
+    private fun captureAppLogcat(pid: Int): String {
+        val cmd = arrayOf("logcat", "-d", "-v", "threadtime", "-t", APP_LOGCAT_LINES, "--pid=$pid")
+        // Via Shizuku primeiro (o buffer root ve tudo); cai para o processo local se indisponivel.
+        runCatching { ShizukuUtils.runCommandAndGetOutput(cmd) }
+            .getOrDefault("")
+            .let { if (it.isNotBlank()) return it }
+        return runCatching {
+            val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }
+            runCatching { p.destroy() }
+            out
+        }.getOrDefault("").ifBlank { "(logcat do app indisponivel)" }
+    }
+
     private fun captureRootLogcat(): String {
         val cmd =
             arrayOf(
