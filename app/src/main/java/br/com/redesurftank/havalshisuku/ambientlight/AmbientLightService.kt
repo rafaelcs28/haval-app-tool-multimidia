@@ -382,6 +382,12 @@ class AmbientLightService : Service() {
 
         @JvmStatic
         fun startIfEnabled(context: Context) {
+            // Modo Concessionária: as fitas de LED são das coisas mais visíveis do app —
+            // não podem voltar no boot enquanto o modo estiver ativo.
+            if (br.com.redesurftank.havalshisuku.managers.StealthModeManager.isActive()) {
+                Log.w(TAG, "Modo Concessionária ativo; ambient light não sobe")
+                return
+            }
             if (AmbientLightSettings.isEnabled()) {
                 context.startService(createStartIntent(context))
             }

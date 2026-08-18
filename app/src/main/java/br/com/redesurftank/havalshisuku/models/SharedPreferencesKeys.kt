@@ -110,6 +110,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     ENABLE_AA_CLUSTER_OFFSET("enableAaClusterOffset", "Habilitar deslocamento do Android Auto no cluster"),
     AA_CLUSTER_LEFT_OFFSET("aaClusterLeftOffset", "Deslocamento horizontal do Android Auto no cluster (px)"),
     CAR_MONITOR_PROPERTIES("carMonitorProperties", "Propriedades do monitoramento do carro"),
+    // ===== Modo Concessionária (MASTER SWITCH) =====
+    // Única chave do modo. NENHUMA preferência do usuário é alterada ao entrar/sair: os pontos
+    // de ação consultam StealthModeManager.isActive() e o estado normal é só reaplicado na saída.
+    STEALTH_MODE_ACTIVE("stealthModeActive", "Modo Concessionária ativo"),
     BYPASS_SELF_INSTALLATION_INTEGRITY_CHECK(
             "bypassSelfInstallationIntegrityCheck",
             "Ignorar verificação de integridade da instalação"

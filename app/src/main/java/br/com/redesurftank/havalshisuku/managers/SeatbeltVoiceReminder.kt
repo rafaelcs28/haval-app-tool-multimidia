@@ -192,10 +192,14 @@ object SeatbeltVoiceReminder {
         Log.i(TAG, "registrado")
     }
 
+    // O aviso é disparado por um IDataChanged registrado no ServiceManager, e esses listeners
+    // rodam dentro do dispatchTelemetryOnly — ou seja, ANTES do gate central do Modo
+    // Concessionária. Por isso o gate se repete aqui: com o modo ativo o carro não fala nada.
     private fun isEnabled(): Boolean =
-        App.getDeviceProtectedContext()
-            .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
-            .getBoolean(SharedPreferencesKeys.ENABLE_SEATBELT_VOICE.key, true)
+        !StealthModeManager.isActive() &&
+            App.getDeviceProtectedContext()
+                .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+                .getBoolean(SharedPreferencesKeys.ENABLE_SEATBELT_VOICE.key, true)
 
     private fun beltRaw(): String? =
         lastBeltRaw ?: ServiceManager.getInstance().getData(CarConstants.CAR_BASIC_SEAT_BELT_WARNING.value)

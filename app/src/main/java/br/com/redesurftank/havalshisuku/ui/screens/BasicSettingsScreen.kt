@@ -32,6 +32,7 @@ import br.com.redesurftank.havalshisuku.ambientlight.AmbientLightService
 import br.com.redesurftank.havalshisuku.managers.AutoBrightnessManager
 import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
+import br.com.redesurftank.havalshisuku.managers.StealthModeManager
 import coil.compose.AsyncImage
 import br.com.redesurftank.havalshisuku.models.BottomBarState
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
@@ -927,6 +928,12 @@ fun BasicSettingsTab() {
                         delay(10000)
                 }
         }
+
+        // Modo Concessionária: a linha é um BOTÃO DE AÇÃO (hideSwitch), não um toggle persistente.
+        // `stealthRowExpanded` só abre/fecha o conteúdo da linha; a ativação de verdade passa por
+        // um AlertDialog de confirmação (o ícone do app some, então não pode ser um toque solto).
+        var stealthRowExpanded by remember { mutableStateOf(false) }
+        var showStealthConfirm by remember { mutableStateOf(false) }
 
         val settingsList = mutableListOf<SettingItem>()
 
@@ -3601,10 +3608,83 @@ fun BasicSettingsTab() {
                 )
         )
 
+        // Modo Concessionária — devolve o carro ao comportamento de fábrica antes da revisão.
+        settingsList.add(
+                SettingItem(
+                        title = "Modo Concessionária",
+                        description =
+                                "Esconde o ícone e desliga tudo que é visível, deixando o carro como de fábrica. Para voltar: 3 toques longos no botão 1 do volante.",
+                        group = SettingsGroups.FEATURES,
+                        hideSwitch = true,
+                        checked = stealthRowExpanded,
+                        onCheckedChange = { stealthRowExpanded = it },
+                        customContent = {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                                "Ao ativar: o ícone do Impulse some do menu de apps, o painel volta ao nativo, a barra inferior e o overlay saem, as fitas de LED apagam e os patches do Android Auto/CarPlay são desmontados. As automações do carro param de agir. NENHUMA configuração sua é apagada — é só uma chave-mestra.",
+                                                color = AppColors.TextSecondary,
+                                                fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                                "Para voltar: 3 toques LONGOS no botão 1 do volante, com até 8s entre eles. Rede de segurança por telnet/adb: am broadcast -a br.com.redesurftank.havalshisuku.STEALTH_EXIT",
+                                                color = AppColors.TextSecondary,
+                                                fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                        Button(
+                                                onClick = { showStealthConfirm = true },
+                                                colors =
+                                                        ButtonDefaults.buttonColors(
+                                                                containerColor = Color(0xFFB3261E),
+                                                                contentColor = Color.White
+                                                        )
+                                        ) { Text("Ativar Modo Concessionária") }
+                                }
+                        }
+                )
+        )
+
         // Aba "Performance" (SettingsGroups.PERFORMANCE): debloat + DataTrack + overlay CPU/RAM.
         settingsList.addAll(performanceSettingItems(prefs))
 
         GroupedSettingsLayout(items = settingsList)
+
+        // Confirmação obrigatória: depois disso o ícone some e a volta é só pelo volante/broadcast.
+        if (showStealthConfirm) {
+                AlertDialog(
+                        onDismissRequest = { showStealthConfirm = false },
+                        containerColor = AppColors.CardBackground,
+                        title = {
+                                Text(
+                                        "Ativar Modo Concessionária?",
+                                        color = AppColors.TextPrimary,
+                                        fontWeight = FontWeight.SemiBold
+                                )
+                        },
+                        text = {
+                                Text(
+                                        "O ícone do Impulse vai SUMIR do menu de apps e tudo que é visível será desligado. A única forma de voltar pela tela do carro é dar 3 toques LONGOS no botão 1 do volante (até 8s entre eles). Suas configurações não são apagadas.",
+                                        color = AppColors.TextSecondary,
+                                        fontSize = 14.sp
+                                )
+                        },
+                        confirmButton = {
+                                TextButton(
+                                        onClick = {
+                                                showStealthConfirm = false
+                                                stealthRowExpanded = false
+                                                StealthModeManager.enter(context, "UI")
+                                        }
+                                ) { Text("Ativar", color = Color(0xFFE05252)) }
+                        },
+                        dismissButton = {
+                                TextButton(onClick = { showStealthConfirm = false }) {
+                                        Text("Cancelar", color = AppColors.TextSecondary)
+                                }
+                        }
+                )
+        }
 
         if (showStartPicker) {
                 LaunchedEffect(Unit) {

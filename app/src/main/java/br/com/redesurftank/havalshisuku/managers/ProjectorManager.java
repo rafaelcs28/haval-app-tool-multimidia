@@ -62,6 +62,12 @@ public class ProjectorManager {
 
     public void initialize() {
         Log.w(TAG, "Initializing ProjectorManager");
+        // Modo Concessionária: o painel tem que ficar NATIVO, inclusive depois de desligar/ligar
+        // o carro. Ponto único — cobre o boot e qualquer re-inicialização do ServiceManager.
+        if (StealthModeManager.isActive()) {
+            Log.w(TAG, "Modo Concessionária ativo; não subindo os projetores do cluster");
+            return;
+        }
         try {
             if (initialized && (instrumentProjector != null || instrumentProjector2 != null)) {
                 Log.w(TAG, "ProjectorManager already initialized; skipping duplicate presentations");

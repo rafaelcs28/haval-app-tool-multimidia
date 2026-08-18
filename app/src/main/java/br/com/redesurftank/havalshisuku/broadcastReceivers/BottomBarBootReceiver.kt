@@ -11,6 +11,11 @@ class BottomBarBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
         if (Intent.ACTION_BOOT_COMPLETED == action || "android.intent.action.QUICKBOOT_POWERON" == action) {
+            // Modo Concessionária sobrevive ao desligar/ligar do carro: nada visível volta.
+            if (br.com.redesurftank.havalshisuku.managers.StealthModeManager.isActive()) {
+                Log.w("BottomBarBootReceiver", "Modo Concessionária ativo, skipping")
+                return
+            }
             val prefs = br.com.redesurftank.App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
             val isEnabled = prefs.getBoolean(br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys.PERSISTENT_BOTTOM_BAR.key, false)
             

@@ -161,6 +161,17 @@
                 <action android:name="br.com.redesurftank.havalshisuku.FRIDA_START" />
             </intent-filter>
         </receiver>
+        <!-- Porta de serviço do Modo Concessionária: reverte por telnet/adb quando o ícone
+             do launcher está escondido e a sequência do volante não estiver disponível.
+             am broadcast -a br.com.redesurftank.havalshisuku.STEALTH_EXIT -->
+        <receiver
+            android:name=".broadcastReceivers.StealthExitReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="br.com.redesurftank.havalshisuku.STEALTH_EXIT" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".broadcastReceivers.DispatchAllDatasReceiver"
             android:enabled="true"

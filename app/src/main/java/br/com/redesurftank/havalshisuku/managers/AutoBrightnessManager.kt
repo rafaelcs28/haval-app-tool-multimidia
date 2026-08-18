@@ -75,6 +75,10 @@ class AutoBrightnessManager private constructor() {
 
     private fun updateScheduleBlocking() {
         cancelSchedules()
+        // Modo Concessionária: o brilho é dirigido por AlarmManager, não por OnDataChanged, então
+        // o gate central não o alcança. Com o modo ativo os alarmes ficam cancelados (acima) e
+        // nada é reagendado; a saída do modo chama updateSchedule() de novo.
+        if (StealthModeManager.isActive()) return
         if (!isEnabled()) return
         ensureLocationPermissionIfNeeded()
         if (useSun() && applySunSchedule()) {
