@@ -169,15 +169,11 @@ object StealthModeManager {
      * launcher — o ícone some da tela e o serviço continua rodando, que é justamente o que
      * mantém a porta de volta aberta.
      */
-    private val HIDE_ICON_ONLY = setOf(
-        // Fornece o privilégio que reverte este modo: suspendê-lo trancaria a porta por dentro.
-        "moe.shizuku.privileged.api",
-        // EcoTrip: é justamente durante a revisão que o acompanhamento remoto do carro mais
-        // importa (posição, telemetria, comandos pelo celular). `pm hide` SUSPENDE o app — ele
-        // pararia de falar por MQTT e o dono ficaria cego enquanto o carro está com terceiros.
-        // O ícone some do mesmo jeito; o serviço continua de pé.
-        "br.com.redesurftank.ecotrip"
-    )
+    // Só o Shizuku: ele fornece o privilégio que reverte este modo, então suspendê-lo trancaria
+    // a porta por dentro. O EcoTrip fica de FORA desta lista por escolha do dono — ele é
+    // suspenso como qualquer outro app de terceiro (perde o MQTT e o acompanhamento remoto
+    // enquanto o modo está ativo), em favor do disfarce completo.
+    private val HIDE_ICON_ONLY = setOf("moe.shizuku.privileged.api")
 
     private fun prefs() =
         App.getDeviceProtectedContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
