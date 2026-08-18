@@ -359,17 +359,23 @@ public class ServiceManager {
     private static final long STEERING_WHEEL_CLIMATE_COMMAND_DEDUP_WINDOW_MS = 800L;
     // ===== Modo Concessionária: sequência de saída pelo volante =====
     // Com o modo ativo o ícone do launcher some, então esta é a ÚNICA porta de volta pela tela do
-    // carro. 3 toques LONGOS no botão 1 (keyCode 518) dentro de 8s revertem o modo. Roda MESMO com
+    // carro. 3 toques no botão 1 seguidos de 3 toques no botão 2 (curtos, 8s entre toques) revertem o modo. Roda MESMO com
     // ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS desligado. Fora do modo é inerte (não interfere no uso
     // normal do botão).
-    private static final int STEALTH_EXIT_KEY_CODE = 518;          // botão 1 do volante, toque LONGO
-    private static final int STEALTH_EXIT_REQUIRED_PRESSES = 3;
+    // Sequência: 3 toques no botão 1, depois 3 toques no botão 2 (toques CURTOS).
+    // Exigir a TROCA de botão é o que torna a sequência imune a auto-repeat do firmware: se um
+    // botão segurado repetir sozinho, ele nunca avança de fase. E a combinação 3+3 alternada não
+    // acontece por acidente no uso normal.
+    private static final int STEALTH_EXIT_BUTTON_1_KEY = 517;      // botão 1, toque curto
+    private static final int STEALTH_EXIT_BUTTON_2_KEY = 1031;     // botão 2, toque curto
+    private static final int STEALTH_EXIT_PRESSES_PER_BUTTON = 3;
     private static final long STEALTH_EXIT_WINDOW_MS = 8000L;      // janela máxima ENTRE toques
     // O input service deste head unit reporta o toque como evento de RELEASE (ver
     // ClusterCardNavigationPolicy.shouldHandleInputAction). Não filtramos por action — se o
     // firmware mandar DOWN+UP, este debounce colapsa o par em um toque só.
     private static final long STEALTH_EXIT_DEBOUNCE_MS = 300L;
     private int stealthExitPressCount = 0;
+    private int stealthExitPhase = 0;                              // 0 = botão 1, 1 = botão 2
     private long stealthExitLastPressAtMs = 0L;
     private int lastDashboardToggleButton = -1;
     private long lastDashboardToggleAtMs = 0L;
@@ -1281,8 +1287,8 @@ public class ServiceManager {
     }
 
     /**
-     * Modo Concessionária — detecção da sequência de saída: 3 toques LONGOS no botão 1 do volante
-     * (keyCode 518) dentro de 8s. Chamada no TOPO de dispatchKeyEvent, antes de qualquer outro
+     * Modo Concessionária — detecção da sequência de saída: 3 toques no botão 1 do volante,
+     * seguidos de 3 toques no botão 2 (toques curtos, até 8s entre eles). Chamada no TOPO de dispatchKeyEvent, antes de qualquer outro
      * handler, porque com o modo ativo o ícone do app some e esta é a única porta de volta pela
      * tela do carro.
      *
@@ -1292,30 +1298,59 @@ public class ServiceManager {
      * comportamento normal do botão (o handler custom logo abaixo continua recebendo a tecla).
      */
     private void handleStealthExitSequence(KeyEvent keyEvent) {
-        if (keyEvent == null || keyEvent.getKeyCode() != STEALTH_EXIT_KEY_CODE) {
-            return;
-        }
+        if (keyEvent == null) return;
+        int code = keyEvent.getKeyCode();
+        if (code != STEALTH_EXIT_BUTTON_1_KEY && code != STEALTH_EXIT_BUTTON_2_KEY) return;
+
         if (!StealthModeManager.isActive()) {
             stealthExitPressCount = 0;
+            stealthExitPhase = 0;
             stealthExitLastPressAtMs = 0L;
             return;
         }
+
         long now = SystemClock.uptimeMillis();
         if (stealthExitLastPressAtMs != 0L && now - stealthExitLastPressAtMs < STEALTH_EXIT_DEBOUNCE_MS) {
             return; // repique do mesmo toque
         }
         if (stealthExitLastPressAtMs != 0L && now - stealthExitLastPressAtMs > STEALTH_EXIT_WINDOW_MS) {
-            stealthExitPressCount = 0; // passou da janela -> recomeça a contagem
+            stealthExitPressCount = 0; // demorou demais entre toques -> recomeça
+            stealthExitPhase = 0;
         }
         stealthExitLastPressAtMs = now;
-        stealthExitPressCount++;
-        Log.w(TAG, "Stealth exit sequence: long press " + stealthExitPressCount + "/" + STEALTH_EXIT_REQUIRED_PRESSES);
-        if (stealthExitPressCount >= STEALTH_EXIT_REQUIRED_PRESSES) {
-            stealthExitPressCount = 0;
-            stealthExitLastPressAtMs = 0L;
-            Log.w(TAG, "Stealth exit sequence complete; leaving Modo Concessionária");
-            StealthModeManager.exit(App.getContext(), "STEERING_SEQUENCE");
+
+        int expected = (stealthExitPhase == 0) ? STEALTH_EXIT_BUTTON_1_KEY : STEALTH_EXIT_BUTTON_2_KEY;
+        if (code != expected) {
+            // Botão fora de ordem. Se for o começo da fase 1 de novo, conta como 1º toque;
+            // qualquer outro caso zera. Assim um engano não obriga a esperar a janela expirar.
+            if (code == STEALTH_EXIT_BUTTON_1_KEY) {
+                stealthExitPhase = 0;
+                stealthExitPressCount = 1;
+            } else {
+                stealthExitPhase = 0;
+                stealthExitPressCount = 0;
+            }
+            return;
         }
+
+        stealthExitPressCount++;
+        Log.w(TAG, "Stealth exit sequence: fase " + (stealthExitPhase + 1) + " toque "
+                + stealthExitPressCount + "/" + STEALTH_EXIT_PRESSES_PER_BUTTON);
+
+        if (stealthExitPressCount < STEALTH_EXIT_PRESSES_PER_BUTTON) return;
+
+        if (stealthExitPhase == 0) {
+            stealthExitPhase = 1;      // botão 1 completo -> agora o botão 2
+            stealthExitPressCount = 0;
+            Log.w(TAG, "Stealth exit sequence: botão 1 completo, aguardando 3 toques no botão 2");
+            return;
+        }
+
+        stealthExitPressCount = 0;
+        stealthExitPhase = 0;
+        stealthExitLastPressAtMs = 0L;
+        Log.w(TAG, "Stealth exit sequence complete; leaving Modo Concessionária");
+        StealthModeManager.exit(App.getContext(), "STEERING_SEQUENCE");
     }
 
     // Toque curto. Se houver acao de DUPLO configurada, espera ~350ms pra ver se vem um 2o toque

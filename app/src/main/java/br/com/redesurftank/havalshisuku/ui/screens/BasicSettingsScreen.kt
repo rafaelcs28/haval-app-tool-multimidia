@@ -3613,7 +3613,7 @@ fun BasicSettingsTab() {
                 SettingItem(
                         title = "Modo Concessionária",
                         description =
-                                "Esconde o ícone e desliga tudo que é visível, deixando o carro como de fábrica. Para voltar: 3 toques longos no botão 1 do volante.",
+                                "Esconde o ícone e desliga tudo que é visível, deixando o carro como de fábrica. Para voltar: 3 toques no botão 1 e 3 no botão 2 do volante.",
                         group = SettingsGroups.FEATURES,
                         hideSwitch = true,
                         checked = stealthRowExpanded,

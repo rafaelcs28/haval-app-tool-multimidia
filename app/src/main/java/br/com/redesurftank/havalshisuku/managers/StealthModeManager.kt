@@ -166,7 +166,7 @@ object StealthModeManager {
         step("log") {
             ClusterPersistentEventLogger.log("stealth_mode_enter", mapOf("reason" to reason))
         }
-        toast(appContext, "Modo Concessionária ativo — 3 toques longos no botão 1 do volante para voltar")
+        toast(appContext, "Modo Concessionária ativo — 3 toques no botão 1 e 3 no botão 2 do volante para voltar")
     }
 
     @JvmStatic
