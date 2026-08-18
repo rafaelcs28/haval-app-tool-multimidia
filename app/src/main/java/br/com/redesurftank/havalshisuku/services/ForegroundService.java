@@ -782,6 +782,26 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
 
     @Override
     public void onBinderDead() {
+        // A morte do Shizuku e a origem de uma cascata: o canal de controle cai, o servico
+        // reinicia e a projecao do cluster e sacudida junto (ver o preto sobre o velocimetro
+        // em 20260817-180725). Ate aqui isso so aparecia como Log.w, que se perde no buffer,
+        // e o relatorio de bug chegava sem explicacao. Grava no log persistente COM o estado
+        // de memoria: se o sistema estiver sob pressao, o suspeito imediato e o low-memory
+        // killer levando o processo do Shizuku.
+        try {
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            if (am != null) am.getMemoryInfo(mi);
+            ClusterPersistentEventLogger.logText(
+                    "shizuku_binder_dead",
+                    "availMemMb=" + (mi.availMem / 1048576L)
+                            + " lowMemory=" + mi.lowMemory
+                            + " thresholdMb=" + (mi.threshold / 1048576L)
+                            + " uptimeMs=" + SystemClock.elapsedRealtime()
+            );
+        } catch (Throwable ignored) {
+        }
         Shizuku.removeBinderReceivedListener(this::shizukuBinderReceived);
         Shizuku.removeBinderDeadListener(this);
         Log.w(TAG, "Shizuku binder is dead, stopping service");
