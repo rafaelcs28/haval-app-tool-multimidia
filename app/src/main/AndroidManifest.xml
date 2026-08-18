@@ -163,7 +163,10 @@
         </receiver>
         <!-- Porta de serviço do Modo Concessionária: reverte por telnet/adb quando o ícone
              do launcher está escondido e a sequência do volante não estiver disponível.
-             am broadcast -a br.com.redesurftank.havalshisuku.STEALTH_EXIT -->
+             O broadcast PRECISA ser explícito (-n); implícito não chega em receiver de
+             manifest no Android 8+ (testado no carro):
+             am broadcast -n br.com.redesurftank.havalshisuku/.broadcastReceivers.StealthExitReceiver
+                 -a br.com.redesurftank.havalshisuku.STEALTH_EXIT -->
         <receiver
             android:name=".broadcastReceivers.StealthExitReceiver"
             android:enabled="true"

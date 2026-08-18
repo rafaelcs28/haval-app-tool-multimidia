@@ -15,21 +15,33 @@ import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.services.BottomBarService
 import br.com.redesurftank.havalshisuku.utils.ShizukuUtils
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * MODO CONCESSIONÁRIA — devolve o carro ao comportamento de fábrica antes de levar à revisão.
  *
- * ARQUITETURA: MASTER SWITCH, não salvar/restaurar preferências.
- * Entrar no modo NÃO altera nenhuma preferência do usuário (a única chave escrita é
- * [SharedPreferencesKeys.STEALTH_MODE_ACTIVE]). Os pontos de ação espalhados pelo app consultam
- * [isActive] e se calam sozinhos. Sair = desligar a flag e reaplicar o estado normal a partir das
- * MESMAS preferências que o boot lê. Assim nenhuma configuração pode se perder numa falha de
- * restauração.
+ * ARQUITETURA: DESLIGAR AS PREFERÊNCIAS DE VERDADE (não master switch).
+ *
+ * A primeira versão era um master switch: uma flag consultada em N pontos de ação. Falhou no
+ * carro — o painel continuou com o tema porque `ProjectorManager.refresh()` recria os projetores
+ * por um caminho que não passava pelo gate de `initialize()`. A lição: gate espalhado obriga a
+ * caçar TODOS os caminhos, e sempre escapa um.
+ *
+ * Agora o modo:
+ *  1. grava um RETRATO completo de `haval_prefs` (JSON, com os tipos) em
+ *     [SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT], com `commit()`, ANTES de mexer em nada;
+ *  2. desliga as preferências que ativam funcionalidades (ver [featureKeysToDisable]);
+ *  3. reaplica o estado desligado pelos MESMOS pontos que o boot usa.
+ *
+ * Com as preferências realmente desligadas, o app roda pelo caminho já testado de quem nunca ligou
+ * nenhuma dessas features — em vez de um caminho novo cheio de gates. Sair = restaurar o retrato
+ * (tipos originais, removendo o que não existia) e reaplicar.
  *
  * VOLTA: o ícone do launcher some, então não há como abrir o app. As portas de volta são:
- *  1. 3 toques LONGOS no botão 1 do volante em até 8s (ServiceManager.dispatchKeyEvent);
- *  2. `am broadcast -a br.com.redesurftank.havalshisuku.STEALTH_EXIT` (StealthExitReceiver),
- *     acessível por telnet/adb como rede de segurança.
+ *  1. 3 toques CURTOS no botão 1 do volante em até 8s (ServiceManager.dispatchKeyEvent);
+ *  2. o broadcast do StealthExitReceiver, por telnet/adb — o comando exato está no KDoc daquele
+ *     receiver (precisa de `-n <componente>`; broadcast implícito não chega no Android 8+).
  *
  * Toda etapa é isolada em try/catch: uma etapa que falhe NUNCA pode impedir as outras — sobretudo
  * no [exit], que é o único caminho de recuperação.
@@ -37,8 +49,107 @@ import br.com.redesurftank.havalshisuku.utils.ShizukuUtils
 object StealthModeManager {
     private const val TAG = "StealthModeManager"
     private const val PREFS_NAME = "haval_prefs"
+
     /** Onde guardamos a lista do que escondemos, para saber o que devolver na volta. */
     private const val HIDDEN_PACKAGES_KEY = "stealthHiddenPackages"
+
+    /**
+     * Chaves DO PRÓPRIO MODO. Ficam fora do retrato e fora da restauração: são o estado que
+     * controla a volta, não configuração do usuário. Se entrassem no retrato, restaurar apagaria
+     * a lista de apps escondidos antes de devolvê-los.
+     */
+    private val INTERNAL_KEYS =
+        setOf(
+            SharedPreferencesKeys.STEALTH_MODE_ACTIVE.key,
+            SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT.key,
+            HIDDEN_PACKAGES_KEY
+        )
+
+    /**
+     * Exceções ao desligamento automático: preferências cujo nome começa com `ENABLE_` mas que NÃO
+     * são feature visível — são a infraestrutura privilegiada que o app usa para funcionar (e para
+     * reverter este modo). Desligá-las deixaria o app sem braços.
+     */
+    private val NEVER_DISABLE =
+        setOf(
+            // Hooks do Frida: é por eles que o app instala/patcheia coisas no system_server.
+            // Não aparecem na tela e desligar a pref não desfaz o que já está injetado — só tiraria
+            // capacidade do app, sem ganho nenhum de disfarce.
+            SharedPreferencesKeys.ENABLE_FRIDA_HOOKS,
+            SharedPreferencesKeys.ENABLE_FRIDA_HOOK_SYSTEM_SERVER
+        )
+
+    /**
+     * Preferências de ATIVAÇÃO que não começam com `ENABLE_`. Critério da lista: entra tudo que,
+     * sozinho, LIGA um comportamento — automação do carro, algo desenhado na tela, patch montado,
+     * app do sistema desativado, controle de rede. Ficam de fora: valores de ajuste (horários,
+     * limites, cores, offsets), estado interno de bookkeeping (`*_DISABLED_BY_APP`, contadores de
+     * tráfego, últimas telas) e preferências de UI do próprio app (canal beta, uso avançado) —
+     * nenhum deles faz nada por conta própria, e o retrato devolve todos intactos na saída.
+     */
+    private val EXTRA_FEATURE_KEYS =
+        listOf(
+            // --- Automações do carro (janelas, teto, cortina, volume) ---
+            SharedPreferencesKeys.CLOSE_WINDOW_ON_POWER_OFF,
+            SharedPreferencesKeys.CLOSE_WINDOW_ON_FOLD_MIRROR,
+            SharedPreferencesKeys.CLOSE_SUNROOF_ON_POWER_OFF,
+            SharedPreferencesKeys.CLOSE_SUNROOF_ON_FOLD_MIRROR,
+            SharedPreferencesKeys.CLOSE_WINDOWS_ON_SPEED,
+            SharedPreferencesKeys.CLOSE_SUNROOF_ON_SPEED,
+            SharedPreferencesKeys.CLOSE_SUNROOF_SUN_SHADE_ON_CLOSE_SUNROOF,
+            SharedPreferencesKeys.SET_STARTUP_VOLUME,
+            // --- Comportamentos do carro que o app SUPRIME (false = volta ao de fábrica) ---
+            SharedPreferencesKeys.DISABLE_MONITORING,
+            SharedPreferencesKeys.DISABLE_AVAS,
+            SharedPreferencesKeys.DISABLE_AVM_CAR_STOPPED,
+            // --- Debloat: false faz o boot reinstalar (pm install-existing) os apps do OEM ---
+            SharedPreferencesKeys.DISABLE_NATIVE_NAVIGATION,
+            SharedPreferencesKeys.DISABLE_NATIVE_VOICE,
+            SharedPreferencesKeys.DISABLE_NATIVE_WEATHER,
+            // --- Bluetooth / hotspot ao desligar ou recolher o retrovisor ---
+            SharedPreferencesKeys.DISABLE_BLUETOOTH_ON_POWER_OFF,
+            SharedPreferencesKeys.DISABLE_HOTSPOT_ON_POWER_OFF,
+            SharedPreferencesKeys.DISABLE_BLUETOOTH_ON_FOLD_MIRROR,
+            SharedPreferencesKeys.DISABLE_HOTSPOT_ON_FOLD_MIRROR,
+            // --- Barra inferior e painel lateral (desenhados por cima da UI do OEM) ---
+            SharedPreferencesKeys.PERSISTENT_BOTTOM_BAR,
+            SharedPreferencesKeys.BOTTOM_BAR_AUTO_HIDE,
+            SharedPreferencesKeys.HIDE_LEFT_NAV_PANE,
+            // --- Cluster / projeção ---
+            SharedPreferencesKeys.CLUSTER_PROJECTION_OPENS_DASHBOARD,
+            SharedPreferencesKeys.CLUSTER_HIDE_SPEEDOMETER_ON_MAPS,
+            SharedPreferencesKeys.CLUSTER_V2_TRIP_INFO,
+            SharedPreferencesKeys.TRIP_CONSISTENCY_CLUSTER_ACTIVE,
+            SharedPreferencesKeys.TRIP_CONSISTENCY_CLUSTER_SCORE,
+            SharedPreferencesKeys.AUTO_MOVE_PROJECTION_TO_CLUSTER,
+            SharedPreferencesKeys.AA_CLUSTER_BLACK_RECOVERY,
+            // --- Patches montados no Android Auto / CarPlay (CarPlay tem default TRUE) ---
+            SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT,
+            SharedPreferencesKeys.CARPLAY_PATCH_AUTO_MOUNT,
+            // --- Luz ambiente (BLE/DMX) ---
+            SharedPreferencesKeys.AMBIENT_LIGHT_BLE_ENABLED,
+            SharedPreferencesKeys.AMBIENT_LIGHT_SYNC_DRIVE_MODE,
+            SharedPreferencesKeys.AMBIENT_LIGHT_ANIMATIONS_ENABLED,
+            SharedPreferencesKeys.AMBIENT_LIGHT_MUSIC_ANIMATION_ENABLED,
+            SharedPreferencesKeys.AMBIENT_LIGHT_AUTO_RECONNECT,
+            // --- Conectividade (roteamento, prioridade de WiFi, corte de 4G, telemetria OEM) ---
+            SharedPreferencesKeys.WIFI_PRIORITY_ENABLED,
+            SharedPreferencesKeys.MOBILE_DATA_CONTROL_ENABLED,
+            SharedPreferencesKeys.BLOCK_CAR_MOBILE_DATA,
+            SharedPreferencesKeys.MOBILE_DATA_AUTOBLOCK,
+            SharedPreferencesKeys.MOBILE_DATA_BLOCK_ON_WIFI,
+            SharedPreferencesKeys.MOBILE_DATA_BLOCK_ON_PROJECTION,
+            SharedPreferencesKeys.BLOCK_DATATRACK_TELEMETRY,
+            // --- Aviso de voz do cinto: o duck da música é ativação própria ---
+            SharedPreferencesKeys.SEATBELT_VOICE_DUCK_MUSIC
+        )
+
+    /**
+     * A única preferência de ativação que não é booleana: o pacote que o cluster abre sozinho no
+     * startup (InstrumentProjector2.triggerAutoLaunch). Vazio = não abre nada. Sem isto, um app
+     * configurado subiria no painel depois de um ciclo de ignição — o pior tipo de denúncia.
+     */
+    private val CLEAR_ON_ENTER = listOf(SharedPreferencesKeys.DEFAULT_DISPLAY_APP_PACKAGE)
 
     /**
      * Nunca esconder, mesmo sendo apps de terceiros:
@@ -64,8 +175,10 @@ object StealthModeManager {
         App.getDeviceProtectedContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /**
-     * Consultado pelos pontos de ação (gate das automações, boot, projetores). Lê a pref direto —
-     * device-protected storage, igual aos outros managers — pra funcionar antes do unlock do usuário.
+     * Consultado pelos dois gates que sobraram (o central do OnDataChanged e a suspensão das ações
+     * do volante), pela detecção da sequência de saída e pelo ensureSteeringWheelButtonIntegration
+     * (que precisa manter o botão 1 nosso mesmo com as prefs desligadas). Lê a pref direto —
+     * device-protected storage, igual aos outros managers — pra funcionar antes do unlock.
      */
     @JvmStatic
     fun isActive(): Boolean =
@@ -82,10 +195,200 @@ object StealthModeManager {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Entrada / saída
+    // Retrato das preferências
     // ---------------------------------------------------------------------------------------
 
-    @JvmStatic
+    /**
+     * Serializa TODO o conteúdo de `haval_prefs` num JSON `{ chave: {t: tipo, v: valor} }` e grava
+     * em [SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT] com `commit()` — síncrono de propósito: o
+     * retrato tem que estar no disco antes da primeira alteração, senão um kill no meio da entrada
+     * levaria as configurações do usuário junto.
+     *
+     * @return true se o retrato foi gravado. false ABORTA a entrada no modo (ver [enter]).
+     */
+    private fun snapshotPreferences(): Boolean =
+        try {
+            val root = JSONObject()
+            for ((key, value) in prefs().all) {
+                if (key in INTERNAL_KEYS) continue
+                val entry = JSONObject()
+                when (value) {
+                    is Boolean -> entry.put("t", "b").put("v", value)
+                    is Int -> entry.put("t", "i").put("v", value)
+                    is Long -> entry.put("t", "l").put("v", value)
+                    is Float -> entry.put("t", "f").put("v", value.toDouble())
+                    is String -> entry.put("t", "s").put("v", value)
+                    is Set<*> -> {
+                        val arr = JSONArray()
+                        for (item in value) {
+                            if (item is String) arr.put(item)
+                        }
+                        entry.put("t", "ss").put("v", arr)
+                    }
+                    null -> continue
+                    else -> {
+                        Log.w(TAG, "Tipo desconhecido em '$key' (${value.javaClass}); fora do retrato")
+                        continue
+                    }
+                }
+                root.put(key, entry)
+            }
+            val ok =
+                prefs().edit()
+                    .putString(SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT.key, root.toString())
+                    .commit()
+            Log.w(TAG, "Retrato das preferências gravado: ${root.length()} chaves (commit=$ok)")
+            ClusterPersistentEventLogger.log(
+                "stealth_prefs_snapshot",
+                mapOf("keys" to root.length(), "committed" to ok)
+            )
+            ok
+        } catch (t: Throwable) {
+            Log.e(TAG, "Falha ao gravar o retrato das preferências", t)
+            false
+        }
+
+    /**
+     * A lista do que é desligado ao entrar.
+     *
+     * CRITÉRIO: (1) TODA preferência cujo nome no enum começa com `ENABLE_` — é a convenção do
+     * projeto para "liga uma funcionalidade" — menos as de [NEVER_DISABLE]; (2) mais as de
+     * ativação que não seguem a convenção, listadas em [EXTRA_FEATURE_KEYS].
+     *
+     * A parte automática é de propósito: uma feature nova que siga a convenção `ENABLE_` já nasce
+     * coberta, sem ninguém precisar lembrar de vir aqui — que foi exatamente como a versão de
+     * master switch deixou caminhos escapando.
+     */
+    private fun featureKeysToDisable(): List<String> {
+        val keys = LinkedHashSet<String>()
+        for (pref in SharedPreferencesKeys.values()) {
+            if (pref in NEVER_DISABLE) continue
+            if (pref.name.startsWith("ENABLE_")) keys.add(pref.key)
+        }
+        for (pref in EXTRA_FEATURE_KEYS) keys.add(pref.key)
+        keys.removeAll(INTERNAL_KEYS)
+        return keys.toList()
+    }
+
+    /**
+     * Escreve `false` em todas as chaves de [featureKeysToDisable] — inclusive nas que nem existem
+     * ainda, porque várias têm default TRUE (aviso de cinto, patch do CarPlay, fundo do display 1)
+     * e "não existir" não as desliga. Chaves que hoje guardam outro tipo são puladas: sobrescrever
+     * um Int com Boolean derrubaria quem as lê com getInt.
+     */
+    private fun disableFeaturePreferences() {
+        val p = prefs()
+        val current = p.all
+        val editor = p.edit()
+        var written = 0
+        var skipped = 0
+        for (key in featureKeysToDisable()) {
+            val existing = current[key]
+            if (existing != null && existing !is Boolean) {
+                Log.w(TAG, "Pulando '$key': valor atual não é booleano (${existing.javaClass.simpleName})")
+                skipped++
+                continue
+            }
+            editor.putBoolean(key, false)
+            written++
+        }
+        for (pref in CLEAR_ON_ENTER) {
+            val existing = current[pref.key]
+            if (existing != null && existing !is String) continue
+            editor.putString(pref.key, "")
+        }
+        val ok = editor.commit()
+        Log.w(TAG, "Preferências desligadas: $written (puladas: $skipped, commit=$ok)")
+        ClusterPersistentEventLogger.log(
+            "stealth_prefs_disabled",
+            mapOf("written" to written, "skipped" to skipped, "committed" to ok)
+        )
+    }
+
+    /**
+     * Devolve o retrato: cada chave volta com o TIPO original e o que não estava no retrato é
+     * REMOVIDO (voltando ao default do código). O retrato é apagado logo depois, pelo [exit].
+     *
+     * Nunca trava: retrato ausente ou corrompido só loga e retorna false — o [exit] segue com as
+     * outras etapas. Ficar preso no modo é muito pior do que ter que reconfigurar.
+     */
+    private fun restorePreferences(): Boolean {
+        val raw =
+            try {
+                prefs().getString(SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT.key, null)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Falha lendo o retrato das preferências", t)
+                null
+            }
+        if (raw.isNullOrBlank()) {
+            Log.e(TAG, "Sem retrato das preferências para restaurar; seguindo com a saída")
+            ClusterPersistentEventLogger.log("stealth_prefs_restore_missing")
+            return false
+        }
+        return try {
+            val root = JSONObject(raw)
+            val p = prefs()
+            val editor = p.edit()
+
+            // 1) Some com o que nasceu depois do retrato (e não é chave interna do modo).
+            for (key in p.all.keys.toList()) {
+                if (key in INTERNAL_KEYS) continue
+                if (!root.has(key)) editor.remove(key)
+            }
+
+            // 2) Devolve cada chave do retrato com o tipo original.
+            var restored = 0
+            val names = root.keys()
+            while (names.hasNext()) {
+                val key = names.next()
+                if (key in INTERNAL_KEYS) continue
+                val entry = root.optJSONObject(key) ?: continue
+                when (entry.optString("t")) {
+                    "b" -> editor.putBoolean(key, entry.optBoolean("v", false))
+                    "i" -> editor.putInt(key, entry.optInt("v", 0))
+                    "l" -> editor.putLong(key, entry.optLong("v", 0L))
+                    "f" -> editor.putFloat(key, entry.optDouble("v", 0.0).toFloat())
+                    "s" -> editor.putString(key, entry.optString("v", ""))
+                    "ss" -> {
+                        val arr = entry.optJSONArray("v") ?: JSONArray()
+                        val set = LinkedHashSet<String>()
+                        for (i in 0 until arr.length()) set.add(arr.optString(i))
+                        editor.putStringSet(key, set)
+                    }
+                    else -> {
+                        Log.w(TAG, "Entrada '$key' do retrato tem tipo desconhecido; ignorada")
+                        continue
+                    }
+                }
+                restored++
+            }
+
+            val ok = editor.commit()
+            Log.w(TAG, "Preferências restauradas: $restored (commit=$ok)")
+            ClusterPersistentEventLogger.log(
+                "stealth_prefs_restored",
+                mapOf("restored" to restored, "committed" to ok)
+            )
+            ok
+        } catch (t: Throwable) {
+            Log.e(TAG, "Retrato das preferências corrompido; seguindo com a saída assim mesmo", t)
+            ClusterPersistentEventLogger.log(
+                "stealth_prefs_restore_failed",
+                mapOf("error" to t.toString())
+            )
+            false
+        }
+    }
+
+    /** Apaga o retrato. O modo não deve deixar lixo para trás. */
+    private fun clearSnapshot() {
+        prefs().edit().remove(SharedPreferencesKeys.STEALTH_PREFS_SNAPSHOT.key).commit()
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Ícones dos apps
+    // ---------------------------------------------------------------------------------------
+
     /** Activity de launcher de [pkg], ou null se o app não tiver ícone. */
     private fun launcherActivityOf(pkg: String): String? = try {
         val pm = App.getContext().packageManager
@@ -188,35 +491,81 @@ object StealthModeManager {
         )
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Entrada / saída
+    // ---------------------------------------------------------------------------------------
+
     fun enter(context: Context, reason: String) {
         val appContext = context.applicationContext
         Log.w(TAG, "Entrando no Modo Concessionária (reason=$reason)")
 
+        // ANTES de qualquer coisa: garantir que os botões do volante cheguem até nós. Sem a
+        // integração custom habilitada, o head unit trata o botão como função nativa e os toques
+        // NUNCA chegam ao app — a sequência de saída simplesmente não existiria. Forçamos
+        // independentemente das preferências; o exit() devolve o estado do usuário.
+        // (A sequência usa o botão 1; o 2 vai junto por ser inofensivo e simétrico.)
+        //
+        // ORDEM IMPORTA — este passo vem ANTES do retrato de propósito: enableSteeringWheelButtonN
+        // grava a config NATIVA do botão em STEERING_WHEEL_CUSTOM_BUTON_N_ACTION_ORIGINAL antes de
+        // trocá-la por 99. Se o retrato fosse tirado antes, essa chave não estaria nele e a saída a
+        // removeria — aí disableNativeSteeringWheelButtonN não teria o valor original pra devolver e
+        // o botão ficaria preso em 99 (nosso) sem nenhuma ação configurada, ou seja, morto.
+        step("force_steering_integration") {
+            ServiceManager.getInstance().enableSteeringWheelButton1Integration()
+            ServiceManager.getInstance().enableSteeringWheelButton2Integration()
+        }
+
+        // O retrato é a condição de segurança da entrada: sem ele, desligar as preferências
+        // significaria perder a configuração do usuário. Falhou => não entra.
+        if (!snapshotPreferences()) {
+            Log.e(TAG, "Não foi possível salvar as preferências; ABORTANDO a entrada no modo")
+            ClusterPersistentEventLogger.log("stealth_mode_enter_aborted", mapOf("reason" to reason))
+            toast(appContext, "Não consegui salvar suas configurações — Modo Concessionária NÃO foi ativado")
+            return
+        }
+
         step("set_flag") { setActive(true) }
+        step("disable_feature_prefs") { disableFeaturePreferences() }
         step("hide_launcher_icon") { setLauncherIconEnabled(appContext, false) }
         step("hide_third_party_apps") { hideThirdPartyApps() }
-        // Painel volta ao NATIVO: derruba as Presentations do cluster (máscara/tema + HUD).
-        // Presentation.dismiss() exige a UI thread.
-        onMain { step("stop_projectors") { ProjectorManager.getInstance().stopProjectors() } }
+
+        // Agora força a aplicação do estado desligado pelos mesmos pontos do boot.
+        //
+        // ATENÇÃO ao refresh(): ele NÃO respeita ENABLE_VIRTUAL_CLUSTER / ENABLE_INSTRUMENT_PROJECTOR
+        // — repopula os creators e chama initialize(), que cria as Presentations de qualquer jeito
+        // (as prefs só decidem o que é PINTADO dentro delas). Por isso o stopProjectors() vem
+        // DEPOIS: é ele que garante o painel nativo agora. Presentation.dismiss() exige a UI thread.
+        onMain {
+            step("refresh_projectors") { ProjectorManager.getInstance().refresh() }
+            step("stop_projectors") { ProjectorManager.getInstance().stopProjectors() }
+        }
         // A barra inferior e o overlay flutuante de CPU/RAM são desenhados pelo MESMO serviço
         // (BottomBarService); o onDestroy dele já devolve o `wm overscan` para 0,0,0,0.
         step("stop_bottom_bar") {
             appContext.stopService(Intent(appContext, BottomBarService::class.java))
         }
         step("stop_ambient_light") { AmbientLightService.stop(appContext) }
-        // Cancela os alarmes de brilho automático (não mexe na pref do usuário).
-        step("cancel_auto_brightness") { AutoBrightnessManager.getInstance().setEnabled(false) }
+        // Com a pref já em false, updateSchedule() cancela os alarmes e não reagenda nada.
+        step("cancel_auto_brightness") { AutoBrightnessManager.getInstance().updateSchedule() }
 
-        // Desmontagem dos patches: shell via Shizuku, nunca na thread chamadora (a UI).
-        background("unmount_patches") {
+        // Trabalho de shell via Shizuku: nunca na thread chamadora (a UI).
+        background("apply_off_state") {
             step("unmount_android_auto") { AndroidAutoPatchManager.removeMounts() }
             step("unmount_carplay") { CarPlayPatchManager.removeMounts() }
+            // onServicesReady() só LIGA; para desligar é o setEnabled(false) (a pref já está false).
+            step("stop_hot_router") { HotRouterManager.getInstance().setEnabled(false) }
+            step("stop_wifi_priority") { WifiPriorityManager.getInstance().setEnabled(false) }
+            // Devolve o 4G e a telemetria OEM: no modo o carro tem que se comportar como de fábrica.
+            step("release_mobile_data") { MobileDataManager.recomputeAndApply(appContext) }
+            step("release_datatrack") { MobileDataManager.applyDatatrackState() }
+            // Reinstala (pm install-existing) os apps do OEM que o debloat tinha removido.
+            step("restore_native_apps") { ServiceManager.getInstance().ensureDebloatedSystemApps() }
         }
 
         step("log") {
             ClusterPersistentEventLogger.log("stealth_mode_enter", mapOf("reason" to reason))
         }
-        toast(appContext, "Modo Concessionária ativo — 3 toques no botão 1 e 3 no botão 2 do volante para voltar")
+        toast(appContext, "Modo Concessionária ativo — 3 toques no botão 1 do volante para voltar")
     }
 
     @JvmStatic
@@ -224,8 +573,17 @@ object StealthModeManager {
         val appContext = context.applicationContext
         Log.w(TAG, "Saindo do Modo Concessionária (reason=$reason)")
 
-        // A flag cai PRIMEIRO: tudo que é reaplicado abaixo se auto-gateia por isActive().
+        // A flag cai PRIMEIRO: tudo que é reaplicado abaixo tem que enxergar o app já normal.
         step("clear_flag") { setActive(false) }
+        // Depois as preferências: todas as reaplicações abaixo leem delas. Dentro de step() como
+        // todo o resto — nada nesta função pode abortar a saída pela metade.
+        var restored = false
+        step("restore_prefs") { restored = restorePreferences() }
+        step("clear_snapshot") { clearSnapshot() }
+        // Devolve os botões ao que as preferências do usuário mandam (pode ser função nativa).
+        step("restore_steering_integration") {
+            ServiceManager.getInstance().ensureSteeringWheelButtonIntegration()
+        }
         step("show_launcher_icon") { setLauncherIconEnabled(appContext, true) }
         step("restore_third_party_apps") { restoreThirdPartyApps() }
         onMain { step("restart_projectors") { ProjectorManager.getInstance().refresh() } }
@@ -234,7 +592,7 @@ object StealthModeManager {
         // updateSchedule() já retorna cedo se a pref do usuário estiver desligada.
         step("restore_auto_brightness") { AutoBrightnessManager.getInstance().updateSchedule() }
 
-        background("remount_patches") {
+        background("reapply_user_state") {
             // Mesma rotina e mesmo gate por pref que o ForegroundService usa no boot.
             step("remount_android_auto") {
                 if (prefs().getBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.key, false)) {
@@ -246,12 +604,25 @@ object StealthModeManager {
                     CarPlayPatchManager.ensureMounted()
                 }
             }
+            // onServicesReady() é o ponto do boot: liga só se a pref restaurada mandar.
+            step("restart_hot_router") { HotRouterManager.getInstance().onServicesReady() }
+            step("restart_wifi_priority") { WifiPriorityManager.getInstance().onServicesReady() }
+            step("reapply_mobile_data") { MobileDataManager.recomputeAndApply(appContext) }
+            step("reapply_datatrack") { MobileDataManager.applyDatatrackState() }
+            step("reapply_debloat") { ServiceManager.getInstance().ensureDebloatedSystemApps() }
         }
 
         step("log") {
-            ClusterPersistentEventLogger.log("stealth_mode_exit", mapOf("reason" to reason))
+            ClusterPersistentEventLogger.log(
+                "stealth_mode_exit",
+                mapOf("reason" to reason, "prefsRestored" to restored)
+            )
         }
-        toast(appContext, "Impulse reativado")
+        toast(
+            appContext,
+            if (restored) "Impulse reativado"
+            else "Impulse reativado — não achei o retrato das configurações, confira os ajustes"
+        )
     }
 
     // ---------------------------------------------------------------------------------------

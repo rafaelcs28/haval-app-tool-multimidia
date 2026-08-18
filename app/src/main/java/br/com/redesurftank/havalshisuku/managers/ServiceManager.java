@@ -359,23 +359,18 @@ public class ServiceManager {
     private static final long STEERING_WHEEL_CLIMATE_COMMAND_DEDUP_WINDOW_MS = 800L;
     // ===== Modo Concessionária: sequência de saída pelo volante =====
     // Com o modo ativo o ícone do launcher some, então esta é a ÚNICA porta de volta pela tela do
-    // carro. 3 toques no botão 1 seguidos de 3 toques no botão 2 (curtos, 8s entre toques) revertem o modo. Roda MESMO com
-    // ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS desligado. Fora do modo é inerte (não interfere no uso
-    // normal do botão).
-    // Sequência: 3 toques no botão 1, depois 3 toques no botão 2 (toques CURTOS).
-    // Exigir a TROCA de botão é o que torna a sequência imune a auto-repeat do firmware: se um
-    // botão segurado repetir sozinho, ele nunca avança de fase. E a combinação 3+3 alternada não
-    // acontece por acidente no uso normal.
+    // carro: 3 toques CURTOS no botão 1, com até 8s entre eles. Roda MESMO com
+    // ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS desligado (que é justamente o estado do modo). Fora do
+    // modo é inerte — não interfere no uso normal do botão.
     private static final int STEALTH_EXIT_BUTTON_1_KEY = 517;      // botão 1, toque curto
-    private static final int STEALTH_EXIT_BUTTON_2_KEY = 1031;     // botão 2, toque curto
-    private static final int STEALTH_EXIT_PRESSES_PER_BUTTON = 3;
+    private static final int STEALTH_EXIT_PRESSES = 3;
     private static final long STEALTH_EXIT_WINDOW_MS = 8000L;      // janela máxima ENTRE toques
     // O input service deste head unit reporta o toque como evento de RELEASE (ver
     // ClusterCardNavigationPolicy.shouldHandleInputAction). Não filtramos por action — se o
-    // firmware mandar DOWN+UP, este debounce colapsa o par em um toque só.
+    // firmware mandar DOWN+UP, este debounce colapsa o par em um toque só. Ele também é a defesa
+    // contra auto-repeat: repetição de firmware chega bem mais rápido que 300ms.
     private static final long STEALTH_EXIT_DEBOUNCE_MS = 300L;
     private int stealthExitPressCount = 0;
-    private int stealthExitPhase = 0;                              // 0 = botão 1, 1 = botão 2
     private long stealthExitLastPressAtMs = 0L;
     private int lastDashboardToggleButton = -1;
     private long lastDashboardToggleAtMs = 0L;
@@ -916,9 +911,11 @@ public class ServiceManager {
                         Log.w(TAG, "Android Auto handled steering media key: " + keyEvent.getKeyCode());
                         return;
                     }
-                    // As ações CUSTOM do volante ficam suspensas no Modo Concessionária (senão os
-                    // 3 toques da sequência de saída também disparariam a ação LONG configurada).
-                    // A detecção da sequência já rodou lá em cima, antes de tudo.
+                    // As ações CUSTOM do volante ficam suspensas no Modo Concessionária: senão os
+                    // 3 toques curtos da sequência de saída disparariam a ação de toque curto
+                    // configurada pelo usuário (e a de toque DUPLO, que a janela de 350ms detecta no
+                    // meio da sequência). A pref já está desligada no modo, então isto é rede de
+                    // segurança. A detecção da sequência já rodou lá em cima, antes de tudo.
                     if (!StealthModeManager.isActive()
                             && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS.getKey(), false)) {
                         switch (keyEvent.getKeyCode()) {
@@ -1224,6 +1221,18 @@ public class ServiceManager {
     }
 
     public void ensureSteeringWheelButtonIntegration() {
+        // Modo Concessionária: as preferências do usuário estão desligadas (inclusive a dos botões
+        // custom), então o caminho normal aqui embaixo devolveria os botões à função NATIVA do head
+        // unit — e os toques nunca mais chegariam ao dispatchKeyEvent. Como este método roda a cada
+        // boot (initialize()), sem esta guarda o primeiro ciclo de ignição mataria a sequência de
+        // saída e trancaria o app por dentro. É a mesma razão do force_steering_integration do
+        // enter(); a saída limpa a flag ANTES de chamar este método, então o estado do usuário volta
+        // normalmente.
+        if (StealthModeManager.isActive()) {
+            Log.w(TAG, "Modo Concessionária ativo; mantendo o botão 1 do volante integrado (porta de saída)");
+            enableSteeringWheelButton1Integration();
+            return;
+        }
         if (sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS.getKey(), false)) {
             // habilita o botao se QUALQUER toque (curto/duplo/longo) tiver acao configurada
             boolean button1Used = steeringActionConfigured(1, "SHORT") || steeringActionConfigured(1, "DOUBLE") || steeringActionConfigured(1, "LONG");
@@ -1287,24 +1296,27 @@ public class ServiceManager {
     }
 
     /**
-     * Modo Concessionária — detecção da sequência de saída: 3 toques no botão 1 do volante,
-     * seguidos de 3 toques no botão 2 (toques curtos, até 8s entre eles). Chamada no TOPO de dispatchKeyEvent, antes de qualquer outro
-     * handler, porque com o modo ativo o ícone do app some e esta é a única porta de volta pela
-     * tela do carro.
+     * Modo Concessionária — detecção da sequência de saída: 3 toques CURTOS no botão 1 do volante,
+     * com até 8s entre eles. Chamada no TOPO de dispatchKeyEvent, antes de qualquer outro handler,
+     * porque com o modo ativo o ícone do app some e esta é a única porta de volta pela tela do
+     * carro.
      *
-     * Deliberadamente NÃO consulta ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS: a volta não pode depender
-     * de uma preferência que o usuário talvez tenha desligado. E quando o modo NÃO está ativo a
-     * sequência é inerte — só zera o contador e sai, sem consumir o evento nem alterar o
-     * comportamento normal do botão (o handler custom logo abaixo continua recebendo a tecla).
+     * Deliberadamente NÃO consulta preferência nenhuma: no modo, ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS
+     * está desligado de propósito, e a volta não pode depender de nada que o modo desliga. Quando o
+     * modo NÃO está ativo a sequência é inerte — só zera o contador e sai, sem consumir o evento nem
+     * alterar o comportamento normal do botão (o handler custom logo abaixo continua recebendo a
+     * tecla).
+     *
+     * O que garante que a tecla CHEGUE aqui é a integração custom do botão estar habilitada no head
+     * unit — por isso enter() a força e ensureSteeringWheelButtonIntegration() a mantém enquanto o
+     * modo está ativo.
      */
     private void handleStealthExitSequence(KeyEvent keyEvent) {
         if (keyEvent == null) return;
-        int code = keyEvent.getKeyCode();
-        if (code != STEALTH_EXIT_BUTTON_1_KEY && code != STEALTH_EXIT_BUTTON_2_KEY) return;
+        if (keyEvent.getKeyCode() != STEALTH_EXIT_BUTTON_1_KEY) return;
 
         if (!StealthModeManager.isActive()) {
             stealthExitPressCount = 0;
-            stealthExitPhase = 0;
             stealthExitLastPressAtMs = 0L;
             return;
         }
@@ -1315,39 +1327,14 @@ public class ServiceManager {
         }
         if (stealthExitLastPressAtMs != 0L && now - stealthExitLastPressAtMs > STEALTH_EXIT_WINDOW_MS) {
             stealthExitPressCount = 0; // demorou demais entre toques -> recomeça
-            stealthExitPhase = 0;
         }
         stealthExitLastPressAtMs = now;
 
-        int expected = (stealthExitPhase == 0) ? STEALTH_EXIT_BUTTON_1_KEY : STEALTH_EXIT_BUTTON_2_KEY;
-        if (code != expected) {
-            // Botão fora de ordem. Se for o começo da fase 1 de novo, conta como 1º toque;
-            // qualquer outro caso zera. Assim um engano não obriga a esperar a janela expirar.
-            if (code == STEALTH_EXIT_BUTTON_1_KEY) {
-                stealthExitPhase = 0;
-                stealthExitPressCount = 1;
-            } else {
-                stealthExitPhase = 0;
-                stealthExitPressCount = 0;
-            }
-            return;
-        }
-
         stealthExitPressCount++;
-        Log.w(TAG, "Stealth exit sequence: fase " + (stealthExitPhase + 1) + " toque "
-                + stealthExitPressCount + "/" + STEALTH_EXIT_PRESSES_PER_BUTTON);
-
-        if (stealthExitPressCount < STEALTH_EXIT_PRESSES_PER_BUTTON) return;
-
-        if (stealthExitPhase == 0) {
-            stealthExitPhase = 1;      // botão 1 completo -> agora o botão 2
-            stealthExitPressCount = 0;
-            Log.w(TAG, "Stealth exit sequence: botão 1 completo, aguardando 3 toques no botão 2");
-            return;
-        }
+        Log.w(TAG, "Stealth exit sequence: toque " + stealthExitPressCount + "/" + STEALTH_EXIT_PRESSES);
+        if (stealthExitPressCount < STEALTH_EXIT_PRESSES) return;
 
         stealthExitPressCount = 0;
-        stealthExitPhase = 0;
         stealthExitLastPressAtMs = 0L;
         Log.w(TAG, "Stealth exit sequence complete; leaving Modo Concessionária");
         StealthModeManager.exit(App.getContext(), "STEERING_SEQUENCE");
@@ -2795,13 +2782,6 @@ public class ServiceManager {
      * Fechar tem precedência se as janelas casarem. Temperatura condiciona SOMENTE a abertura.
      */
     private void evaluateCurtainSchedule(String trigger) {
-        // A cortina é reagendada por TIMER, não por OnDataChanged, então o gate central não a
-        // alcança: repete-se aqui. O reagendamento segue rodando (barato) pra que a saída do modo
-        // volte a atuar na próxima janela sem precisar reiniciar nada.
-        if (StealthModeManager.isActive()) {
-            traceCurtain("sunroof_curtain_skip", "reason", "stealth_mode", "trigger", trigger);
-            return;
-        }
         boolean openEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_OPEN_SUNROOF_CURTAIN_ON_START.getKey(), false);
         boolean closeEnabled = sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_CLOSE_SUNROOF_CURTAIN_ON_TIME.getKey(), false);
         if (!openEnabled && !closeEnabled) return;

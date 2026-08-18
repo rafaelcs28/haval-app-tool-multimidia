@@ -377,11 +377,7 @@ private fun SettingsRow(item: SettingItem) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = item.enabled) {
-                    // Linha com switch: o clique alterna a preferência (comportamento original).
-                    // Linha sem switch (hideSwitch, marcada com o chevron "›"): é uma linha de
-                    // AÇÃO/drill-in — o clique abre e fecha o customContent. Sem isto o chevron
-                    // ficava decorativo e o conteúdo nunca aparecia.
-                    if (!item.hideSwitch || expandable) item.onCheckedChange(!item.checked)
+                    if (!item.hideSwitch) item.onCheckedChange(!item.checked)
                 }
                 .heightIn(min = 88.dp)
                 .padding(horizontal = 26.dp, vertical = 19.dp),

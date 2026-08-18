@@ -307,10 +307,6 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                             .apply();
                 }
 
-                if (br.com.redesurftank.havalshisuku.managers.StealthModeManager.isActive()) {
-                    Log.w(TAG, "Modo Concessionária ativo; patches do CarPlay não são remontados (" + reason + ").");
-                    return;
-                }
                 boolean shouldAutoMountCarPlay = prefs.getBoolean(SharedPreferencesKeys.CARPLAY_PATCH_AUTO_MOUNT.getKey(), true);
                 if (shouldAutoMountCarPlay) {
                     Log.i(TAG, "Checking CarPlay patch auto-mount (" + reason + ")...");
@@ -338,12 +334,6 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     }
 
     private void ensurePersistentBottomBarStarted(SharedPreferences sharedPreferences, String reason) {
-        // Modo Concessionária: a barra inferior (e o overlay de CPU/RAM que ela desenha) não podem
-        // voltar no boot. A preferência do usuário fica INTACTA — é só o gate que a suprime.
-        if (br.com.redesurftank.havalshisuku.managers.StealthModeManager.isActive()) {
-            Log.w(TAG, "Modo Concessionária ativo; barra inferior não sobe (" + reason + ").");
-            return;
-        }
         if (!sharedPreferences.getBoolean(SharedPreferencesKeys.PERSISTENT_BOTTOM_BAR.getKey(), false)) {
             Log.d(TAG, "Persistent bottom bar disabled (" + reason + ").");
             return;
@@ -711,10 +701,6 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                     prefs.edit().putBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.getKey(), aaInstalled).apply();
                 }
 
-                if (br.com.redesurftank.havalshisuku.managers.StealthModeManager.isActive()) {
-                    Log.w(TAG, "Modo Concessionária ativo; patches do Android Auto não são remontados.");
-                    return;
-                }
                 boolean shouldAutoMount = prefs.getBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.getKey(), false);
                 if (shouldAutoMount) {
                     Log.i(TAG, "Checking Android Auto patch auto-mount...");

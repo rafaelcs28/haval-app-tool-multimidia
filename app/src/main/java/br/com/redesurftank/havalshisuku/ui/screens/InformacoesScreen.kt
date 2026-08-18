@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
@@ -39,6 +40,7 @@ import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.TAG
 import br.com.redesurftank.havalshisuku.R
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
+import br.com.redesurftank.havalshisuku.managers.StealthModeManager
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.models.UpdateCheckResult
 import br.com.redesurftank.havalshisuku.ui.components.AppColors
@@ -100,6 +102,9 @@ fun InformacoesTab() {
                         ActivityResultContracts.StartActivityForResult()
                 ) { /* Permission requested */}
         var showPermissionDialog by remember { mutableStateOf(false) }
+        // Modo Concessionária: nunca ativa direto do toque — o ícone do app some depois
+        // disso, então passa por uma confirmação explícita.
+        var showStealthConfirm by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
                 try {
@@ -404,7 +409,94 @@ fun InformacoesTab() {
                                                 )
                                         }
                                 }
+
+                                HorizontalDivider(color = ImpTokens.Hairline)
+
+                                // ===== Modo Concessionária =====
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                                "Modo Concessionária",
+                                                color = Color.White,
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                                "Deixa o carro como saiu de fábrica antes de levar à revisão: o ícone do Impulse some do menu, o painel volta ao nativo, a barra inferior e as luzes saem, os patches do Android Auto/CarPlay são desmontados e as automações param. Suas configurações são salvas e devolvidas na volta.",
+                                                color = ImpTokens.TextSecondary,
+                                                fontSize = 14.sp
+                                        )
+                                        Text(
+                                                "Para voltar: 3 toques no botão 1 do volante, com até 8s entre eles.",
+                                                color = ImpTokens.TextSecondary,
+                                                fontSize = 14.sp
+                                        )
+                                        Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                        ) {
+                                                Button(
+                                                        onClick = { showStealthConfirm = true },
+                                                        modifier = Modifier.height(48.dp),
+                                                        colors =
+                                                                ButtonDefaults.buttonColors(
+                                                                        containerColor =
+                                                                                Color(0xFFB3261E)
+                                                                ),
+                                                        shape =
+                                                                RoundedCornerShape(
+                                                                        AppDimensions
+                                                                                .ButtonCornerRadius
+                                                                )
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.Build,
+                                                                contentDescription =
+                                                                        "Modo Concessionária",
+                                                                modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                                "Ativar Modo Concessionária",
+                                                                color = Color.White
+                                                        )
+                                                }
+                                        }
+                                }
                         }
+                }
+
+                if (showStealthConfirm) {
+                        AlertDialog(
+                                onDismissRequest = { showStealthConfirm = false },
+                                containerColor = ImpTokens.Container,
+                                title = {
+                                        Text(
+                                                "Ativar Modo Concessionária?",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.SemiBold
+                                        )
+                                },
+                                text = {
+                                        Text(
+                                                "O ícone do Impulse vai SUMIR do menu de apps e tudo que o app liga será desligado. A única forma de voltar pela tela do carro é dar 3 toques no botão 1 do volante (até 8s entre eles). Suas configurações ficam salvas e voltam sozinhas na saída.",
+                                                color = ImpTokens.TextSecondary,
+                                                fontSize = 14.sp
+                                        )
+                                },
+                                confirmButton = {
+                                        TextButton(
+                                                onClick = {
+                                                        showStealthConfirm = false
+                                                        StealthModeManager.enter(context, "UI")
+                                                }
+                                        ) { Text("Ativar", color = Color(0xFFE05252)) }
+                                },
+                                dismissButton = {
+                                        TextButton(onClick = { showStealthConfirm = false }) {
+                                                Text("Cancelar", color = ImpTokens.TextSecondary)
+                                        }
+                                }
+                        )
                 }
 
                 // Seção de Contribuição
