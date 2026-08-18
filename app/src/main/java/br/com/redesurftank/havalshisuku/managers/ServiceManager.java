@@ -76,11 +76,6 @@ import rikka.shizuku.ShizukuBinderWrapper;
 public class ServiceManager {
     private static final String TAG = "ServiceManager";
     public static final CarConstants[] DEFAULT_KEYS = {
-            // Setas: monitoradas para a sequência de saída do Modo Concessionária (ver
-            // handleStealthExitTurnSignal). Sem estarem aqui, o host só as entrega sob demanda
-            // via getData() e nenhuma mudança chega ao OnDataChanged.
-            CarConstants.CAR_BASIC_LEFT_TURN_SWITCH_STATUS,
-            CarConstants.CAR_BASIC_RIGHT_TURN_SWITCH_STATUS,
             CarConstants.CAR_BASIC_ACCUMULATED_DIRVETIME,
             CarConstants.CAR_BASIC_BATTERY_POWER_LEVEL,
             CarConstants.CAR_BASIC_BATTERY_VOLTAGE,
@@ -1336,8 +1331,11 @@ public class ServiceManager {
      */
     private void handleStealthExitTurnSignal(String key, String value) {
         if (key == null) return;
-        boolean isLeft = CarConstants.CAR_BASIC_LEFT_TURN_SWITCH_STATUS.getValue().equals(key);
-        boolean isRight = CarConstants.CAR_BASIC_RIGHT_TURN_SWITCH_STATUS.getValue().equals(key);
+        // A LUZ da seta, não o switch da alavanca: este carro responde
+        // "is not support for dataId car.basic.left_turn_switch_status" e nunca emite nada por lá.
+        // Estas três chaves já estavam em DEFAULT_KEYS, então chegam sem configuração extra.
+        boolean isLeft = CarConstants.CAR_BASIC_LEFT_TURN_LIGHT_STATUS.getValue().equals(key);
+        boolean isRight = CarConstants.CAR_BASIC_RIGHT_TURN_LIGHT_STATUS.getValue().equals(key);
         if (!isLeft && !isRight) return;
 
         if (!StealthModeManager.isActive()) {
@@ -1348,7 +1346,19 @@ public class ServiceManager {
         }
 
         boolean on = "1".equals(value == null ? "" : value.trim());
-        if (!on) return; // desligar a seta não conta; só o acionamento
+        if (!on) return; // apagar a luz não conta; só o acendimento
+
+        // Pisca-alerta acende os dois lados alternando: sozinho ele completaria a sequência e
+        // tiraria o carro do modo sem ninguém pedir. Enquanto estiver ligado, nada conta.
+        try {
+            String hazard = getData(CarConstants.CAR_BASIC_HAZARD_LIGHT_STATUS.getValue());
+            if (hazard != null && "1".equals(hazard.trim())) {
+                stealthExitTurnIndex = 0;
+                stealthExitLastTurnSide = null;
+                return;
+            }
+        } catch (Exception ignored) {
+        }
 
         // Só com o carro PARADO. Manobrar para estacionar produz esquerda-direita-esquerda-direita
         // sem nenhuma intenção de sair do modo; parado, a alternância só acontece de propósito.
