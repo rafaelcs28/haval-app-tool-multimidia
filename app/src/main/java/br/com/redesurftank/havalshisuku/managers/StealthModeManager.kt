@@ -14,6 +14,7 @@ import br.com.redesurftank.havalshisuku.ambientlight.AmbientLightService
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.services.BottomBarService
+import br.com.redesurftank.havalshisuku.services.ForegroundService
 import br.com.redesurftank.havalshisuku.utils.ShizukuUtils
 import org.json.JSONArray
 import org.json.JSONObject
@@ -24,9 +25,14 @@ import org.json.JSONObject
  * ARQUITETURA: DESLIGAR AS PREFERÊNCIAS DE VERDADE (não master switch).
  *
  * A primeira versão era um master switch: uma flag consultada em N pontos de ação. Falhou no
- * carro — o painel continuou com o tema porque `ProjectorManager.refresh()` recria os projetores
- * por um caminho que não passava pelo gate de `initialize()`. A lição: gate espalhado obriga a
- * caçar TODOS os caminhos, e sempre escapa um.
+ * carro — o painel continuou com o tema porque `ProjectorManager` criava as Presentations do
+ * cluster incondicionalmente (as prefs só decidiam o que era PINTADO dentro da janela). A lição:
+ * gate espalhado obriga a caçar TODOS os caminhos, e sempre escapa um.
+ *
+ * Isso foi consertado na ORIGEM, não aqui: `ProjectorManager.initialize()` agora consulta
+ * ENABLE_VIRTUAL_CLUSTER / ENABLE_INSTRUMENT_PROJECTOR antes de criar cada projector, e derruba o
+ * que estiver vivo com a pref desligada. Ou seja: desligar o Virtual Cluster passou a devolver o
+ * painel ao nativo para QUALQUER usuário, e este modo herda o comportamento de graça — sem gate.
  *
  * Agora o modo:
  *  1. grava um RETRATO completo de `haval_prefs` (JSON, com os tipos) em
@@ -152,28 +158,19 @@ object StealthModeManager {
     private val CLEAR_ON_ENTER = listOf(SharedPreferencesKeys.DEFAULT_DISPLAY_APP_PACKAGE)
 
     /**
-     * Nunca esconder, mesmo sendo apps de terceiros:
-     *  - o Shizuku é a fonte do privilégio que executa o `pm unhide`; escondê-lo tranca a porta
-     *    por dentro e a volta passa a exigir telnet;
-     *  - o próprio Impulse precisa continuar rodando para detectar a sequência do volante (o
-     *    ícone dele já é tratado à parte, desabilitando a activity do launcher).
+     * A ÚNICA exclusão da varredura de apps de terceiros: o próprio Impulse.
+     *
+     * Não existem mais duas listas (uma de "não mexer" e outra de "só o ícone"). Depois do teste
+     * no carro o dono decidiu que TODO app de terceiro é tratado igual — só o ícone some, o app
+     * continua rodando (ver [hideThirdPartyApps]). Com isso, Shizuku e EcoTrip deixaram de ser
+     * casos especiais: nada é suspenso, então nada tranca a porta por dentro nem derruba sessão
+     * de ninguém.
+     *
+     * O Impulse fica de fora porque o ícone dele é tratado à parte, por
+     * [setLauncherIconEnabled] (`setComponentEnabledSetting` no próprio processo, com
+     * DONT_KILL_APP) — deixá-lo também na varredura genérica só duplicaria o comando.
      */
-    private val NEVER_HIDE = setOf(
-        "moe.shizuku.privileged.api",
-        "br.com.redesurftank.havalshisuku"
-    )
-
-    /**
-     * Apps que não podem ser desabilitados por inteiro, mas cujo ÍCONE ainda deve sumir.
-     * `pm hide` derruba o app todo; para estes usamos `pm disable` apenas na activity do
-     * launcher — o ícone some da tela e o serviço continua rodando, que é justamente o que
-     * mantém a porta de volta aberta.
-     */
-    // Só o Shizuku: ele fornece o privilégio que reverte este modo, então suspendê-lo trancaria
-    // a porta por dentro. O EcoTrip fica de FORA desta lista por escolha do dono — ele é
-    // suspenso como qualquer outro app de terceiro (perde o MQTT e o acompanhamento remoto
-    // enquanto o modo está ativo), em favor do disfarce completo.
-    private val HIDE_ICON_ONLY = setOf("moe.shizuku.privileged.api")
+    private val NEVER_TOUCH = setOf("br.com.redesurftank.havalshisuku")
 
     private fun prefs() =
         App.getDeviceProtectedContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -393,13 +390,20 @@ object StealthModeManager {
     // Ícones dos apps
     // ---------------------------------------------------------------------------------------
 
-    /** Activity de launcher de [pkg], ou null se o app não tiver ícone. */
-    private fun launcherActivityOf(pkg: String): String? = try {
+    /**
+     * Activity de launcher de [pkg], ou null se o app não tiver ícone.
+     *
+     * [includeDisabled] existe porque, depois de `pm disable`, o componente SOME das buscas
+     * normais do PackageManager — procurar o ícone para devolvê-lo daria "esse app nunca teve
+     * ícone". Toda leitura feita no caminho de VOLTA precisa da flag.
+     */
+    private fun launcherActivityOf(pkg: String, includeDisabled: Boolean = false): String? = try {
         val pm = App.getContext().packageManager
         val intent = Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)
             .setPackage(pkg)
-        pm.queryIntentActivities(intent, 0)
+        val flags = if (includeDisabled) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+        pm.queryIntentActivities(intent, flags)
             .firstOrNull()
             ?.activityInfo
             ?.name
@@ -409,12 +413,13 @@ object StealthModeManager {
     }
 
     /**
-     * Some com o ícone de [pkg] sem desabilitar o app: `pm disable` mira só a activity do
-     * launcher. Usado no Shizuku, que precisa continuar servindo o privilégio que reverte
-     * este modo.
+     * Some com o ícone de [pkg] sem tocar no app: `pm disable` mira SÓ a activity do launcher.
+     * O processo, os serviços e as permissões do app continuam exatamente como estavam.
      */
     private fun setThirdPartyIconEnabled(pkg: String, enabled: Boolean) {
-        val activity = launcherActivityOf(pkg)
+        // Ao reabilitar, a activity já está desabilitada — sem MATCH_DISABLED_COMPONENTS a busca
+        // volta vazia e o ícone ficaria escondido para sempre.
+        val activity = launcherActivityOf(pkg, includeDisabled = enabled)
         if (activity == null) {
             Log.w(TAG, "$pkg não tem activity de launcher; nada a esconder")
             return
@@ -425,74 +430,157 @@ object StealthModeManager {
     }
 
     /**
-     * Esconde os ícones dos apps INSTALADOS pelo dono, deixando só os nativos do sistema.
+     * Esconde o ÍCONE dos apps instalados pelo dono, deixando na tela só os nativos do sistema.
+     * Os apps continuam rodando normalmente — só somem da área de trabalho e da gaveta.
+     *
+     * POR QUE NUNCA `pm hide`: a versão anterior suspendia cada app de terceiro. Suspender não é
+     * "esconder": o app fica impedido de rodar enquanto durar o modo — não recebe broadcast, não
+     * sobe serviço, nada. No carro isso matou a sessão do EcoTrip e exigiu reautorizar o Shizuku
+     * na volta. O disfarce que o dono quer é visual, então o comando certo é
+     * `pm disable <pkg>/<activityDeLauncher>` — mira só o ícone.
+     *
+     * RESSALVA HONESTA sobre o `pm disable`: o shell não expõe DONT_KILL_APP, então trocar o
+     * estado do componente MATA o processo do app uma vez, na hora. A diferença para o `pm hide`
+     * é que aqui a morte é pontual e reversível sozinha: o app não fica suspenso, então serviço
+     * com START_STICKY, alarme ou broadcast o trazem de volta em seguida. Não é "zero impacto",
+     * é "cai e levanta" em vez de "fica no chão até sair do modo".
      *
      * `pm list packages -3` é exatamente a distinção pedida: lista apenas o que não veio de
-     * fábrica. `pm hide` some com o app do launcher e da gaveta sem desinstalar nem apagar dados —
-     * é reversível com `pm unhide`. A lista do que foi escondido é gravada em preferência ANTES de
-     * esconder: se o processo morrer no meio, a volta ainda sabe o que devolver.
+     * fábrica.
+     *
+     * O REGISTRO GUARDA `pkg/activity`, não só o pacote. Dois motivos: depois do disable a
+     * activity não aparece mais numa busca comum (ver [launcherActivityOf]), e ela pode mudar
+     * numa atualização do app — guardar o par é o que garante devolver exatamente o que foi
+     * tirado. Ele é gravado ANTES do primeiro disable: se o processo morrer no meio do laço, a
+     * volta ainda sabe o que devolver.
      */
     private fun hideThirdPartyApps() {
         val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "list", "packages", "-3"))
         val packages = raw.lineSequence()
             .map { it.trim().removePrefix("package:").trim() }
-            .filter { it.isNotEmpty() && it !in NEVER_HIDE && it !in HIDE_ICON_ONLY }
+            .filter { it.isNotEmpty() && it !in NEVER_TOUCH }
             .distinct()
             .toList()
         if (packages.isEmpty()) {
             Log.w(TAG, "Nenhum app de terceiros para esconder")
             return
         }
-        // Grava primeiro: um kill no meio do laço não pode deixar apps escondidos sem registro.
-        prefs().edit().putString(HIDDEN_PACKAGES_KEY, packages.joinToString(",")).commit()
+
+        // Resolve TODAS as activities antes de desabilitar a primeira: uma vez desabilitada, a
+        // activity some da busca e o par pkg/activity não seria mais recuperável.
+        val targets = packages.mapNotNull { pkg ->
+            val activity = launcherActivityOf(pkg)
+            if (activity == null) {
+                Log.w(TAG, "$pkg não tem activity de launcher; nada a esconder")
+                null
+            } else {
+                "$pkg/$activity"
+            }
+        }
+        if (targets.isEmpty()) {
+            Log.w(TAG, "Nenhum ícone de app de terceiros para esconder")
+            return
+        }
+
+        prefs().edit().putString(HIDDEN_PACKAGES_KEY, targets.joinToString(",")).commit()
         var hidden = 0
-        for (pkg in packages) {
+        for (target in targets) {
             try {
-                ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "hide", pkg))
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "disable", target))
                 hidden++
             } catch (t: Throwable) {
-                Log.e(TAG, "Falha ao esconder $pkg", t)
+                Log.e(TAG, "Falha ao esconder o ícone de $target", t)
             }
         }
-        // Estes ficam rodando; só o ícone sai da tela.
-        for (pkg in HIDE_ICON_ONLY) {
-            try { setThirdPartyIconEnabled(pkg, false) } catch (t: Throwable) {
-                Log.e(TAG, "Falha ao esconder o ícone de $pkg", t)
-            }
-        }
-        Log.w(TAG, "Apps de terceiros escondidos: $hidden/${packages.size}")
+        Log.w(TAG, "Ícones de apps de terceiros escondidos: $hidden/${targets.size}")
         ClusterPersistentEventLogger.log(
             "stealth_hide_apps",
-            mapOf("requested" to packages.size, "hidden" to hidden)
+            mapOf("requested" to targets.size, "hidden" to hidden)
         )
     }
 
-    /** Devolve os apps escondidos por [hideThirdPartyApps]. Best-effort, um a um. */
+    /**
+     * Devolve os ícones. Best-effort, um a um, e TODAS as etapas rodam SEMPRE.
+     *
+     * BUG CORRIGIDO: aqui havia um `return` quando a lista salva estava em branco, colocado ANTES
+     * das etapas seguintes de restauração. Bastava a lista faltar (modo entrado por outra versão,
+     * preferência perdida, entrada abortada no meio) para a função ir embora sem devolver nada —
+     * foi assim que o ícone do Shizuku ficou para trás no carro. Agora a lista vazia só significa
+     * "não tenho registro", e a varredura por estado observado continua.
+     */
     private fun restoreThirdPartyApps() {
         val stored = prefs().getString(HIDDEN_PACKAGES_KEY, "").orEmpty()
-        if (stored.isBlank()) return
-        val packages = stored.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val entries = stored.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
         var restored = 0
-        for (pkg in packages) {
+        for (entry in entries) {
             try {
-                ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "unhide", pkg))
+                if (entry.contains('/')) {
+                    ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "enable", entry))
+                } else {
+                    // Formato ANTIGO: versões anteriores gravavam só o pacote e usavam `pm hide`.
+                    // Se o app foi atualizado com o modo ativo, é este o lixo que sobrou — desfaz
+                    // a suspensão e, por garantia, reabilita o ícone.
+                    ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "unhide", entry))
+                    setThirdPartyIconEnabled(entry, true)
+                }
                 restored++
             } catch (t: Throwable) {
-                Log.e(TAG, "Falha ao restaurar $pkg", t)
+                Log.e(TAG, "Falha ao restaurar $entry", t)
             }
         }
-        for (pkg in HIDE_ICON_ONLY) {
-            try { setThirdPartyIconEnabled(pkg, true) } catch (t: Throwable) {
-                Log.e(TAG, "Falha ao restaurar o ícone de $pkg", t)
-            }
-        }
+
+        // Rede de segurança — roda mesmo sem lista nenhuma. Ver [reenableDisabledLauncherIcons].
+        var swept = 0
+        step("sweep_disabled_icons") { swept = reenableDisabledLauncherIcons() }
+
         // Só limpa o registro depois de tentar todos — se algo falhou, uma nova saída retenta.
         prefs().edit().remove(HIDDEN_PACKAGES_KEY).commit()
-        Log.w(TAG, "Apps de terceiros restaurados: $restored/${packages.size}")
+        Log.w(TAG, "Ícones restaurados: $restored/${entries.size} (varredura devolveu $swept)")
         ClusterPersistentEventLogger.log(
             "stealth_restore_apps",
-            mapOf("requested" to packages.size, "restored" to restored)
+            mapOf("requested" to entries.size, "restored" to restored, "swept" to swept)
         )
+    }
+
+    /**
+     * RESTAURAÇÃO POR ESTADO OBSERVADO: reabilita qualquer ícone de app de terceiro que esteja
+     * desabilitado, mesmo que a lista salva não saiba dele.
+     *
+     * Por que existe: até agora a saída só desfazia o que a versão ATUAL sabia ter feito. Quando o
+     * app foi atualizado com o modo ligado, o registro veio de outra versão (ou de um formato
+     * diferente) e sobrou lixo — o ícone do EcoTrip ficou desabilitado e nada o devolvia. Olhar o
+     * estado real do sistema conserta independentemente de quem escondeu, e de qual versão.
+     *
+     * LIMITES DE PRECAUÇÃO, para não "consertar" o que o dono desligou de propósito:
+     *  - só apps de terceiro (`pm list packages -3`); nada do sistema é tocado;
+     *  - só a activity de LAUNCHER; nenhum outro componente entra na varredura;
+     *  - só o estado COMPONENT_ENABLED_STATE_DISABLED, que é exatamente o que `pm disable` grava.
+     *    COMPONENT_ENABLED_STATE_DISABLED_USER (o caminho do usuário / `pm disable-user`) e
+     *    DISABLED_UNTIL_USED (do sistema) ficam intocados de propósito.
+     *
+     * @return quantos ícones foram devolvidos.
+     */
+    private fun reenableDisabledLauncherIcons(): Int {
+        val pm = App.getContext().packageManager
+        val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "list", "packages", "-3"))
+        var fixed = 0
+        for (line in raw.lineSequence()) {
+            val pkg = line.trim().removePrefix("package:").trim()
+            if (pkg.isEmpty() || pkg in NEVER_TOUCH) continue
+            try {
+                val activity = launcherActivityOf(pkg, includeDisabled = true) ?: continue
+                val state = pm.getComponentEnabledSetting(ComponentName(pkg, activity))
+                if (state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED) continue
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "enable", "$pkg/$activity"))
+                Log.w(TAG, "Varredura: ícone de $pkg estava desabilitado; devolvido ($activity)")
+                fixed++
+            } catch (t: Throwable) {
+                Log.e(TAG, "Varredura: falha ao checar/devolver o ícone de $pkg", t)
+            }
+        }
+        Log.w(TAG, "Varredura de ícones desabilitados: $fixed devolvido(s)")
+        return fixed
     }
 
     // ---------------------------------------------------------------------------------------
@@ -531,14 +619,14 @@ object StealthModeManager {
         step("set_flag") { setActive(true) }
         step("disable_feature_prefs") { disableFeaturePreferences() }
         step("hide_launcher_icon") { setLauncherIconEnabled(appContext, false) }
-        step("hide_third_party_apps") { hideThirdPartyApps() }
 
         // Agora força a aplicação do estado desligado pelos mesmos pontos do boot.
         //
-        // ATENÇÃO ao refresh(): ele NÃO respeita ENABLE_VIRTUAL_CLUSTER / ENABLE_INSTRUMENT_PROJECTOR
-        // — repopula os creators e chama initialize(), que cria as Presentations de qualquer jeito
-        // (as prefs só decidem o que é PINTADO dentro delas). Por isso o stopProjectors() vem
-        // DEPOIS: é ele que garante o painel nativo agora. Presentation.dismiss() exige a UI thread.
+        // O refresh() sozinho já basta desde que ProjectorManager.initialize() passou a respeitar
+        // ENABLE_VIRTUAL_CLUSTER / ENABLE_INSTRUMENT_PROJECTOR: com as prefs em false ele derruba a
+        // Presentation viva e não recria nenhuma — o painel volta a ser o nativo. O stopProjectors()
+        // logo depois é redundância barata, para o caso de o refresh falhar no meio.
+        // Presentation.dismiss() exige a UI thread; por isso o onMain.
         onMain {
             step("refresh_projectors") { ProjectorManager.getInstance().refresh() }
             step("stop_projectors") { ProjectorManager.getInstance().stopProjectors() }
@@ -551,9 +639,19 @@ object StealthModeManager {
         step("stop_ambient_light") { AmbientLightService.stop(appContext) }
         // Com a pref já em false, updateSchedule() cancela os alarmes e não reagenda nada.
         step("cancel_auto_brightness") { AutoBrightnessManager.getInstance().updateSchedule() }
+        // A notificação persistente denuncia o app pelo nome. Troca AGORA para a versão neutra —
+        // sem isto ela só mudaria no próximo start do serviço. (A flag já está em true acima, então
+        // o serviço monta a discreta.)
+        step("quiet_notification") { ForegroundService.refreshNotificationForStealth() }
 
         // Trabalho de shell via Shizuku: nunca na thread chamadora (a UI).
+        //
+        // hide_third_party_apps entrou aqui (era síncrono): cada `pm` é um processo novo pelo
+        // Shizuku, e agora são dois por app (resolver a activity + desabilitar). Numa lista de
+        // uma dúzia de apps isso é segundos de bloqueio — de pé na thread que chamou enter(),
+        // que é a da UI. Vai primeiro na fila porque é o efeito que o dono vê na tela.
         background("apply_off_state") {
+            step("hide_third_party_apps") { hideThirdPartyApps() }
             step("unmount_android_auto") { AndroidAutoPatchManager.removeMounts() }
             step("unmount_carplay") { CarPlayPatchManager.removeMounts() }
             // onServicesReady() só LIGA; para desligar é o setEnabled(false) (a pref já está false).
@@ -589,7 +687,8 @@ object StealthModeManager {
             ServiceManager.getInstance().ensureSteeringWheelButtonIntegration()
         }
         step("show_launcher_icon") { setLauncherIconEnabled(appContext, true) }
-        step("restore_third_party_apps") { restoreThirdPartyApps() }
+        // Flag já em false lá em cima, então isto reemite a notificação normal do serviço.
+        step("restore_notification") { ForegroundService.refreshNotificationForStealth() }
         onMain { step("restart_projectors") { ProjectorManager.getInstance().refresh() } }
         step("restart_bottom_bar") { restartBottomBarLikeBoot(appContext) }
         step("restart_ambient_light") { AmbientLightService.startIfEnabled(appContext) }
@@ -597,6 +696,12 @@ object StealthModeManager {
         step("restore_auto_brightness") { AutoBrightnessManager.getInstance().updateSchedule() }
 
         background("reapply_user_state") {
+            // restore_third_party_apps entrou aqui (era síncrono) e vai PRIMEIRO: é o que o dono
+            // precisa ver de volta. Um dos caminhos de saída é o StealthExitReceiver, cujo
+            // onReceive roda na main thread com o prazo de ANR do broadcast — e a devolução dos
+            // ícones agora varre a lista instalada além da lista salva, ou seja, mais `pm` ainda.
+            // Bloquear ali arriscaria o sistema derrubar justo o caminho de recuperação.
+            step("restore_third_party_apps") { restoreThirdPartyApps() }
             // Mesma rotina e mesmo gate por pref que o ForegroundService usa no boot.
             step("remount_android_auto") {
                 if (prefs().getBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.key, false)) {
