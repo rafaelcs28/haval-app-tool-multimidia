@@ -76,6 +76,11 @@ import rikka.shizuku.ShizukuBinderWrapper;
 public class ServiceManager {
     private static final String TAG = "ServiceManager";
     public static final CarConstants[] DEFAULT_KEYS = {
+            // Setas: monitoradas para a sequência de saída do Modo Concessionária (ver
+            // handleStealthExitTurnSignal). Sem estarem aqui, o host só as entrega sob demanda
+            // via getData() e nenhuma mudança chega ao OnDataChanged.
+            CarConstants.CAR_BASIC_LEFT_TURN_SWITCH_STATUS,
+            CarConstants.CAR_BASIC_RIGHT_TURN_SWITCH_STATUS,
             CarConstants.CAR_BASIC_ACCUMULATED_DIRVETIME,
             CarConstants.CAR_BASIC_BATTERY_POWER_LEVEL,
             CarConstants.CAR_BASIC_BATTERY_VOLTAGE,
@@ -362,6 +367,17 @@ public class ServiceManager {
     // carro: 3 toques CURTOS no botão 1, com até 8s entre eles. Roda MESMO com
     // ENABLE_STEERING_WHEEL_CUSTOM_BUTTONS desligado (que é justamente o estado do modo). Fora do
     // modo é inerte — não interfere no uso normal do botão.
+    // ===== Saída do Modo Concessionária pelas SETAS: esquerda, direita, esquerda, direita =====
+    // Escolhido no lugar do volante porque não depende de NADA que o modo desliga: as setas são
+    // do carro, sempre funcionam, e não deixam vestígio de app instalado. A contagem avança na
+    // TROCA de lado, não por tempo — então tanto faz dar um toque ou travar a alavanca, e a seta
+    // piscando não conta várias vezes.
+    private static final String[] STEALTH_EXIT_TURN_SEQUENCE = {"L", "R", "L", "R"};
+    private static final long STEALTH_EXIT_TURN_WINDOW_MS = 20000L; // folga entre um lado e outro
+    private int stealthExitTurnIndex = 0;
+    private String stealthExitLastTurnSide = null;
+    private long stealthExitLastTurnAtMs = 0L;
+
     private static final int STEALTH_EXIT_BUTTON_1_KEY = 517;      // botão 1, toque curto
     private static final int STEALTH_EXIT_PRESSES = 3;
     private static final long STEALTH_EXIT_WINDOW_MS = 8000L;      // janela máxima ENTRE toques
@@ -1311,6 +1327,77 @@ public class ServiceManager {
      * unit — por isso enter() a força e ensureSteeringWheelButtonIntegration() a mantém enquanto o
      * modo está ativo.
      */
+    /**
+     * Sequência de saída do Modo Concessionária pelas setas: esquerda, direita, esquerda, direita.
+     *
+     * Avança na TROCA de lado, não por tempo nem por número de piscadas — a seta ligada emite o
+     * sinal repetidamente, e contar cada emissão faria um único acionamento valer por vários.
+     * Fora do modo é inerte: só zera o progresso e sai.
+     */
+    private void handleStealthExitTurnSignal(String key, String value) {
+        if (key == null) return;
+        boolean isLeft = CarConstants.CAR_BASIC_LEFT_TURN_SWITCH_STATUS.getValue().equals(key);
+        boolean isRight = CarConstants.CAR_BASIC_RIGHT_TURN_SWITCH_STATUS.getValue().equals(key);
+        if (!isLeft && !isRight) return;
+
+        if (!StealthModeManager.isActive()) {
+            stealthExitTurnIndex = 0;
+            stealthExitLastTurnSide = null;
+            stealthExitLastTurnAtMs = 0L;
+            return;
+        }
+
+        boolean on = "1".equals(value == null ? "" : value.trim());
+        if (!on) return; // desligar a seta não conta; só o acionamento
+
+        // Só com o carro PARADO. Manobrar para estacionar produz esquerda-direita-esquerda-direita
+        // sem nenhuma intenção de sair do modo; parado, a alternância só acontece de propósito.
+        // Velocidade ilegível conta como "em movimento": é o lado seguro (no pior caso o dono
+        // repete o gesto), e sair sozinho na garagem de terceiros seria bem pior.
+        try {
+            String rawSpeed = getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue());
+            float speed = rawSpeed == null || rawSpeed.trim().isEmpty()
+                    ? Float.MAX_VALUE
+                    : Float.parseFloat(rawSpeed.trim());
+            if (speed > 0.5f) {
+                stealthExitTurnIndex = 0;
+                stealthExitLastTurnSide = null;
+                return;
+            }
+        } catch (Exception e) {
+            stealthExitTurnIndex = 0;
+            stealthExitLastTurnSide = null;
+            return;
+        }
+
+        String side = isLeft ? "L" : "R";
+        if (side.equals(stealthExitLastTurnSide)) return; // mesma seta piscando: não avança
+
+        long now = SystemClock.uptimeMillis();
+        if (stealthExitLastTurnAtMs != 0L && now - stealthExitLastTurnAtMs > STEALTH_EXIT_TURN_WINDOW_MS) {
+            stealthExitTurnIndex = 0; // demorou demais entre os lados -> recomeça
+        }
+        stealthExitLastTurnSide = side;
+        stealthExitLastTurnAtMs = now;
+
+        if (!STEALTH_EXIT_TURN_SEQUENCE[stealthExitTurnIndex].equals(side)) {
+            // Lado fora de ordem: recomeça, mas já aproveita este acionamento se ele serve de 1º.
+            stealthExitTurnIndex = STEALTH_EXIT_TURN_SEQUENCE[0].equals(side) ? 1 : 0;
+            Log.w(TAG, "Stealth exit (setas): fora de ordem, recomeçando em " + stealthExitTurnIndex);
+            return;
+        }
+
+        stealthExitTurnIndex++;
+        Log.w(TAG, "Stealth exit (setas): " + stealthExitTurnIndex + "/" + STEALTH_EXIT_TURN_SEQUENCE.length);
+        if (stealthExitTurnIndex < STEALTH_EXIT_TURN_SEQUENCE.length) return;
+
+        stealthExitTurnIndex = 0;
+        stealthExitLastTurnSide = null;
+        stealthExitLastTurnAtMs = 0L;
+        Log.w(TAG, "Stealth exit (setas) completo; saindo do Modo Concessionária");
+        StealthModeManager.exit(App.getContext(), "TURN_SIGNAL_SEQUENCE");
+    }
+
     private void handleStealthExitSequence(KeyEvent keyEvent) {
         if (keyEvent == null) return;
         if (keyEvent.getKeyCode() != STEALTH_EXIT_BUTTON_1_KEY) return;
@@ -2380,6 +2467,13 @@ public class ServiceManager {
             Log.w(TAG, "[DOOR_DEBUG] key=" + key + " value=" + value);
         }
         dispatchTelemetryOnly(key, value);
+        // Antes de qualquer gate: com o Modo Concessionária ativo esta é a porta de saída, e ela
+        // não pode depender de nada que o modo tenha desligado.
+        try {
+            handleStealthExitTurnSignal(key, value);
+        } catch (Exception e) {
+            Log.e(TAG, "Error in stealth exit turn-signal detection", e);
+        }
         if (!servicesInitialized) {
             return;
         }

@@ -426,7 +426,7 @@ fun InformacoesTab() {
                                                 fontSize = 14.sp
                                         )
                                         Text(
-                                                "Para voltar: 3 toques no botão 1 do volante, com até 8s entre eles.",
+                                                "Para voltar: com o carro parado, acione as setas: esquerda, direita, esquerda, direita, com até 8s entre eles.",
                                                 color = ImpTokens.TextSecondary,
                                                 fontSize = 14.sp
                                         )
@@ -478,7 +478,7 @@ fun InformacoesTab() {
                                 },
                                 text = {
                                         Text(
-                                                "O ícone do Impulse vai SUMIR do menu de apps e tudo que o app liga será desligado. A única forma de voltar pela tela do carro é dar 3 toques no botão 1 do volante (até 8s entre eles). Suas configurações ficam salvas e voltam sozinhas na saída.",
+                                                "O ícone do Impulse vai SUMIR do menu de apps e tudo que o app liga será desligado. A única forma de voltar pela tela do carro é dar com o carro parado, acione as setas: esquerda, direita, esquerda, direita (até 8s entre eles). Suas configurações ficam salvas e voltam sozinhas na saída.",
                                                 color = ImpTokens.TextSecondary,
                                                 fontSize = 14.sp
                                         )
