@@ -6659,11 +6659,32 @@ object DisplayAppLauncher {
         ).joinToString("|")
     }
 
+    /**
+     * DESLIGADO DE PROPÓSITO — não reative sem ler isto.
+     *
+     * A ideia era uma rede de segurança: se a faixa não mudasse dentro de
+     * [ANDROID_AUTO_STEERING_SKIP_FALLBACK_DELAY_MS], reenviar o skip por outra rota. Só que a
+     * assinatura da faixa vem do poll do card (MediaCenter, source 402), que atualiza a cada
+     * ~1,5s — mais que o prazo de 900ms. O "não mudou" é então quase sempre FALSO, o segundo
+     * skip dispara e o volante **pula duas faixas**.
+     *
+     * A rota nativa do OEM já faz next/previous de forma confiável com o MediaCenter ativo,
+     * então este fallback é redundante: só produzia o skip duplo.
+     *
+     * Este guard existe porque o desligamento já se perdeu TRÊS vezes em rebase (a última na
+     * migração para a base PR119) e o bug voltou ao usuário toda vez. Mantê-lo aqui dentro faz
+     * a proteção sobreviver mesmo que a CHAMADA volte lá em cima. Se algum dia for mesmo
+     * necessário, o caminho não é reativar como está: é usar um prazo maior que o intervalo do
+     * poll (~2000ms+), ao custo de um fallback legítimo ficar lento.
+     */
+    private const val ANDROID_AUTO_STEERING_SKIP_FALLBACK_ENABLED = false
+
     private fun scheduleAndroidAutoSteeringSkipFallbackIfUnchanged(
         keyCode: Int,
         initialSignature: String,
         reason: String
     ) {
+        if (!ANDROID_AUTO_STEERING_SKIP_FALLBACK_ENABLED) return
         val generation = androidAutoSteeringSkipFallbackGeneration.incrementAndGet()
         Log.w(
             TAG,
