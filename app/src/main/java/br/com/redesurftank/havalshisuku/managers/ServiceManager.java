@@ -1338,7 +1338,10 @@ public class ServiceManager {
         boolean isRight = CarConstants.CAR_BASIC_RIGHT_TURN_LIGHT_STATUS.getValue().equals(key);
         if (!isLeft && !isRight) return;
 
-        if (!StealthModeManager.isActive()) {
+        // O mesmo detector serve a dois momentos: o ENSAIO (o dono prova que sabe sair, antes de
+        // ativar) e a SAÍDA de verdade. Fora dos dois, é inerte.
+        boolean rehearsing = StealthModeManager.isAwaitingConfirmation();
+        if (!StealthModeManager.isActive() && !rehearsing) {
             stealthExitTurnIndex = 0;
             stealthExitLastTurnSide = null;
             stealthExitLastTurnAtMs = 0L;
@@ -1399,11 +1402,19 @@ public class ServiceManager {
 
         stealthExitTurnIndex++;
         Log.w(TAG, "Stealth exit (setas): " + stealthExitTurnIndex + "/" + STEALTH_EXIT_TURN_SEQUENCE.length);
-        if (stealthExitTurnIndex < STEALTH_EXIT_TURN_SEQUENCE.length) return;
+        if (stealthExitTurnIndex < STEALTH_EXIT_TURN_SEQUENCE.length) {
+            if (rehearsing) StealthModeManager.onConfirmationStep(stealthExitTurnIndex, false);
+            return;
+        }
 
         stealthExitTurnIndex = 0;
         stealthExitLastTurnSide = null;
         stealthExitLastTurnAtMs = 0L;
+        if (rehearsing) {
+            Log.w(TAG, "Ensaio da saída concluído");
+            StealthModeManager.onConfirmationStep(STEALTH_EXIT_TURN_SEQUENCE.length, true);
+            return;
+        }
         Log.w(TAG, "Stealth exit (setas) completo; saindo do Modo Concessionária");
         StealthModeManager.exit(App.getContext(), "TURN_SIGNAL_SEQUENCE");
     }

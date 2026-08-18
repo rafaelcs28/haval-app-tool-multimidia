@@ -172,6 +172,46 @@ object StealthModeManager {
      */
     private val NEVER_TOUCH = setOf("br.com.redesurftank.havalshisuku")
 
+    // ===== Ensaio da saída, ANTES de ativar =====
+    // Sugestão do dev do EcoTrip, e a proteção que faltava: em vez de explicar o gesto num texto
+    // que ninguém lê, o dono EXECUTA a saída antes de entrar. Assim ele prova que sabe sair e, de
+    // quebra, prova que o gesto funciona NESTE carro — foi exatamente aqui que a versão anterior
+    // falhou (chave de seta não suportada) e o carro ficou preso com o modo ligado.
+    @Volatile private var awaitingConfirmation = false
+    @Volatile private var confirmationProgress = 0
+    @Volatile private var confirmationListener: ((Int, Boolean) -> Unit)? = null
+
+    @JvmStatic
+    fun isAwaitingConfirmation(): Boolean = awaitingConfirmation
+
+    /** Arma o ensaio. [onProgress] recebe (passos de 0 a 4, concluído). */
+    @JvmStatic
+    fun armConfirmation(onProgress: (Int, Boolean) -> Unit) {
+        awaitingConfirmation = true
+        confirmationProgress = 0
+        confirmationListener = onProgress
+        onProgress(0, false)
+    }
+
+    @JvmStatic
+    fun cancelConfirmation() {
+        awaitingConfirmation = false
+        confirmationProgress = 0
+        confirmationListener = null
+    }
+
+    /** Chamado pelo detector de setas a cada troca de lado válida durante o ensaio. */
+    @JvmStatic
+    fun onConfirmationStep(step: Int, done: Boolean) {
+        confirmationProgress = step
+        val listener = confirmationListener
+        if (done) {
+            awaitingConfirmation = false
+            confirmationListener = null
+        }
+        Handler(Looper.getMainLooper()).post { listener?.invoke(step, done) }
+    }
+
     private fun prefs() =
         App.getDeviceProtectedContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -500,6 +540,50 @@ object StealthModeManager {
     }
 
     /**
+     * Reinicia a central logo depois de ativar o modo.
+     *
+     * Aplicar tudo com o sistema em pe deixa a tela travada em preto: sao janelas derrubadas,
+     * icones desabilitados e um punhado de servicos parados ao mesmo tempo, e o launcher nao se
+     * recompoe sozinho. O dono reiniciou na mao e o carro voltou exatamente como devia — com cara
+     * de fabrica — entao o reinicio passa a fazer parte da ativacao, nao ser tarefa dele.
+     *
+     * Reiniciar tambem e o que faz o painel voltar ao nativo de verdade: no boot seguinte, com as
+     * preferencias ja desligadas, os projetores do cluster simplesmente nao sobem.
+     *
+     * So com o carro PARADO: reiniciar a central em movimento tiraria camera de re, ar e som de
+     * quem esta dirigindo. Velocidade ilegivel conta como em movimento.
+     */
+    private fun rebootHeadUnitAfterEnter(context: Context) {
+        try {
+            val raw = ServiceManager.getInstance()
+                .getData(br.com.redesurftank.havalshisuku.models.CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
+            val speed = raw?.trim()?.toFloatOrNull() ?: Float.MAX_VALUE
+            if (speed > 0.5f) {
+                Log.w(TAG, "Carro em movimento (speed=$speed); NAO reiniciando a central")
+                toast(context, "Modo Concessionária ativo — reinicie a central quando parar")
+                return
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Velocidade ilegivel; nao reiniciando a central", t)
+            toast(context, "Modo Concessionária ativo — reinicie a central quando parar")
+            return
+        }
+
+        toast(context, "Modo Concessionária ativo — reiniciando a central…")
+        ClusterPersistentEventLogger.log("stealth_reboot", mapOf("reason" to "ENTER"))
+        // Folga para o toast aparecer e para as preferências assentarem em disco (o snapshot e a
+        // flag já foram gravados com commit(), então um corte aqui não perde o retrato).
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("svc", "power", "reboot"))
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("reboot"))
+            } catch (t: Throwable) {
+                Log.e(TAG, "Falha ao reiniciar a central", t)
+            }
+        }, 4000L)
+    }
+
+    /**
      * Reinicia os apps de terceiros na saida do modo.
      *
      * Desabilitar a activity de launcher derruba o processo do app uma vez, e ele costuma voltar
@@ -705,7 +789,10 @@ object StealthModeManager {
         step("log") {
             ClusterPersistentEventLogger.log("stealth_mode_enter", mapOf("reason" to reason))
         }
-        toast(appContext, "Modo Concessionária ativo — setas: esquerda, direita, esquerda, direita (carro parado) para voltar")
+        // O toast final e o reinicio ficam a cargo de rebootHeadUnitAfterEnter: aplicar tudo com
+        // o sistema em pe deixa a tela travada em preto, e o reinicio e o que faz o painel voltar
+        // ao nativo de verdade (no boot seguinte os projetores nem sobem).
+        step("reboot_head_unit") { rebootHeadUnitAfterEnter(appContext) }
     }
 
     @JvmStatic

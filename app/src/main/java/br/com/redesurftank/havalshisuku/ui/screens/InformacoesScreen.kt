@@ -104,7 +104,13 @@ fun InformacoesTab() {
         var showPermissionDialog by remember { mutableStateOf(false) }
         // Modo Concessionária: nunca ativa direto do toque — o ícone do app some depois
         // disso, então passa por uma confirmação explícita.
+        // O fluxo tem 3 etapas de propósito (sugestão do dev do EcoTrip): ENSAIO -> PRONTO ->
+        // ativa e reinicia. Fazer o dono EXECUTAR a saída antes de entrar prova que ele sabe sair
+        // e que o gesto funciona neste carro — foi justamente por isso que a versão anterior
+        // deixou o carro preso, com uma sequência que o head unit nunca chegava a emitir.
         var showStealthConfirm by remember { mutableStateOf(false) }
+        var stealthStep by remember { mutableStateOf(0) }      // 0 = ensaio, 1 = pronto
+        var stealthProgress by remember { mutableStateOf(0) }  // 0..4 setas feitas
 
         LaunchedEffect(Unit) {
                 try {
@@ -435,7 +441,15 @@ fun InformacoesTab() {
                                                 horizontalArrangement = Arrangement.End
                                         ) {
                                                 Button(
-                                                        onClick = { showStealthConfirm = true },
+                                                        onClick = {
+                                                                stealthStep = 0
+                                                                stealthProgress = 0
+                                                                StealthModeManager.armConfirmation { step, done ->
+                                                                        stealthProgress = step
+                                                                        if (done) stealthStep = 1
+                                                                }
+                                                                showStealthConfirm = true
+                                                        },
                                                         modifier = Modifier.height(48.dp),
                                                         colors =
                                                                 ButtonDefaults.buttonColors(
@@ -467,34 +481,59 @@ fun InformacoesTab() {
 
                 if (showStealthConfirm) {
                         AlertDialog(
-                                onDismissRequest = { showStealthConfirm = false },
+                                onDismissRequest = {
+                                        showStealthConfirm = false
+                                        StealthModeManager.cancelConfirmation()
+                                },
                                 containerColor = ImpTokens.Container,
                                 title = {
                                         Text(
-                                                "Ativar Modo Concessionária?",
+                                                if (stealthStep == 0) "Ensaie a saída" else "Tudo certo!",
                                                 color = Color.White,
                                                 fontWeight = FontWeight.SemiBold
                                         )
                                 },
                                 text = {
-                                        Text(
-                                                "O ícone do Impulse vai SUMIR do menu de apps e tudo que o app liga será desligado. A única forma de voltar pela tela do carro é dar com o carro parado, acione as setas: esquerda, direita, esquerda, direita (até 8s entre eles). Suas configurações ficam salvas e voltam sozinhas na saída.",
-                                                color = ImpTokens.TextSecondary,
-                                                fontSize = 14.sp
-                                        )
+                                        Column {
+                                                if (stealthStep == 0) {
+                                                        Text(
+                                                                "Antes de ativar, faça agora o gesto que devolve o carro ao normal — com o carro parado:\n\nSeta ESQUERDA → DIREITA → ESQUERDA → DIREITA",
+                                                                color = ImpTokens.TextSecondary,
+                                                                fontSize = 14.sp
+                                                        )
+                                                        Spacer(modifier = Modifier.height(12.dp))
+                                                        Text(
+                                                                "$stealthProgress de 4",
+                                                                color = if (stealthProgress > 0) Color(0xFF4CAF50) else ImpTokens.TextSecondary,
+                                                                fontSize = 20.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                        )
+                                                } else {
+                                                        Text(
+                                                                "Você fez o gesto corretamente — é assim que vai sair do modo.\n\nAo confirmar: o ícone do Impulse e os dos apps instalados somem, tudo que o app liga é desligado, e A CENTRAL VAI REINICIAR sozinha para aplicar.\n\nSuas configurações ficam salvas e voltam inteiras na saída.",
+                                                                color = ImpTokens.TextSecondary,
+                                                                fontSize = 14.sp
+                                                        )
+                                                }
+                                        }
                                 },
                                 confirmButton = {
+                                        if (stealthStep == 1) {
+                                                TextButton(
+                                                        onClick = {
+                                                                showStealthConfirm = false
+                                                                StealthModeManager.enter(context, "UI")
+                                                        }
+                                                ) { Text("Confirmar e reiniciar", color = Color(0xFFE05252)) }
+                                        }
+                                },
+                                dismissButton = {
                                         TextButton(
                                                 onClick = {
                                                         showStealthConfirm = false
-                                                        StealthModeManager.enter(context, "UI")
+                                                        StealthModeManager.cancelConfirmation()
                                                 }
-                                        ) { Text("Ativar", color = Color(0xFFE05252)) }
-                                },
-                                dismissButton = {
-                                        TextButton(onClick = { showStealthConfirm = false }) {
-                                                Text("Cancelar", color = ImpTokens.TextSecondary)
-                                        }
+                                        ) { Text("Cancelar", color = ImpTokens.TextSecondary) }
                                 }
                         )
                 }
