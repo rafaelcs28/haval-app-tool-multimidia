@@ -190,6 +190,16 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private var speculativeHoleExpiryRunnable: Runnable? = null
     private val SPECULATIVE_HOLE_MAX_MS = 1800L
 
+    /** Desde quando a projeção está ativa; 0 = inativa. Base do tempo de assentamento. */
+    private var projectionActiveSinceMs = 0L
+    private var projectionSettleRecheckRunnable: Runnable? = null
+    /**
+     * Quanto a projeção precisa ficar de pé antes de furarmos a máscara. Cobre a janela entre
+     * a task aparecer no D3 e o host desenhar o primeiro frame — furar antes disso expõe a
+     * janela preta no lugar da sombra do tema.
+     */
+    private val PROJECTION_HOLE_SETTLE_MS = 1500L
+
     /**
      * Cached wallpaper × d3_mask composite with no app hole. App-rect changes copy this and
      * CLEAR the hole instead of reloading assets and re-running DST_IN every time.
@@ -976,6 +986,20 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
      * to close it. This bounds that window: if nothing is on D3 shortly after, close it now.
      * (bug 20260817-083131, a repeat of 20260813 that the projection-state gate alone missed.)
      */
+    /** Reavalia assim que a projeção completar o tempo de assentamento. */
+    private fun scheduleProjectionSettleRecheck(nowMs: Long) {
+        if (projectionSettleRecheckRunnable != null) return // já há uma reavaliação a caminho
+        val since = projectionActiveSinceMs
+        if (since <= 0L) return
+        val remaining = (PROJECTION_HOLE_SETTLE_MS - (nowMs - since)).coerceIn(50L, PROJECTION_HOLE_SETTLE_MS)
+        val runnable = Runnable {
+            projectionSettleRecheckRunnable = null
+            updateVirtualClusterVisibility(reason = "PROJECTION_SETTLED")
+        }
+        projectionSettleRecheckRunnable = runnable
+        handler.postDelayed(runnable, remaining)
+    }
+
     private fun scheduleSpeculativeHoleExpiry(reason: String) {
         speculativeHoleExpiryRunnable?.let { handler.removeCallbacks(it) }
         val runnable = Runnable {
@@ -2857,9 +2881,31 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         // rendering. Without this gate we revealed the theme (mirror=false) yet kept the
         // mask hole open over the speedometer, exposing the dead/black AA window.
         // (bug 20260813-184320: "preto no velocímetro sob a sombra esquerda")
-        if (appRectOnDisplay3 == null &&
-                        (carPlayInDash || projectionMirrorInDash || projectionPreparingD3)
-        ) {
+        //
+        // O gate acima cobre a SAÍDA da projeção. Falta a ENTRADA: a task aparece no D3 antes
+        // do host desenhar o primeiro frame, e furar a máscara nesse intervalo mostra a janela
+        // ainda preta — some a sombra sobre o velocímetro e fica um retângulo preto no lugar.
+        // Por isso a abertura espera a projeção ASSENTAR. Enquanto não assenta, a máscara
+        // continua inteira: o app aparecer meio segundo depois é discreto, o preto não é.
+        // (bug 20260817-180725: buraco aberto 5s após o host do AA reiniciar, ainda sem pintar.)
+        val projectionActiveNow = carPlayInDash || projectionMirrorInDash || projectionPreparingD3
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!projectionActiveNow) {
+            projectionActiveSinceMs = 0L
+        } else if (projectionActiveSinceMs == 0L) {
+            projectionActiveSinceMs = nowMs
+        }
+        val projectionSettled =
+                projectionActiveSinceMs > 0L &&
+                        (nowMs - projectionActiveSinceMs) >= PROJECTION_HOLE_SETTLE_MS
+
+        if (appRectOnDisplay3 == null && projectionActiveNow && !projectionSettled) {
+            // Ainda aquecendo: reavalia quando o tempo de assentamento vencer, senão o buraco
+            // só abriria no próximo evento de projeção (que pode demorar).
+            scheduleProjectionSettleRecheck(nowMs)
+        }
+
+        if (appRectOnDisplay3 == null && projectionActiveNow && projectionSettled) {
             val projectionHole = resolveProjectionDisplay3AppRect()
             if (projectionHole != null) {
                 appRectOnDisplay3 = projectionHole
