@@ -52,6 +52,14 @@ object StealthModeManager {
         "br.com.redesurftank.havalshisuku"
     )
 
+    /**
+     * Apps que não podem ser desabilitados por inteiro, mas cujo ÍCONE ainda deve sumir.
+     * `pm hide` derruba o app todo; para estes usamos `pm disable` apenas na activity do
+     * launcher — o ícone some da tela e o serviço continua rodando, que é justamente o que
+     * mantém a porta de volta aberta.
+     */
+    private val HIDE_ICON_ONLY = setOf("moe.shizuku.privileged.api")
+
     private fun prefs() =
         App.getDeviceProtectedContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -78,6 +86,37 @@ object StealthModeManager {
     // ---------------------------------------------------------------------------------------
 
     @JvmStatic
+    /** Activity de launcher de [pkg], ou null se o app não tiver ícone. */
+    private fun launcherActivityOf(pkg: String): String? = try {
+        val pm = App.getContext().packageManager
+        val intent = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setPackage(pkg)
+        pm.queryIntentActivities(intent, 0)
+            .firstOrNull()
+            ?.activityInfo
+            ?.name
+    } catch (t: Throwable) {
+        Log.e(TAG, "Não consegui resolver a activity de launcher de $pkg", t)
+        null
+    }
+
+    /**
+     * Some com o ícone de [pkg] sem desabilitar o app: `pm disable` mira só a activity do
+     * launcher. Usado no Shizuku, que precisa continuar servindo o privilégio que reverte
+     * este modo.
+     */
+    private fun setThirdPartyIconEnabled(pkg: String, enabled: Boolean) {
+        val activity = launcherActivityOf(pkg)
+        if (activity == null) {
+            Log.w(TAG, "$pkg não tem activity de launcher; nada a esconder")
+            return
+        }
+        val verb = if (enabled) "enable" else "disable"
+        ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", verb, "$pkg/$activity"))
+        Log.w(TAG, "Ícone de $pkg: $verb ($activity)")
+    }
+
     /**
      * Esconde os ícones dos apps INSTALADOS pelo dono, deixando só os nativos do sistema.
      *
@@ -90,7 +129,7 @@ object StealthModeManager {
         val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "list", "packages", "-3"))
         val packages = raw.lineSequence()
             .map { it.trim().removePrefix("package:").trim() }
-            .filter { it.isNotEmpty() && it !in NEVER_HIDE }
+            .filter { it.isNotEmpty() && it !in NEVER_HIDE && it !in HIDE_ICON_ONLY }
             .distinct()
             .toList()
         if (packages.isEmpty()) {
@@ -106,6 +145,12 @@ object StealthModeManager {
                 hidden++
             } catch (t: Throwable) {
                 Log.e(TAG, "Falha ao esconder $pkg", t)
+            }
+        }
+        // Estes ficam rodando; só o ícone sai da tela.
+        for (pkg in HIDE_ICON_ONLY) {
+            try { setThirdPartyIconEnabled(pkg, false) } catch (t: Throwable) {
+                Log.e(TAG, "Falha ao esconder o ícone de $pkg", t)
             }
         }
         Log.w(TAG, "Apps de terceiros escondidos: $hidden/${packages.size}")
@@ -127,6 +172,11 @@ object StealthModeManager {
                 restored++
             } catch (t: Throwable) {
                 Log.e(TAG, "Falha ao restaurar $pkg", t)
+            }
+        }
+        for (pkg in HIDE_ICON_ONLY) {
+            try { setThirdPartyIconEnabled(pkg, true) } catch (t: Throwable) {
+                Log.e(TAG, "Falha ao restaurar o ícone de $pkg", t)
             }
         }
         // Só limpa o registro depois de tentar todos — se algo falhou, uma nova saída retenta.
