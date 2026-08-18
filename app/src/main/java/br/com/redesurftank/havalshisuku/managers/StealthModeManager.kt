@@ -500,6 +500,44 @@ object StealthModeManager {
     }
 
     /**
+     * Reinicia os apps de terceiros na saida do modo.
+     *
+     * Desabilitar a activity de launcher derruba o processo do app uma vez, e ele costuma voltar
+     * num estado meio-vivo: o EcoTrip ficava com a tela do celular presa em dados antigos ate
+     * levar um force-stop na mao. Um `am force-stop` limpa isso — o app sobe de novo pelo proprio
+     * servico/alarme, ou no primeiro toque do dono.
+     *
+     * O proprio Impulse e o Shizuku ficam de fora: derrubar o primeiro mataria quem esta
+     * executando esta restauracao, e o segundo e a fonte do privilegio que a executa.
+     */
+    private fun restartThirdPartyApps() {
+        val keepAlive = setOf(
+            "br.com.redesurftank.havalshisuku",
+            "moe.shizuku.privileged.api"
+        )
+        val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "list", "packages", "-3"))
+        val packages = raw.lineSequence()
+            .map { it.trim().removePrefix("package:").trim() }
+            .filter { it.isNotEmpty() && it !in keepAlive }
+            .distinct()
+            .toList()
+        var restarted = 0
+        for (pkg in packages) {
+            try {
+                ShizukuUtils.runCommandAndGetOutput(arrayOf("am", "force-stop", pkg))
+                restarted++
+            } catch (t: Throwable) {
+                Log.e(TAG, "Falha ao reiniciar $pkg", t)
+            }
+        }
+        Log.w(TAG, "Apps de terceiros reiniciados: $restarted/${packages.size}")
+        ClusterPersistentEventLogger.log(
+            "stealth_restart_apps",
+            mapOf("requested" to packages.size, "restarted" to restarted)
+        )
+    }
+
+    /**
      * Devolve os ícones. Best-effort, um a um, e TODAS as etapas rodam SEMPRE.
      *
      * BUG CORRIGIDO: aqui havia um `return` quando a lista salva estava em branco, colocado ANTES
@@ -702,6 +740,7 @@ object StealthModeManager {
             // ícones agora varre a lista instalada além da lista salva, ou seja, mais `pm` ainda.
             // Bloquear ali arriscaria o sistema derrubar justo o caminho de recuperação.
             step("restore_third_party_apps") { restoreThirdPartyApps() }
+            step("restart_third_party_apps") { restartThirdPartyApps() }
             // Mesma rotina e mesmo gate por pref que o ForegroundService usa no boot.
             step("remount_android_auto") {
                 if (prefs().getBoolean(SharedPreferencesKeys.AA_PATCH_AUTO_MOUNT.key, false)) {
