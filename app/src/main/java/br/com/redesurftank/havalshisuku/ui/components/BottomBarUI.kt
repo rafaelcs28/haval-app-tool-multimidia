@@ -6752,16 +6752,16 @@ private fun DashboardMediaPanel(
                 mediaTitle
                         ?: appLabel
                         ?: shortProjectionLabel(activeProjectionPackage)
-                        ?: "Audio"
+                        ?: "Áudio"
         val mediaSubtitle =
                 listOfNotNull(mediaArtist, mediaAlbum).distinct().joinToString(" • ")
                         .takeIf { it.isNotBlank() }
         val subtitle =
                 mediaSubtitle
                         ?: when {
-                                activeProjectionPackage != null -> "Projecao ativa no cluster"
-                                mediaPackageName != null -> "Midia do sistema"
-                                else -> "Sistema de audio"
+                                activeProjectionPackage != null -> "Projeção ativa no cluster"
+                                mediaPackageName != null -> "Mídia do sistema"
+                                else -> "Sistema de áudio"
                         }
         var visibleVolume by remember {
                 mutableIntStateOf(
@@ -6850,7 +6850,7 @@ private fun DashboardMediaPanel(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                         ) {
-                                DashboardPanelTitle(Icons.Default.Album, "Midia")
+                                DashboardPanelTitle(Icons.Default.Album, "Mídia")
                                 Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -6952,7 +6952,7 @@ private fun DashboardMediaPanel(
                                 DashboardIconButton(
                                         Icons.Default.SkipPrevious,
                                         size = 66.dp,
-                                        contentDescription = "Musica anterior"
+                                        contentDescription = "Música anterior"
                                 ) {
                                         runMediaControl {
                                                 BottomBarService.skipCurrentMediaPrevious()
@@ -6962,7 +6962,7 @@ private fun DashboardMediaPanel(
                                         if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                         size = 66.dp,
                                         contentDescription =
-                                                if (isPlaying) "Pausar musica" else "Reproduzir musica"
+                                                if (isPlaying) "Pausar música" else "Reproduzir música"
                                 ) {
                                         runMediaControl {
                                                 BottomBarService.toggleCurrentMediaPlayback()
@@ -6983,7 +6983,7 @@ private fun DashboardMediaPanel(
                                 DashboardIconButton(
                                         Icons.Default.SkipNext,
                                         size = 66.dp,
-                                        contentDescription = "Proxima musica"
+                                        contentDescription = "Próxima música"
                                 ) {
                                         runMediaControl {
                                                 BottomBarService.skipCurrentMediaNext()
@@ -7372,8 +7372,8 @@ private fun DashboardMediaBadge(isPlaying: Boolean, hasMetadata: Boolean) {
                         text =
                                 when {
                                         isPlaying -> "PLAY"
-                                        hasMetadata -> "MIDIA"
-                                        else -> "AUDIO"
+                                        hasMetadata -> "MÍDIA"
+                                        else -> "ÁUDIO"
                                 },
                         color = if (isPlaying) Color(0xFF78E08F) else Color.White.copy(alpha = 0.78f),
                         fontSize = 12.sp,
@@ -7437,7 +7437,7 @@ private fun DashboardArtworkFallback(
                         }
                 }
                 Text(
-                        text = shortProjectionLabel(activeProjectionPackage) ?: "IMPULSE AUDIO",
+                        text = shortProjectionLabel(activeProjectionPackage) ?: "IMPULSE ÁUDIO",
                         color = Color.White.copy(alpha = 0.1f),
                         fontSize = 34.sp,
                         fontFamily = DashboardReadableFont,
@@ -8821,7 +8821,7 @@ private fun shortProjectionLabel(packageName: String?): String? {
                 BOTTOM_BAR_CARPLAY_PACKAGE -> "Apple CarPlay"
                 BOTTOM_BAR_ANDROID_AUTO_PACKAGE -> "Android Auto"
                 null -> null
-                else -> "Projecao"
+                else -> "Projeção"
         }
 }
 
