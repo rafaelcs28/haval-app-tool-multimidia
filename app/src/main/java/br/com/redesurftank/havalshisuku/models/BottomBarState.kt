@@ -90,6 +90,12 @@ object BottomBarState {
     var activeSwipeHud by mutableStateOf<SwipeHudData?>(null)
     var isAcMenuExpanded by mutableStateOf(false)
 
+    // Popup do sub-modo HEV (long-press no botão de energia do dashboard).
+    // Renderizado como overlay full-screen no root do menu — NUNCA como Compose
+    // Dialog: a barra roda no overlay do BottomBarService (sem token de Activity),
+    // e Dialog.show() ali estoura BadTokenException ("token null is not valid").
+    var showHevModeDialog by mutableStateOf(false)
+
     var activeSliderType by mutableStateOf<SliderType?>(null)
     var sliderPositionX by mutableStateOf(0f)
     var sliderInteractionTrigger by mutableStateOf(0)

@@ -4904,6 +4904,12 @@ fun BottomBarMenus() {
                                 },
                 contentAlignment = Alignment.BottomCenter
         ) {
+                // Overlay do sub-modo HEV (long-press no botão de energia). Fica no root do
+                // menu (full-screen, zIndex alto) em vez de Compose Dialog, que estoura no
+                // overlay do serviço por não ter token de Activity.
+                if (BottomBarState.showHevModeDialog) {
+                        HevModeOverlay(serviceManager) { BottomBarState.showHevModeDialog = false }
+                }
                 if (dashboardExpanded) {
                         ExpandedImpulseDashboard()
                 } else {
@@ -6549,14 +6555,6 @@ private fun DashboardSettingsPanel(
                 val powerOptions = listOf("0" to "HEV", "1" to "EV Prior.", "3" to "EV")
                 val regenOptions = listOf("2" to "Baixo", "0" to "Normal", "1" to "Alto")
                 val steeringOptions = listOf("2" to "Conforto", "0" to "Normal", "1" to "Sport")
-                var showHevDialog by remember { mutableStateOf(false) }
-                if (showHevDialog) {
-                        HevModeDialog(
-                                snapshot = snapshot,
-                                serviceManager = serviceManager,
-                                onDismiss = { showHevDialog = false }
-                        )
-                }
 
                 Column(
                         modifier = Modifier.fillMaxSize(),
@@ -6648,7 +6646,7 @@ private fun DashboardSettingsPanel(
                                                         // Toque longo em HEV -> popup do sub-modo
                                                         // (Inteligente/Prioritário + % de bateria).
                                                         if (snapshot.powerModel.trim() == "0") {
-                                                                showHevDialog = true
+                                                                BottomBarState.showHevModeDialog = true
                                                         }
                                                 }
                                         ) {
@@ -8136,35 +8134,64 @@ private fun DashboardQuickCycleControl(
         }
 }
 
+// Overlay inline do sub-modo HEV. NÃO usa Compose Dialog/AlertDialog: a barra roda
+// no overlay do BottomBarService (ComposeView em WindowManager, sem token de Activity),
+// e Dialog.show() ali lança BadTokenException ("token null is not valid"). Aqui é só
+// um Box full-screen (scrim + card) dentro da MESMA janela do menu, sem criar janela nova.
+// Lê/escreve direto no ServiceManager porque pode ser montado no root do menu, longe do
+// snapshot do painel. Sem campo de texto -> FLAG_NOT_FOCUSABLE do overlay não atrapalha.
 @Composable
-private fun HevModeDialog(
-        snapshot: DashboardVehicleSnapshot,
+private fun HevModeOverlay(
         serviceManager: ServiceManager,
         onDismiss: () -> Unit
 ) {
-        val reserve = snapshot.powerReserve
-        val pct = snapshot.socTarget.trim().toIntOrNull()?.coerceIn(20, 80) ?: 50
-        var dragging by remember { mutableStateOf(false) }
-        var sliderPos by remember { mutableFloatStateOf(pct.toFloat()) }
-        LaunchedEffect(pct) { if (!dragging) sliderPos = pct.toFloat() }
-        AlertDialog(
-                onDismissRequest = onDismiss,
-                containerColor = Color(0xFF161B24),
-                titleContentColor = Color.White,
-                textContentColor = Color.White,
-                confirmButton = {
-                        TextButton(onClick = onDismiss) {
-                                Text("Fechar", color = Color(0xFF78E08F))
-                        }
-                },
-                title = { Text("Modo HEV") },
-                text = {
-                        Column {
+        var reserve by remember {
+                mutableStateOf(
+                        serviceManager.getData(
+                                CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG.getValue()
+                        ) ?: "1"
+                )
+        }
+        val initialPct =
+                (serviceManager
+                        .getData(CarConstants.CAR_EV_SETTING_CHARGE_SOC_TARGET_CONFIG.getValue())
+                        ?.trim()
+                        ?.toIntOrNull()
+                        ?: 50)
+                        .coerceIn(20, 80)
+        var sliderPos by remember { mutableFloatStateOf(initialPct.toFloat()) }
+
+        Box(
+                modifier =
+                        Modifier
+                                .fillMaxSize()
+                                .zIndex(50f)
+                                .background(Color(0xCC05070B))
+                                .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+                contentAlignment = Alignment.Center
+        ) {
+                Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF161B24),
+                        modifier =
+                                Modifier
+                                        .width(440.dp)
+                                        // Engole o toque no card pra não fechar ao mexer dentro.
+                                        .pointerInput(Unit) { detectTapGestures { } }
+                ) {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                                Text(
+                                        "Modo HEV",
+                                        color = Color.White,
+                                        style = labelStyle.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Spacer(Modifier.height(16.dp))
                                 SettingsCategoryRow(
                                         "Reserva de bateria",
                                         reserve,
                                         listOf("1" to "Inteligente", "2" to "Prioritário")
                                 ) { newVal ->
+                                        reserve = newVal
                                         serviceManager.updateData(
                                                 CarConstants.CAR_EV_SETTING_POWER_RESERVE_CONFIG
                                                         .getValue(),
@@ -8175,20 +8202,14 @@ private fun HevModeDialog(
                                         Spacer(Modifier.height(14.dp))
                                         Text(
                                                 text = "Bateria a manter: ${sliderPos.toInt()}%",
-                                                style =
-                                                        labelStyle.copy(
-                                                                fontWeight = FontWeight.Bold
-                                                        )
+                                                color = Color.White,
+                                                style = labelStyle.copy(fontWeight = FontWeight.Bold)
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Slider(
                                                 value = sliderPos,
-                                                onValueChange = { v ->
-                                                        dragging = true
-                                                        sliderPos = v
-                                                },
+                                                onValueChange = { v -> sliderPos = v },
                                                 onValueChangeFinished = {
-                                                        dragging = false
                                                         serviceManager.setHevSocTargetValue(
                                                                 sliderPos.toInt()
                                                         )
@@ -8197,9 +8218,18 @@ private fun HevModeDialog(
                                                 steps = 11
                                         )
                                 }
+                                Spacer(Modifier.height(12.dp))
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                ) {
+                                        TextButton(onClick = onDismiss) {
+                                                Text("Fechar", color = Color(0xFF78E08F))
+                                        }
+                                }
                         }
                 }
-        )
+        }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
