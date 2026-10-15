@@ -25,6 +25,8 @@ public class HotRouterManager {
     private static final String PIDFILE = BASE + "/hotrouter.pid";
     private static final String STATEFILE = BASE + "/hotrouter.state";
     private static final String ASSET_NAME = "hotrouter.sh";
+    // Interface WLAN externa que o daemon roteia (mesma do hotrouter.sh: WLAN_IF="wlan0").
+    private static final String WLAN_IF = "wlan0";
 
     private static final long WATCHDOG_INTERVAL_MS = 60000L;
     private static final long START_GRACE_MS = 20000L;
@@ -296,5 +298,95 @@ public class HotRouterManager {
             return new Status(MODE_STARTING, 0L);
         }
         return new Status(MODE_ERROR, 0L);
+    }
+
+    /**
+     * Nome (SSID) da rede Wi-Fi externa (wlan0) que o HotRouter está roteando. Lê via shell (Shizuku)
+     * com fallback entre ferramentas (iw -> wpa_cli -> iwconfig); parse em Java pra evitar escaping.
+     * Retorna null se não conseguir determinar. Chamar OFF da main thread.
+     */
+    public String readRoutedWifiNameBlocking() {
+        try {
+            // As quatro fontes numa CHAMADA SO.
+            //
+            // Antes eram quatro processos por consulta, e o comentario da quarta ja dizia o porque:
+            // nesta central iw, wpa_cli e iwconfig voltam sempre vazios, entao os quatro rodavam
+            // toda vez, sem excecao. Cada processo criado vaza ~9,3 KB no servidor do Shizuku, que
+            // tem 96 MB de heap - foi assim que ele passou a estourar de tempos em tempos e levar a
+            // projecao junto. Um processo so, com marcadores, e a mesma informacao por um quarto do
+            // preco; o parse continua em Java, que era a razao de nao filtrar no shell (SSID pode
+            // ter caractere que o shell interpretaria).
+            String bruto = ShizukuUtils.runCommandAndGetOutput(new String[]{
+                    "sh", "-c",
+                    "iw dev " + WLAN_IF + " link 2>/dev/null;"
+                            + " echo '@@WPA@@';"
+                            + " wpa_cli -i " + WLAN_IF + " status 2>/dev/null;"
+                            + " echo '@@IWCFG@@';"
+                            + " iwconfig " + WLAN_IF + " 2>/dev/null;"
+                            + " echo '@@NET@@';"
+                            + " dumpsys netstats 2>/dev/null | grep -m1 networkId"
+            });
+            if (bruto == null) return null;
+
+            String secIw = trechoAte(bruto, "", "@@WPA@@");
+            String secWpa = trechoAte(bruto, "@@WPA@@", "@@IWCFG@@");
+            String secIwcfg = trechoAte(bruto, "@@IWCFG@@", "@@NET@@");
+            String secNet = trechoAte(bruto, "@@NET@@", null);
+
+            // 1) iw dev wlan0 link  ->  linha "\tSSID: <nome>"
+            for (String line : secIw.split("\n")) {
+                int i = line.indexOf("SSID:");
+                if (i >= 0) {
+                    String v = line.substring(i + 5).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 2) wpa_cli -i wlan0 status  ->  "ssid=<nome>"
+            for (String line : secWpa.split("\n")) {
+                String t = line.trim();
+                if (t.startsWith("ssid=")) {
+                    String v = t.substring(5).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 3) iwconfig wlan0  ->  ESSID:"<nome>"
+            int q = secIwcfg.indexOf("ESSID:\"");
+            if (q >= 0) {
+                int end = secIwcfg.indexOf('"', q + 7);
+                if (end > q + 7) {
+                    String v = secIwcfg.substring(q + 7, end).trim();
+                    if (!v.isEmpty()) return v;
+                }
+            }
+            // 4) Neste head unit iw/wpa_cli/iwconfig voltam vazio; o Android reporta a rede WiFi
+            //    conectada no netstats como networkId="<nome>" (a wlan0 ativa). Fonte confiavel aqui.
+            int n = secNet.indexOf("networkId=\"");
+            if (n >= 0) {
+                int end2 = secNet.indexOf('"', n + 11);
+                if (end2 > n + 11) {
+                    String v2 = secNet.substring(n + 11, end2).trim();
+                    if (!v2.isEmpty()) return v2;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "readRoutedWifiNameBlocking failed", e);
+        }
+        return null;
+    }
+
+    /** Recorta a saida combinada entre dois marcadores; ausencia de marcador vira trecho vazio. */
+    private static String trechoAte(String texto, String depoisDe, String antesDe) {
+        int inicio = 0;
+        if (depoisDe != null && !depoisDe.isEmpty()) {
+            int i = texto.indexOf(depoisDe);
+            if (i < 0) return "";
+            inicio = i + depoisDe.length();
+        }
+        int fim = texto.length();
+        if (antesDe != null) {
+            int j = texto.indexOf(antesDe, inicio);
+            if (j >= 0) fim = j;
+        }
+        return texto.substring(inicio, fim);
     }
 }

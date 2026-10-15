@@ -476,6 +476,8 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "Mover AA/CarPlay para o cluster (D3) no auto-start — só se AA/CarPlay for o app inicial na tela Telas"
     ),
     ENABLE_HOT_ROUTER("enableHotRouter", "Roteia o hotspot pelo 4G ou WLAN (Starlink) quando disponível"),
+    WIFI_PRIORITY_ENABLED("wifiPriorityEnabled", "Trocar de WiFi sozinho pela rede de maior prioridade disponível"),
+    WIFI_PRIORITY_LIST("wifiPriorityList", "Redes WiFi por ordem de prioridade (JSON de SSIDs)"),
     // ===== Controle de dados móveis do carro =====
     MOBILE_DATA_CONTROL_ENABLED("mobileDataControlEnabled", "Master: ativa o controle de dados móveis do carro"),
     BLOCK_CAR_MOBILE_DATA("blockCarMobileData", "Bloquear dados móveis do carro (usar só WiFi/Starlink)"),

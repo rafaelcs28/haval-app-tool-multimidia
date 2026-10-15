@@ -274,6 +274,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <provider
+            android:name=".providers.ConnectivityStatusProvider"
+            android:authorities="br.com.redesurftank.havalshisuku.status"
+            android:enabled="true"
+            android:exported="true" />
     </application>
 
 </manifest>

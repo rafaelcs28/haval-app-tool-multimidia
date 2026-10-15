@@ -46,6 +46,40 @@ object HeadUnitResourceSampler {
         synchronized(lock) { hasPreviousSample = false }
     }
 
+    /**
+     * Amostra ÚNICA e autossuficiente: lê /proc/stat duas vezes separadas por [intervalMs] pra calcular
+     * o % de CPU (base LOCAL — NÃO mexe na base compartilhada do overlay, então os dois podem coexistir),
+     * mais RAM do sistema e RSS deste processo. BLOQUEIA a thread por ~[intervalMs] — chamar SEMPRE fora
+     * da main thread (ex.: thread de binder do ContentProvider). Pra outro app amostrar sob demanda sem
+     * manter nada rodando aqui.
+     */
+    fun sampleOnceBlocking(intervalMs: Long): Snapshot {
+        var cpu: Int? = null
+        val t0 = readProcStatTotals()
+        if (t0 != null) {
+            try { Thread.sleep(intervalMs.coerceIn(50L, 5000L)) } catch (_: InterruptedException) {}
+            val t1 = readProcStatTotals()
+            if (t1 != null) {
+                val totalDelta = t1.totalJiffies - t0.totalJiffies
+                val idleDelta = t1.idleJiffies - t0.idleJiffies
+                if (totalDelta > 0L && idleDelta >= 0L) {
+                    cpu = ((totalDelta - idleDelta).toDouble() / totalDelta.toDouble() * 100.0)
+                            .toInt().coerceIn(0, 100)
+                }
+            }
+        }
+        return Snapshot(cpuPct = cpu, ramPct = readSystemRamPct(), appRamMb = readAppResidentMb())
+    }
+
+    private fun readProcStatTotals() =
+            runCatching {
+                        File("/proc/stat").useLines { lines ->
+                            lines.firstOrNull { it.startsWith("cpu ") }
+                        }
+                    }
+                    .getOrNull()
+                    ?.let { ClusterPerfEventLogger.parseProcStatLine(it) }
+
     private fun readSystemCpuPct(): Int? {
         val line =
                 runCatching {

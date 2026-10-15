@@ -37,10 +37,10 @@ sealed class HomeVerifyResult {
 
 object ImpulseHomeUpdater {
     const val MANIFEST_URL =
-        "https://github.com/netseek/impulse-home/releases/download/channel-stable/latest.json"
+        "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/channel-stable/latest.json"
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
-    private val ALLOWED_APK_PREFIX = "https://github.com/netseek/impulse-home/releases/download/"
+    private val ALLOWED_APK_PREFIX = "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/"
 
     /** Devolve null se o JSON estiver incompleto, nao for do canal stable ou tiver URL/hash suspeitos. */
     fun parseManifest(json: String): HomeManifest? =
