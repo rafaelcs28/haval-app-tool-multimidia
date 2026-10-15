@@ -3942,6 +3942,18 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             return
         }
 
+        // Mapa da AA ocupando o d3: o vídeo é opaco e cobre o cluster inteiro, então as máscaras
+        // nativas (insets compostos com o wallpaper, que existem pra tapar o bleed dos gauges do
+        // d1 atrás do tema) NÃO são necessárias — e pintá-las sobre o mapa é justamente o bug dos
+        // insets aparecendo (lado esquerdo/direito) quando o furo por-rect não cobre/assenta a
+        // tempo. Suprime por completo enquanto o mapa streama; o furo por-rect fica só pros apps
+        // normais no d3. (Fix pedido pelo dono; o resto do cluster não é tocado.)
+        if (isAaClusterInDash()) {
+            nativeMaskContainer?.isVisible = false
+            setDisplayedGlobalMask(null)
+            return
+        }
+
         if (!isThemeLiveOnDisplay3()) {
             // Re-runs on its own: onPageFinished calls back into this method once the theme
             // is up, so the masks appear together with the content they belong to.
