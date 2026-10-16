@@ -3949,6 +3949,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         // tempo. Suprime por completo enquanto o mapa streama; o furo por-rect fica só pros apps
         // normais no d3. (Fix pedido pelo dono; o resto do cluster não é tocado.)
         if (isAaClusterInDash()) {
+            Log.w(TAG, "INSET_DIAG: masks DOWN (AA map in dash) surfaceAttached=true hole=$display3AppRect")
             nativeMaskContainer?.isVisible = false
             setDisplayedGlobalMask(null)
             return
@@ -3997,6 +3998,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             return
         }
 
+        Log.w(TAG, "INSET_DIAG: PAINTING masks aaClusterInDash=${isAaClusterInDash()} appD1=$isAnyAppOnDisplay1 appD3=$isAnyAppOnDisplay3 card=$currentCard hole=$display3AppRect theme='${metadata?.name}'")
         nativeMaskContainer?.isVisible = true
         val folderName = metadata?.folderName ?: customThemeDir
         val isCard0 = (currentCard == 0)
