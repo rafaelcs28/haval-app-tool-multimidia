@@ -6,70 +6,46 @@ import br.com.redesurftank.havalshisuku.models.ReleaseInfo
 import br.com.redesurftank.havalshisuku.models.UpdateCheckResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 object ReleaseUpdateChecker {
-    private const val RELEASES_URL =
-            "https://api.github.com/repos/rafaelcs28/haval-app-tool-multimidia/releases"
+    // Manifesto estático no CDN de download do GitHub (NÃO é a api.github.com, que tem limite de
+    // 60 req/h por IP e era esgotada pela varredura de temas -> "Buscar atualização" não achava).
+    // Publicado numa tag fixa (app-latest) e reescrito a cada release nova. Mesmo caminho confiável
+    // que o updater do viewer 3D já usa (releases/download/<tag>/<arquivo>). Ver memória
+    // haval-ota-manifesto-cdn.
+    private const val MANIFEST_URL =
+            "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/app-latest/app-preview.json"
 
     suspend fun getAllReleaseInfo(): UpdateCheckResult {
         return withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
-                conn = URL(RELEASES_URL).openConnection() as HttpURLConnection
+                // rnd= evita cache de CDN/proxy servir um manifesto velho.
+                conn = URL("$MANIFEST_URL?rnd=${System.currentTimeMillis()}")
+                        .openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
-                conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                conn.instanceFollowRedirects = true
 
                 if (conn.responseCode != 200) return@withContext UpdateCheckResult(null, null)
 
-                val response =
-                        conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val releases = JSONArray(response)
+                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val o = JSONObject(body)
+                val tag = o.optString("tag", o.optString("versionName", "")).trim()
+                val apkUrl = o.optString("apkUrl", "").trim()
+                if (tag.isEmpty() || apkUrl.isEmpty()) return@withContext UpdateCheckResult(null, null)
 
-                var latestRelease: ReleaseInfo? = null
-                var latestPreview: ReleaseInfo? = null
+                val prerelease = o.optBoolean("prerelease", tag.contains("preview"))
+                val notes = o.optString("notes", "").trim()
+                val info = ReleaseInfo(tag, apkUrl, prerelease, notes)
 
-                for (i in 0 until releases.length()) {
-                    val release = releases.getJSONObject(i)
-                    val isPrerelease = release.getBoolean("prerelease")
-                    val tag = release.getString("tag_name")
-                    val assets = release.getJSONArray("assets")
-                    var downloadUrl: String? = null
-
-                    for (j in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(j)
-                        if (asset.getString("name").endsWith(".apk")) {
-                            downloadUrl = asset.getString("browser_download_url")
-                            break
-                        }
-                    }
-
-                    if (downloadUrl != null) {
-                        // optString: release publicada sem descricao devolve null no JSON, e um
-                        // getString ali derrubaria a verificacao inteira por causa do texto.
-                        val notes = release.optString("body", "").trim()
-                        val info = ReleaseInfo(tag, downloadUrl, isPrerelease, notes)
-                        // Escolhe a MAIOR versão (compareVersions), NÃO a 1ª da lista: a ordem da API do
-                        // GitHub é por created_at = data do commit que a tag aponta, que fura fácil (tag
-                        // ancorada num commit antigo / releases por mirror). Sem break precoce. Regressão
-                        // reintroduzida na base PR119 — ver memória haval-ota-self-hosted-releases.
-                        if (isPrerelease) {
-                            if (latestPreview == null || compareVersions(tag, latestPreview!!.tag) > 0) latestPreview = info
-                        } else {
-                            if (latestRelease == null || compareVersions(tag, latestRelease!!.tag) > 0) latestRelease = info
-                        }
-                    }
-
-                    if (latestRelease != null && latestPreview != null) break
-                }
-
-                UpdateCheckResult(latestRelease, latestPreview)
+                if (prerelease) UpdateCheckResult(null, info) else UpdateCheckResult(info, null)
             } catch (e: Exception) {
-                Log.w(TAG, "Error fetching release info", e)
+                Log.w(TAG, "Error fetching update manifest", e)
                 UpdateCheckResult(null, null)
             } finally {
                 conn?.disconnect()
