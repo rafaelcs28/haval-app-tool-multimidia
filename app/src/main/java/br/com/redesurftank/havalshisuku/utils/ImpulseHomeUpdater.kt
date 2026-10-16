@@ -37,7 +37,7 @@ sealed class HomeVerifyResult {
 
 object ImpulseHomeUpdater {
     const val MANIFEST_URL =
-        "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/channel-stable/latest.json"
+        "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/home-stable/latest.json"
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
     private val ALLOWED_APK_PREFIX = "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/"
