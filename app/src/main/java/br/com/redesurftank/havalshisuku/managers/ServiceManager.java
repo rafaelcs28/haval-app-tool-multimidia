@@ -382,6 +382,9 @@ public class ServiceManager {
     // 8 tentativas x 4s ≈ 28s: o tether (hotspot) pode demorar a subir no boot deste OEM.
     // O loop para assim que o rádio liga, então tentativas extras são de graça p/ o BT (rápido).
     private static final int RADIO_RESTORE_MAX_ATTEMPTS = 8;
+    // SoftAP (hotspot) sobe bem mais devagar que o BT no power-on deste OEM; janela maior
+    // (15 x 4s = 60s) p/ o restore ao ligar o carro não desistir cedo e deixar o hotspot off.
+    private static final int HOTSPOT_RESTORE_MAX_ATTEMPTS = 15;
     private static final long STARTUP_REPORT_RECONCILE_DELAY_MS = 6000L;
     private CarInfo carInfo;
     private volatile IIntelligentVehicleControlService controlService;
@@ -3849,7 +3852,22 @@ public class ServiceManager {
         updateData(CarConstants.CAR_COMFORT_SETTING_DRIVER_SEAT_VENTILATION_LEVEL.getValue(), targetLevel);
     }
 
+    /** Re-adquire o binder do ConnectivityService se ele não subiu no init (senão o tether fica morto). */
+    private void ensureConnectivityManager() {
+        if (connectivityManager != null) return;
+        try {
+            IBinder raw = getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (raw != null) {
+                connectivityManager = IConnectivityManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+                Log.w(TAG, "HOTSPOT_RESTORE: connectivityManager re-adquirido");
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "HOTSPOT_RESTORE: falha ao re-adquirir connectivityManager", t);
+        }
+    }
+
     public void disableWifiTether() {
+        ensureConnectivityManager();
         if (connectivityManager == null) return;
         try {
             connectivityManager.stopTethering(0, "br.com.redesurftank.havalshisuku");
@@ -3867,7 +3885,11 @@ public class ServiceManager {
     }
 
     public void enableWifiTether() {
-        if (connectivityManager == null) return;
+        ensureConnectivityManager();
+        if (connectivityManager == null) {
+            Log.w(TAG, "HOTSPOT_RESTORE: enableWifiTether SKIP (connectivityManager nulo)");
+            return;
+        }
         try {
             ResultReceiver receiver = new ResultReceiver(new Handler(Looper.getMainLooper())) {
                 @Override
@@ -3944,7 +3966,9 @@ public class ServiceManager {
     }
 
     private void shutdownWifiTetherForRestore() {
-        if (currentWifiTetherState()) {
+        boolean on = currentWifiTetherState();
+        Log.w(TAG, "HOTSPOT_RESTORE: shutdown-for-restore wasOn=" + on + " -> flag=" + on);
+        if (on) {
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), true).apply();
             disableWifiTether();
         }
@@ -4034,16 +4058,20 @@ public class ServiceManager {
             return;
         }
         if (carPoweredOff) {
+            Log.w(TAG, "HOTSPOT_RESTORE: aborta (carPoweredOff) attempt=" + attempt);
             return;
         }
         if (currentWifiTetherState()) {
+            Log.w(TAG, "HOTSPOT_RESTORE: hotspot JA LIGADO, done attempt=" + attempt);
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false).apply();
             return;
         }
+        Log.w(TAG, "HOTSPOT_RESTORE: ligando tether attempt=" + attempt + "/" + HOTSPOT_RESTORE_MAX_ATTEMPTS + " cm=" + (connectivityManager != null));
         enableWifiTether();
-        if (attempt + 1 < RADIO_RESTORE_MAX_ATTEMPTS) {
+        if (attempt + 1 < HOTSPOT_RESTORE_MAX_ATTEMPTS) {
             backgroundHandler.postDelayed(() -> attemptRestoreWifiTether(attempt + 1), RADIO_RESTORE_RETRY_MS);
         } else {
+            Log.w(TAG, "HOTSPOT_RESTORE: desistiu apos " + HOTSPOT_RESTORE_MAX_ATTEMPTS + " tentativas (hotspot nao subiu)");
             sharedPreferences.edit().putBoolean(SharedPreferencesKeys.HOTSPOT_STATE_ON_POWER_OFF.getKey(), false).apply();
         }
     }
