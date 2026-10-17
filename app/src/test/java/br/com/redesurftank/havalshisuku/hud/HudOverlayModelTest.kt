@@ -96,8 +96,9 @@ class HudOverlayModelTest {
         assertTrue(m.HERO_TOP >= m.TBT_TOP)
         assertTrue(m.HERO_TOP + m.HERO_GLYPH + m.HERO_TEXT_GAP <= m.TBT_BOTTOM)
         assertTrue(m.HERO_GLYPH > m.COMPACT_GLYPH)
-        // ETA between the turn-by-turn and the bars; bars inside the visible band.
-        assertTrue(m.TRIP_BASELINE - m.TRIP_SIZE >= m.TBT_BOTTOM)
+        // ETA between the turn-by-turn and the bars (pulled up into the area's empty bottom: its
+        // cap height clears the lane row; see `nav text stays between...`); bars in the band.
+        assertTrue(m.TRIP_BASELINE - m.TRIP_SIZE * 0.75f > m.LANES_TOP + m.LANE_ROW_HEIGHT)
         assertTrue(m.TRIP_BASELINE < m.BAR_Y - m.BAR_HEIGHT / 2)
         assertTrue(m.BAR_Y + m.BAR_HEIGHT / 2 < 200f)
         // Power at the left edge inside the free cells; RPM at the right edge of the panel.
@@ -212,5 +213,124 @@ class HudOverlayModelTest {
     fun `layout keys round-trip`() {
         for (layout in HudOverlayModel.Layout.entries) assertEquals(layout, HudOverlayModel.Layout.fromKey(layout.key))
         assertNull(HudOverlayModel.Layout.fromKey("nope"))
+    }
+
+    @Test
+    fun `roundabout exit rides the tbt only with the roundabout icon`() {
+        val roundabout = Directions(active = true, distance = "80 m", distanceM = 80, turn = "ROUNDABOUT_ENTER", exitNumber = 2)
+        assertEquals(2, HudOverlayModel.tbtFor(roundabout)!!.exitNumber)
+        assertNull(HudOverlayModel.tbtFor(roundabout.copy(exitNumber = null))!!.exitNumber)
+        assertNull(HudOverlayModel.tbtFor(roundabout.copy(exitNumber = 0))!!.exitNumber)
+        // A stale number on a non-roundabout step must not reach the HUD.
+        assertNull(HudOverlayModel.tbtFor(roundabout.copy(turn = "TURN_RIGHT"))!!.exitNumber)
+    }
+
+    @Test
+    fun `exit label and two-digit size`() {
+        assertEquals("2ª", HudOverlayModel.exitLabel(2))
+        assertEquals("12ª", HudOverlayModel.exitLabel(12))
+        assertEquals(HudOverlayModel.HERO_EXIT_SIZE, HudOverlayModel.heroExitSize(3))
+        assertEquals(HudOverlayModel.HERO_EXIT_SIZE_2DIGITS, HudOverlayModel.heroExitSize(10))
+    }
+
+    @Test
+    fun `hero exit number sits in the ring hole, inside the free box`() {
+        val left = HudOverlayModel.BOX_CENTER_X - HudOverlayModel.HERO_GLYPH / 2
+        val (cx, cy) = HudOverlayModel.ringHoleCenter(left, HudOverlayModel.HERO_TOP, HudOverlayModel.HERO_GLYPH)
+        val r = HudOverlayModel.RING_HOLE_R * HudOverlayModel.HERO_GLYPH
+        assertTrue(cx - r >= HudOverlayModel.BOX_LEFT && cx + r <= HudOverlayModel.BOX_RIGHT)
+        assertTrue(cy - r >= HudOverlayModel.TBT_TOP && cy + r <= HudOverlayModel.TBT_BOTTOM)
+        // An 18 px digit is ~13 px tall: it has to clear the ~21 px hole.
+        assertTrue(2 * r >= HudOverlayModel.HERO_EXIT_SIZE)
+    }
+
+    @Test
+    fun `roundabout exit angle travels the ring in the traffic direction`() {
+        // Right-hand traffic (CCW): enter at the bottom, 90 = right, 180 = straight, 270 = left.
+        assertEquals(0f, HudOverlayModel.roundaboutExitDegrees(90, clockwise = false))
+        assertEquals(90f, HudOverlayModel.roundaboutExitDegrees(180, clockwise = false))
+        assertEquals(180f, HudOverlayModel.roundaboutExitDegrees(270, clockwise = false))
+        assertEquals(270f, HudOverlayModel.roundaboutExitDegrees(360, clockwise = false))
+        // Left-hand traffic (CW): 90 = left.
+        assertEquals(180f, HudOverlayModel.roundaboutExitDegrees(90, clockwise = true))
+        assertEquals(90f, HudOverlayModel.roundaboutExitDegrees(180, clockwise = true))
+    }
+
+    @Test
+    fun `dynamic roundabout only with a drawable angle`() {
+        val d = Directions(active = true, distance = "80 m", turn = "ROUNDABOUT", exitNumber = 2, turnAngle = 180)
+        val tbt = HudOverlayModel.tbtFor(d)!!
+        assertTrue(tbt.dynamicRoundabout)
+        assertEquals(180, tbt.exitAngle)
+        assertTrue(!HudOverlayModel.tbtFor(d.copy(turnAngle = null))!!.dynamicRoundabout)
+        assertNull(HudOverlayModel.tbtFor(d.copy(turnAngle = -90))!!.exitAngle)
+        assertNull(HudOverlayModel.tbtFor(d.copy(turn = "TURN_LEFT"))!!.exitAngle)
+        assertEquals(true, HudOverlayModel.tbtFor(d.copy(roundaboutClockwise = true))!!.roundaboutClockwise)
+    }
+
+    @Test
+    fun `dynamic roundabout stays inside its icon box`() {
+        // Arrow tip and the entry stub (plus half the stroke) inside the 24 box.
+        assertTrue(HudOverlayModel.RB_CY - HudOverlayModel.RB_EXIT_TIP >= 0f)
+        assertTrue(HudOverlayModel.RB_CX + HudOverlayModel.RB_EXIT_TIP <= 24f)
+        assertTrue(HudOverlayModel.RB_ENTRY_BOTTOM + HudOverlayModel.RB_STROKE / 2 <= 24f)
+        // The exit number has room inside the ring at hero size.
+        val inner = 2 * (HudOverlayModel.RB_R - HudOverlayModel.RB_STROKE / 2) / 24f * HudOverlayModel.HERO_GLYPH
+        assertTrue(inner >= HudOverlayModel.HERO_EXIT_SIZE)
+    }
+
+    @Test
+    fun `passed exits are spread between the entry and our exit`() {
+        assertEquals(emptyList<Float>(), HudOverlayModel.passedExitAngles(90, 1))
+        assertEquals(emptyList<Float>(), HudOverlayModel.passedExitAngles(180, null))
+        assertEquals(listOf(90f), HudOverlayModel.passedExitAngles(180, 2))
+        assertEquals(listOf(90f, 180f), HudOverlayModel.passedExitAngles(270, 3))
+        // Too crowded to read: none.
+        assertEquals(emptyList<Float>(), HudOverlayModel.passedExitAngles(90, 5))
+        // Stubs stay inside the ring's own box.
+        assertTrue(HudOverlayModel.RB_STUB_END < HudOverlayModel.RB_EXIT_TIP)
+    }
+
+    @Test
+    fun `far row shows the street and a larger trip line, the others neither`() {
+        val far = HudOverlayModel.tbtFor(Directions(active = true, distance = "2.4 km", distanceM = 2_400, turn = "TURN_RIGHT", street = "Av. Brasil"))!!
+        assertEquals(HudOverlayModel.TbtStyle.FAR, far.style)
+        assertTrue(HudOverlayModel.showsStreet(far))
+        assertTrue(!HudOverlayModel.showsStreet(far.copy(street = "")))
+        assertTrue(!HudOverlayModel.showsStreet(far.copy(style = HudOverlayModel.TbtStyle.HERO)))
+        assertTrue(!HudOverlayModel.showsStreet(far.copy(style = HudOverlayModel.TbtStyle.COMPACT)))
+        val (farBase, farSize) = HudOverlayModel.tripPlacement(HudOverlayModel.TbtStyle.FAR, hasStreet = true)
+        val (heroBase, heroSize) = HudOverlayModel.tripPlacement(HudOverlayModel.TbtStyle.HERO, hasStreet = false)
+        // Far: bigger and higher than with the big arrow; big arrow: bigger than the old 13 px.
+        assertTrue(farSize > heroSize && heroSize > 13f)
+        assertTrue(farBase < heroBase)
+        assertTrue(HudOverlayModel.tripPlacement(HudOverlayModel.TbtStyle.FAR, hasStreet = false).first < farBase)
+    }
+
+    @Test
+    fun `nav text stays between the arrow row and the bars`() {
+        val rowBottom = HudOverlayModel.FAR_TOP + HudOverlayModel.COMPACT_GLYPH
+        // Street cap height (~0.75 em) clears the row; trip clears the street.
+        assertTrue(HudOverlayModel.FAR_STREET_BASELINE - HudOverlayModel.FAR_STREET_SIZE * 0.75f > rowBottom)
+        assertTrue(HudOverlayModel.FAR_TRIP_BASELINE - HudOverlayModel.FAR_TRIP_SIZE * 0.75f > HudOverlayModel.FAR_STREET_BASELINE)
+        // Descenders (~0.25 em) stay above the bar row.
+        val barTop = HudOverlayModel.BAR_Y - HudOverlayModel.BAR_HEIGHT / 2
+        assertTrue(HudOverlayModel.FAR_TRIP_BASELINE + HudOverlayModel.FAR_TRIP_SIZE * 0.25f < barTop)
+        assertTrue(HudOverlayModel.TRIP_BASELINE + HudOverlayModel.TRIP_SIZE * 0.25f < barTop)
+        // The trip line clears the lane row and the big arrow's distance.
+        val lanesBottom = HudOverlayModel.LANES_TOP + HudOverlayModel.LANE_ROW_HEIGHT
+        assertTrue(HudOverlayModel.TRIP_BASELINE - HudOverlayModel.TRIP_SIZE * 0.75f > lanesBottom)
+        val heroDistance = HudOverlayModel.HERO_TOP + HudOverlayModel.HERO_GLYPH + HudOverlayModel.HERO_TEXT_GAP
+        assertTrue(HudOverlayModel.TRIP_BASELINE - HudOverlayModel.TRIP_SIZE * 0.75f > heroDistance + HudOverlayModel.HERO_VALUE_SIZE * 0.25f)
+    }
+
+    @Test
+    fun `trip line with its flag is centred as one`() {
+        val size = HudOverlayModel.TRIP_SIZE
+        val text = 100f
+        val (flagLeft, textLeft) = HudOverlayModel.tripLineLefts(text, size)
+        val right = textLeft + text
+        assertEquals(HudOverlayModel.BOX_CENTER_X, (flagLeft + right) / 2, 0.01f)
+        assertEquals(size * HudOverlayModel.TRIP_FLAG_SCALE + HudOverlayModel.TRIP_FLAG_GAP, textLeft - flagLeft, 0.01f)
     }
 }

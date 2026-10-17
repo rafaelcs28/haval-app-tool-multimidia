@@ -45,6 +45,33 @@ object HudOverlayModel {
 
     const val UNIT_GAP = 4f
 
+    // Roundabout exit number. In the big arrow it sits in the ring's hole: the hole's centre and
+    // radius as fractions of the ROUNDABOUT icon's box (486.039 viewBox in HudTbtIcons /
+    // tbtTurnIcons.js: centre 296.897,182.665, inner radius 81.16). The small arrow's hole is too
+    // small to read, so the compact and far rows put "2ª" after the distance instead.
+    const val RING_HOLE_CX = 296.897f / 486.039f
+    const val RING_HOLE_CY = 182.665f / 486.039f
+    const val RING_HOLE_R = 81.16f / 486.039f
+    // Dynamic roundabout, drawn when AA sends the exit angle: ring, entry at the bottom, the
+    // travelled arc and an arrow at the real exit. In a 24 box like the other icons; same geometry
+    // as roundaboutSvg in tbtTurnIcons.js. The exit number sits in the ring's centre.
+    const val RB_CX = 12f
+    const val RB_CY = 12f
+    const val RB_R = 5f
+    const val RB_STROKE = 2.4f
+    const val RB_ENTRY_BOTTOM = 22.5f
+    const val RB_EXIT_TIP = 11f
+    const val RB_HEAD_LENGTH = 4f
+    const val RB_HEAD_HALF_WIDTH = 3.2f
+    // Exits passed before ours: short dim stubs off the ring, as far out as this.
+    const val RB_STUB_END = 7.8f
+    // Closer than this the stubs read as noise, so none are drawn.
+    const val RB_STUB_MIN_GAP = 25f
+
+    const val HERO_EXIT_SIZE = 18f
+    const val HERO_EXIT_SIZE_2DIGITS = 13f
+    const val EXIT_GAP = 6f
+
     /** Top of the compact block (row + lanes), centred in the TBT area. */
     const val COMPACT_TOP =
         TBT_TOP + (TBT_BOTTOM - TBT_TOP - (COMPACT_GLYPH + COMPACT_LANES_GAP + LANE_ROW_HEIGHT)) / 2
@@ -54,13 +81,45 @@ object HudOverlayModel {
     const val HERO_TOP = TBT_TOP + (TBT_BOTTOM - TBT_TOP - (HERO_GLYPH + HERO_TEXT_GAP)) / 2
 
     // No lanes and still >= 1 km away (optional): a small arrow + distance row, like the compact
-    // row without lanes; the big arrow only comes back for the last kilometre.
+    // row without lanes; the big arrow only comes back for the last kilometre. Under the row: the
+    // street the maneuver leads onto, then a larger trip line, all pulled up close to the arrow.
     const val FAR_THRESHOLD_M = 1_000
-    const val FAR_TOP = TBT_TOP + (TBT_BOTTOM - TBT_TOP - COMPACT_GLYPH) / 2
+    const val FAR_TOP = 70f
+    const val FAR_STREET_SIZE = 13f
+    const val FAR_STREET_BASELINE = FAR_TOP + COMPACT_GLYPH + 18f
+    const val FAR_TRIP_SIZE = 16f
+    const val FAR_TRIP_BASELINE = FAR_STREET_BASELINE + 21f
+    /** No street from AA: the trip line moves up into the street's place. */
+    const val FAR_TRIP_BASELINE_NO_STREET = FAR_TOP + COMPACT_GLYPH + 21f
 
-    // Trip line ("4.8 km · 12 min" left to the destination) under the turn-by-turn, centred in the box.
-    const val TRIP_BASELINE = 184f
-    const val TRIP_SIZE = 13f
+    // Trip line ("4.8 km · 12 min" left to the destination) under the big arrow or the lanes,
+    // centred in the box: larger than it was (13), smaller than the far row's.
+    const val TRIP_BASELINE = 178f
+    const val TRIP_SIZE = 15f
+
+    // Destination flag before the trip line: a square box this share of the text size, sitting on
+    // the baseline, then a gap; flag + text are centred together in the box.
+    const val TRIP_FLAG_SCALE = 0.9f
+    const val TRIP_FLAG_GAP = 4f
+
+    /**
+     * Left edges of the flag and of the text for a trip line [textWidth] wide at [size], so the
+     * whole line (flag included) is centred on [BOX_CENTER_X].
+     */
+    fun tripLineLefts(textWidth: Float, size: Float): Pair<Float, Float> {
+        val flag = size * TRIP_FLAG_SCALE
+        val left = BOX_CENTER_X - (flag + TRIP_FLAG_GAP + textWidth) / 2
+        return left to left + flag + TRIP_FLAG_GAP
+    }
+
+    /** Trip line baseline and text size for [style]; the far row's depends on a street showing. */
+    fun tripPlacement(style: TbtStyle, hasStreet: Boolean): Pair<Float, Float> = when (style) {
+        TbtStyle.FAR -> (if (hasStreet) FAR_TRIP_BASELINE else FAR_TRIP_BASELINE_NO_STREET) to FAR_TRIP_SIZE
+        else -> TRIP_BASELINE to TRIP_SIZE
+    }
+
+    /** The far row shows the street under the arrow; the big arrow and the lane rows don't. */
+    fun showsStreet(tbt: Tbt): Boolean = tbt.style == TbtStyle.FAR && tbt.street.isNotEmpty()
 
     // Bars on the bottom row of the visible band, no labels: power at the HUD's left edge, RPM at
     // its right edge (the native HUD leaves the bottom of both sides empty). Approved in the
@@ -281,32 +340,168 @@ object HudOverlayModel {
         /** Lanes: small arrow + distance row centred over the lane row. */
         COMPACT,
         /** No lanes, still >= [FAR_THRESHOLD_M] away, "smaller arrow when far" on: the row alone. */
-        FAR
+        FAR,
+        /** "Navegação AR" layout, no lanes, a maneuver with a ribbon shape: the 3D arrow ([HudArArrow]). */
+        AR
     }
 
-    /** Turn-by-turn part. [trip] (remaining distance · time) is "" when off or unknown. */
+    // ---- AR layout: left column (no big arrow there; the arrow is in the middle) ----
+
+    /** Left column, no lanes: street, a large distance, the trip line. */
+    const val AR_STREET_BASELINE = 80f
+    const val AR_STREET_SIZE = 16f
+    const val AR_DISTANCE_BASELINE = 128f
+    const val AR_DISTANCE_VALUE_SIZE = 38f
+    const val AR_DISTANCE_UNIT_SIZE = 20f
+    const val AR_TRIP_BASELINE = 160f
+    const val AR_TRIP_SIZE = 16f
+
+    /** Left column with lanes: the same, compacted around the lane row. */
+    const val AR_LANES_STREET_BASELINE = 74f
+    const val AR_LANES_STREET_SIZE = 14f
+    const val AR_LANES_DISTANCE_BASELINE = 104f
+    const val AR_LANES_DISTANCE_VALUE_SIZE = 28f
+    const val AR_LANES_DISTANCE_UNIT_SIZE = 16f
+    const val AR_LANES_TOP = 114f
+    const val AR_LANES_TRIP_BASELINE = 172f
+    const val AR_LANES_TRIP_SIZE = 14f
+
+    // ---- AR layout: power / RPM arcs round the native speed readout ----
+    // Centred on the native speed readout. Measured on the car (2026-10-17): with the car parked
+    // the native "0" sat under the 2nd outer segment (~175°, the arc's leftmost point) when the
+    // centre was at x 268, so the speed's centre is at about (222, 100). Radii a confirmar for
+    // 3-digit speeds.
+    const val ARC_CX = 222f
+    const val ARC_CY = 100f
+    /** Outer arc: power. */
+    const val ARC_POWER_R = 46f
+    /** Inner arc: RPM. */
+    const val ARC_RPM_R = 38f
+    const val ARC_THICKNESS = 5f
+    /** 270° open at the bottom: starts bottom-left (135°, canvas angles, clockwise) to bottom-right. */
+    const val ARC_START_DEG = 135f
+    const val ARC_SWEEP_DEG = 270f
+    const val ARC_GAP_DEG = 3f
+    const val ARC_POWER_STEPS = 10
+    const val ARC_RPM_STEPS = 7
+
+    /** Start angle and sweep of arc segment [i] of [steps], gap included. */
+    fun arcSegment(i: Int, steps: Int): Pair<Float, Float> {
+        val each = ARC_SWEEP_DEG / steps
+        return ARC_START_DEG + i * each + ARC_GAP_DEG / 2 to each - ARC_GAP_DEG
+    }
+
+    /**
+     * Lit power segments on the outer arc. Drive fills from the left end, one segment per 10 %.
+     * Regen grows from the top centre towards both sides, one segment per side per 20 %.
+     * Empty for 0 %.
+     */
+    fun arcPowerLit(percent: Int): IntRange {
+        if (percent == 0) return IntRange.EMPTY
+        if (percent > 0) return 0 until powerSegments(percent)
+        val half = ARC_POWER_STEPS / 2
+        val perSide = ((kotlin.math.abs(percent) + 10) / 20).coerceIn(1, half)
+        return (half - perSide) until (half + perSide)
+    }
+
+    /** Lit RPM segments on the inner arc: one per 1000 rpm, at least one while turning. */
+    fun arcRpmLit(tenths: Int): Int {
+        if (tenths <= 0) return 0
+        return ((tenths + 5) / 10).coerceIn(1, ARC_RPM_STEPS)
+    }
+
+    /**
+     * Turn-by-turn part. [trip] (remaining distance · time) is "" when off or unknown. For
+     * [TbtStyle.AR], [arAngle] is the maneuver's bend and [arMeters] the distance that places the
+     * corner (the controller interpolates it between Android Auto updates when near).
+     * [exitNumber] is the roundabout exit to take, only with the ROUNDABOUT icon.
+     */
     data class Tbt(
         val icon: String,
         val distanceValue: String,
         val distanceUnit: String,
         val lanes: List<List<LaneArrow>>,
         val style: TbtStyle,
-        val trip: String
-    )
+        val trip: String,
+        val arAngle: Float? = null,
+        val arMeters: Float? = null,
+        /** Road the maneuver leads onto (shown by the AR layout's left column). */
+        val street: String = "",
+        val exitNumber: Int? = null,
+        /** Degrees travelled around the ring (1..360); set only with the ROUNDABOUT icon. */
+        val exitAngle: Int? = null,
+        val roundaboutClockwise: Boolean = false
+    ) {
+        /** Draw the roundabout with its real exit instead of the static icon. */
+        val dynamicRoundabout: Boolean get() = icon == "ROUNDABOUT" && exitAngle != null
+    }
+
+    /**
+     * Where the exit leaves the ring, as a maths angle (degrees, 0 = right, 90 = up). The entry
+     * is at the bottom (270); [angle] is travelled in the roundabout's direction: counter-clockwise
+     * on screen for right-hand traffic (90 = right exit, 180 = straight, 270 = left), clockwise
+     * for left-hand traffic. A confirmar against a real drive (see aa_nav_roundabout).
+     */
+    fun roundaboutExitDegrees(angle: Int, clockwise: Boolean): Float =
+        roundaboutExitDegrees(angle.toFloat(), clockwise)
+
+    fun roundaboutExitDegrees(angle: Float, clockwise: Boolean): Float {
+        val deg = if (clockwise) 270f - angle else 270f + angle
+        return ((deg % 360f) + 360f) % 360f
+    }
+
+    /**
+     * Travel angles (as [angle]) of the exits passed before ours, for the dim stubs. AA sends
+     * only our exit, so the count is real (exit 3 passes two) but the positions are not: they
+     * are spread evenly between the entry and our exit. Empty for the first exit, without an
+     * exit number, or when they would sit closer than [RB_STUB_MIN_GAP].
+     */
+    fun passedExitAngles(angle: Int, exitNumber: Int?): List<Float> {
+        val n = exitNumber ?: return emptyList()
+        if (n < 2) return emptyList()
+        val step = angle.toFloat() / n
+        if (step < RB_STUB_MIN_GAP) return emptyList()
+        return (1 until n).map { step * it }
+    }
+
+    /** Exit angle the dynamic icon can draw: 1..360, else null (static icon). */
+    fun drawableExitAngle(angle: Int?): Int? = angle?.takeIf { it in 1..360 }
+
+    /** Exit after the distance in the compact / far rows: 2 -> "2ª" (saída). */
+    fun exitLabel(exitNumber: Int): String = "${exitNumber}ª"
+
+    /** Text size of the exit in the big arrow's ring: two digits shrink to stay inside the hole. */
+    fun heroExitSize(exitNumber: Int): Float = if (exitNumber >= 10) HERO_EXIT_SIZE_2DIGITS else HERO_EXIT_SIZE
+
+    /**
+     * Centre of the ring's hole for an icon drawn at [left], [top] in a [size] square: the static
+     * icon's hole, or the dynamic ring's centre.
+     */
+    fun ringHoleCenter(left: Float, top: Float, size: Float, dynamic: Boolean = false): Pair<Float, Float> =
+        if (dynamic) (left + RB_CX / 24f * size) to (top + RB_CY / 24f * size)
+        else (left + RING_HOLE_CX * size) to (top + RING_HOLE_CY * size)
 
     /**
      * Everything the view draws; null parts are switched off or have no data. Bars are quantised
      * (whole %, 0.1k rpm), so equal frames are skipped and the high-rate CAN feed only redraws on
      * a visible change.
      */
-    data class Frame(val tbt: Tbt?, val powerPercent: Int?, val rpmTenths: Int?)
+    data class Frame(
+        val tbt: Tbt?,
+        val powerPercent: Int?,
+        val rpmTenths: Int?,
+        /** AR layout: power and RPM as arcs round the native speed instead of the bottom bars. */
+        val arcs: Boolean = false
+    )
 
     /** HUD layouts the owner picks from in the Telas tab. */
     enum class Layout(val key: String) {
         /** The car's own HUD only; Impulse draws nothing. */
         ORIGINAL("original"),
         /** Turn-by-turn + power/RPM bars. */
-        NAVIGATION("navigation");
+        NAVIGATION("navigation"),
+        /** Navigation with the 3D perspective arrow in place of the big arrow. */
+        AR("ar");
 
         companion object {
             fun fromKey(key: String?): Layout? = entries.firstOrNull { it.key == key }
@@ -330,18 +525,28 @@ object HudOverlayModel {
         val (value, unit) = splitDistance(d.distance, d.distanceM)
         val lanes = d.lanes.map { laneArrows(it) }
         val meters = distanceMeters(d.distance, d.distanceM)
+        val arAngle = if (config.layout == Layout.AR) HudArArrow.angleFor(d.turn) else null
         val style = when {
+            // AR keeps the centre arrow with lanes too; the lanes go to the left column.
+            arAngle != null && meters != null -> TbtStyle.AR
             lanes.isNotEmpty() -> TbtStyle.COMPACT
             config.smallArrowWhenFar && meters != null && meters >= FAR_THRESHOLD_M -> TbtStyle.FAR
             else -> TbtStyle.HERO
         }
+        val icon = resolveTurnIcon(d.turn)
         return Tbt(
-            icon = resolveTurnIcon(d.turn),
+            icon = icon,
             distanceValue = value,
             distanceUnit = unit,
             lanes = lanes,
             style = style,
-            trip = if (config.trip) tripLabel(d.remainingM, d.remainingS) else ""
+            trip = if (config.trip) tripLabel(d.remainingM, d.remainingS) else "",
+            arAngle = arAngle.takeIf { style == TbtStyle.AR },
+            arMeters = meters?.toFloat().takeIf { style == TbtStyle.AR },
+            street = d.street.trim(),
+            exitNumber = d.exitNumber?.takeIf { icon == "ROUNDABOUT" && it > 0 },
+            exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null,
+            roundaboutClockwise = d.roundaboutClockwise == true
         )
     }
 
@@ -350,10 +555,84 @@ object HudOverlayModel {
         config: Config,
         directions: AndroidAutoNavigationTelemetry.Directions?,
         powerPercent: Int,
-        rpmTenths: Int?
+        rpmTenths: Int?,
+        arMetersOverride: Float? = null
     ): Frame = Frame(
-        tbt = if (config.navigation) directions?.let { tbtFor(it, config) } else null,
+        tbt = if (config.navigation) {
+            directions?.let { tbtFor(it, config) }?.let { tbt ->
+                if (tbt.style == TbtStyle.AR && arMetersOverride != null) tbt.copy(arMeters = arMetersOverride) else tbt
+            }
+        } else null,
         powerPercent = if (config.powerBar) powerPercent else null,
-        rpmTenths = if (config.rpmBar) rpmTenths else null
+        rpmTenths = if (config.rpmBar) rpmTenths else null,
+        arcs = config.layout == Layout.AR
     )
+
+    /**
+     * Scripted drive for the debug `hudDemo drive`: what the HUD would get [t] seconds into a
+     * 48 s loop at [speed] m/s. Right turn from 450 m (engine on, then regen into the turn), then
+     * a sharp left with lanes from 270 m (into the RPM red zone, then regen).
+     */
+    object DemoDrive {
+        class Step(
+            val directions: AndroidAutoNavigationTelemetry.Directions,
+            val powerPercent: Int,
+            val rpmTenths: Int?
+        )
+
+        private fun lane(shape: Int, used: Boolean) =
+            listOf(AndroidAutoNavigationTelemetry.LaneDirection(shape, used))
+
+        fun at(t: Float, speed: Float): Step {
+            val firstLeg = 30f
+            return if (t < firstLeg) {
+                val d = (450f - speed * t).coerceAtLeast(0f)
+                Step(
+                    directions(d, "TURN_RIGHT", "R. Augusta", 5_200f - speed * t, 700 - t.toInt(), emptyList()),
+                    powerPercent = when {
+                        t < 10f -> 45
+                        t < 20f -> 20
+                        else -> -40
+                    },
+                    rpmTenths = if (t < 12f) 28 else null
+                )
+            } else {
+                val s = t - firstLeg
+                val d = (270f - speed * s).coerceAtLeast(0f)
+                Step(
+                    directions(
+                        d, "SHARP_LEFT", "Av. Paulista", 4_750f - speed * s, 670 - s.toInt(),
+                        listOf(lane(4, true), lane(1, false), lane(1, false))
+                    ),
+                    powerPercent = if (s < 8f) 85 else -25,
+                    rpmTenths = when {
+                        s < 3f -> 35
+                        s < 8f -> 56
+                        else -> null
+                    }
+                )
+            }
+        }
+
+        private fun directions(
+            meters: Float,
+            turn: String,
+            street: String,
+            remainingM: Float,
+            remainingS: Int,
+            lanes: List<List<AndroidAutoNavigationTelemetry.LaneDirection>>
+        ): AndroidAutoNavigationTelemetry.Directions {
+            val rounded = (meters / 10f).roundToInt() * 10
+            return AndroidAutoNavigationTelemetry.Directions(
+                active = true,
+                distance = "$rounded m",
+                distanceM = meters.roundToInt(),
+                turn = turn,
+                street = street,
+                remainingM = remainingM.roundToInt(),
+                remainingS = remainingS,
+                lanes = lanes
+            )
+        }
+    }
 }
