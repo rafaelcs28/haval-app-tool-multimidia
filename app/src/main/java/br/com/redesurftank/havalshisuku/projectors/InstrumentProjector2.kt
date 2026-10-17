@@ -967,11 +967,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
      * before the activity is moved/started — avoids a frame of the app buried under
      * the opaque mask.
      */
-    fun prepareDisplay3AppHole(
-            bounds: IntArray,
-            reason: String = "PREPARE_DISPLAY3_APP_HOLE",
-            clampToNativeCard: Boolean = true
-    ) {
+    fun prepareDisplay3AppHole(bounds: IntArray, reason: String = "PREPARE_DISPLAY3_APP_HOLE") {
         if (bounds.size < 4) return
         ensureUi {
             val res =
@@ -983,11 +979,8 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             val baseRight = bounds[2]
             val baseBottom = bounds[3]
             val baseWidth = baseRight - baseX
-            // The AA map sizes itself for the native card (it fades out over the card's left
-            // edge), so its hole is taken as given; apps still stop at the 70% line.
             val actualWidth =
-                    if (clampToNativeCard &&
-                                    fullWidth > 0 &&
+                    if (fullWidth > 0 &&
                                     !isWarningDismissed &&
                                     (currentCard == ClusterCardIds.NATIVE_CARD || isWarningActive)
                     ) {
@@ -1433,17 +1426,12 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                         }
                         ServiceManagerEventType.AA_CLUSTER_SURFACE -> {
                             val enabled = args.getOrNull(0) as? Boolean ?: false
+                            // The map draws above the native masks, so it needs no mask hole;
+                            // this only tells the theme the map covers both sides.
                             updateVirtualClusterVisibility(
                                     reason = "AA_CLUSTER_SURFACE",
                                     forceNativeMaskRefresh = true
                             )
-                            if (enabled) {
-                                prepareDisplay3AppHole(
-                                        AaClusterVideoHost.mapBounds(),
-                                        reason = "AA_CLUSTER_SURFACE",
-                                        clampToNativeCard = false
-                                )
-                            }
                         }
                         ServiceManagerEventType.RAW_KEY_EVENT -> {
                             val key = args[0] as br.com.redesurftank.havalshisuku.models.ClusterKey
@@ -1489,7 +1477,9 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         root = FrameLayout(outerContext).apply { setBackgroundColor(Color.TRANSPARENT) }
         setContentView(root)
         setupControlView(root)
-        AaClusterVideoHost.attachParent(root)
+        // Directly above the native masks, below the theme WebView: the masks can never
+        // cover the map, so the map needs no mask hole.
+        AaClusterVideoHost.attachParent(root, above = nativeMaskContainer)
         syncAaClusterMapWindow()
         if (AndroidAutoClusterController.isClusterRequested()) {
             AndroidAutoClusterController.setClusterMapEnabled(true, "projector_attach")
@@ -3061,19 +3051,14 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             }
         }
 
-        // AA/CarPlay are intentionally excluded from managed secondary configs (resize/
-        // sync paths), but they still need a native-mask hole on D3 — otherwise the
-        // opaque d3_mask wallpaper stays on top of the projection.
+        // AA/CarPlay projections are intentionally excluded from managed secondary configs
+        // (resize/sync paths), but they still need a native-mask hole on D3 — otherwise the
+        // opaque d3_mask wallpaper stays on top of the projection. The AA cluster map does
+        // not: it is drawn above the masks inside this window (AaClusterVideoHost).
         if (appRectOnDisplay3 == null) {
             val projectionHole = resolveProjectionDisplay3AppRect()
             if (projectionHole != null) {
                 appRectOnDisplay3 = projectionHole
-                isLeftCovered = true
-                isRightCovered = true
-            } else if (isAaClusterInDash()) {
-                val bounds = AaClusterVideoHost.mapBounds()
-                appRectOnDisplay3 =
-                        android.graphics.Rect(bounds[0], bounds[1], bounds[2], bounds[3])
                 isLeftCovered = true
                 isRightCovered = true
             }
@@ -3942,19 +3927,6 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             return
         }
 
-        // Mapa da AA ocupando o d3: o vídeo é opaco e cobre o cluster inteiro, então as máscaras
-        // nativas (insets compostos com o wallpaper, que existem pra tapar o bleed dos gauges do
-        // d1 atrás do tema) NÃO são necessárias — e pintá-las sobre o mapa é justamente o bug dos
-        // insets aparecendo (lado esquerdo/direito) quando o furo por-rect não cobre/assenta a
-        // tempo. Suprime por completo enquanto o mapa streama; o furo por-rect fica só pros apps
-        // normais no d3. (Fix pedido pelo dono; o resto do cluster não é tocado.)
-        if (isAaClusterInDash()) {
-            Log.w(TAG, "INSET_DIAG: masks DOWN (AA map in dash) surfaceAttached=true hole=$display3AppRect")
-            nativeMaskContainer?.isVisible = false
-            setDisplayedGlobalMask(null)
-            return
-        }
-
         if (!isThemeLiveOnDisplay3()) {
             // Re-runs on its own: onPageFinished calls back into this method once the theme
             // is up, so the masks appear together with the content they belong to.
@@ -3998,7 +3970,6 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             return
         }
 
-        Log.w(TAG, "INSET_DIAG: PAINTING masks aaClusterInDash=${isAaClusterInDash()} appD1=$isAnyAppOnDisplay1 appD3=$isAnyAppOnDisplay3 card=$currentCard hole=$display3AppRect theme='${metadata?.name}'")
         nativeMaskContainer?.isVisible = true
         val folderName = metadata?.folderName ?: customThemeDir
         val isCard0 = (currentCard == 0)
