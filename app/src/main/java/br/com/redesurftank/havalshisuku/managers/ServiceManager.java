@@ -368,6 +368,13 @@ public class ServiceManager {
     // sem retry ela simplesmente nunca abriria. 6 tentativas x 5s = 30s cobre o boot deste OEM.
     private static final long CURTAIN_TEMP_RETRY_MS = 5000L;
     private static final int CURTAIN_TEMP_MAX_ATTEMPTS = 6;
+    // Duplo-check da ATUAÇÃO: o módulo do teto às vezes responde a leitura mas não executa o
+    // comando logo após o boot (set_100 com levelBefore=0 e a cortina fechada). Depois de mandar,
+    // confere em CURTAIN_ACTUATE_VERIFY_MS se o nível se moveu em direção ao alvo; se não, re-manda,
+    // até CURTAIN_ACTUATE_MAX_ATTEMPTS. Só marca "agiu nesta janela" quando confirma o movimento.
+    private static final long CURTAIN_ACTUATE_VERIFY_MS = 8000L;
+    private static final long CURTAIN_ACTUATE_RETRY_MS = 3000L;
+    private static final int CURTAIN_ACTUATE_MAX_ATTEMPTS = 8;
     // Comandar a cortina aos ~25-45s do boot não funciona: o módulo do teto ainda não executa o
     // comando (visto em 20/08 20:10 e 21/08 06:28 — set_100 com levelBefore=0 e a cortina fechada).
     // Espera driving_ready + settle antes de mandar. Tudo é event-driven/timer: nenhum polling,
@@ -3039,6 +3046,69 @@ public class ServiceManager {
         }
     }
 
+    /** Nível atual da cortina (0..100), ou null se o binder/módulo do veículo ainda não respondem. */
+    private Integer readShadeLevel() {
+        try {
+            if (vehicle == null) return null;
+            return vehicle.getShadeScreensLevel(0);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Atuação com DUPLO-CHECK (fluxo automático da cortina). Lê o nível; se o binder não respondeu,
+     * re-tenta. Manda o alvo (100=abrir, 0=fechar) e, após CURTAIN_ACTUATE_VERIFY_MS, confere se o
+     * nível se moveu em direção ao alvo; se NÃO moveu (módulo aceitou a leitura mas não executou),
+     * re-manda, até CURTAIN_ACTUATE_MAX_ATTEMPTS. Marca a janela como "agiu" só no sucesso; no
+     * give-up libera a flag pra a próxima avaliação tentar de novo.
+     */
+    private void actuateCurtainVerified(boolean open, int attempt) {
+        final int target = open ? 100 : 0;
+        Integer before = readShadeLevel();
+        if (before == null) {
+            traceCurtain("sunroof_curtain_actuate_notready", "action", open ? "open" : "close", "attempt", attempt);
+            scheduleCurtainActuateRetry(open, attempt, "binder_not_ready");
+            return;
+        }
+        if (before == target) {
+            if (open) curtainOpenActedThisWindow = true; else curtainCloseActedThisWindow = true;
+            traceCurtain("sunroof_curtain_actuate_ok", "action", open ? "open" : "close", "attempt", attempt, "reason", "already", "level", before);
+            return;
+        }
+        try {
+            vehicle.setShadeScreensLevel(target);
+        } catch (Throwable t) {
+            traceCurtain("sunroof_curtain_actuate_error", "action", open ? "open" : "close", "attempt", attempt, "error", String.valueOf(t));
+            scheduleCurtainActuateRetry(open, attempt, "set_threw");
+            return;
+        }
+        traceCurtain("sunroof_curtain_actuate", "action", open ? "open" : "close", "attempt", attempt, "levelBefore", before, "target", target);
+        final int beforeLevel = before;
+        backgroundHandler.postDelayed(() -> {
+            Integer after = readShadeLevel();
+            boolean reached = after != null && after == target;
+            boolean moved = after != null && (open ? after > beforeLevel : after < beforeLevel);
+            if (reached || moved) {
+                if (open) curtainOpenActedThisWindow = true; else curtainCloseActedThisWindow = true;
+                traceCurtain("sunroof_curtain_actuate_ok", "action", open ? "open" : "close", "attempt", attempt, "levelBefore", beforeLevel, "levelAfter", String.valueOf(after));
+            } else {
+                traceCurtain("sunroof_curtain_actuate_noeffect", "action", open ? "open" : "close", "attempt", attempt, "levelBefore", beforeLevel, "levelAfter", String.valueOf(after));
+                scheduleCurtainActuateRetry(open, attempt, "no_effect");
+            }
+        }, CURTAIN_ACTUATE_VERIFY_MS);
+    }
+
+    private void scheduleCurtainActuateRetry(boolean open, int attempt, String reason) {
+        if (attempt + 1 < CURTAIN_ACTUATE_MAX_ATTEMPTS) {
+            backgroundHandler.postDelayed(() -> actuateCurtainVerified(open, attempt + 1), CURTAIN_ACTUATE_RETRY_MS);
+        } else {
+            // Desistiu: libera a janela pra a próxima avaliação (timer) tentar de novo.
+            if (open) curtainOpenActedThisWindow = false; else curtainCloseActedThisWindow = false;
+            traceCurtain("sunroof_curtain_actuate_giveup", "action", open ? "open" : "close", "attempts", CURTAIN_ACTUATE_MAX_ATTEMPTS, "reason", reason);
+        }
+    }
+
     /**
      * Hotspot / viewer body commands. Returns false when the vehicle binder is
      * not ready or the command is unknown.
@@ -3416,7 +3486,7 @@ public class ServiceManager {
             traceCurtain("sunroof_curtain_open", "attempt", attempt, "now", currentHour + ":" + currentMinute,
                     "outsideTemp", outsideTemp, "maxTemp", maxTemp);
             // Delay slightly to ensure services are fully ready or just triggering command
-            backgroundHandler.postDelayed(this::openSunRoofShade, 2000);
+            backgroundHandler.postDelayed(() -> actuateCurtainVerified(true, 0), 2000);
         } else {
             Log.w(TAG, "Outside temp " + outsideTemp + " > max configured " + maxTemp + ", not opening curtain");
             traceCurtain("sunroof_curtain_skip", "reason", "temp_above_max", "outsideTemp", outsideTemp, "maxTemp", maxTemp);
@@ -3519,7 +3589,7 @@ public class ServiceManager {
     private void autoCloseSunroofCurtain() {
         Log.w(TAG, "Auto-closing sunroof curtain (schedule)");
         // Pequeno atraso p/ garantir serviços prontos no boot (igual à abertura).
-        backgroundHandler.postDelayed(this::closeSunRoofShade, 2000);
+        backgroundHandler.postDelayed(() -> actuateCurtainVerified(false, 0), 2000);
     }
 
     /** Janela [sh:sm, eh:em) com virada de meia-noite. Janela vazia (s==e) = nunca. */
