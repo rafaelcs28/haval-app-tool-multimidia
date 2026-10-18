@@ -365,49 +365,52 @@ object HudOverlayModel {
     const val AR_LANES_TOP = 114f
     const val AR_LANES_TRIP_BASELINE = 172f
     const val AR_LANES_TRIP_SIZE = 14f
+    /** While the maneuver is still far (straight arrow), street and distance at this scale. */
+    const val AR_FAR_TEXT_SCALE = 0.75f
+    /** ...and the distance baseline this much higher, closer to the street line. */
+    const val AR_FAR_DISTANCE_RAISE = 8f
 
     // ---- AR layout: power / RPM arcs round the native speed readout ----
-    // Centred on the native speed readout. Measured on the car (2026-10-17): with the car parked
-    // the native "0" sat under the 2nd outer segment (~175°, the arc's leftmost point) when the
-    // centre was at x 268, so the speed's centre is at about (222, 100). Radii a confirmar for
-    // 3-digit speeds.
-    const val ARC_CX = 222f
-    const val ARC_CY = 100f
-    /** Outer arc: power. */
-    const val ARC_POWER_R = 46f
-    /** Inner arc: RPM. */
-    const val ARC_RPM_R = 38f
-    const val ARC_THICKNESS = 5f
-    /** 270° open at the bottom: starts bottom-left (135°, canvas angles, clockwise) to bottom-right. */
-    const val ARC_START_DEG = 135f
-    const val ARC_SWEEP_DEG = 270f
-    const val ARC_GAP_DEG = 3f
-    const val ARC_POWER_STEPS = 10
-    const val ARC_RPM_STEPS = 7
+    // Centred on the native speed (measured on the car 2026-10-17: about x 222, y 100), then moved
+    // down ~20 px then back up ~8 px at the owner's request (y 112). Each arc is 50 thin
+    // radial ticks over 195° (150°..345°): 15° shorter at each end than the 225° version, so it
+    // stops well short of the native "km/h".
 
-    /** Start angle and sweep of arc segment [i] of [steps], gap included. */
-    fun arcSegment(i: Int, steps: Int): Pair<Float, Float> {
-        val each = ARC_SWEEP_DEG / steps
-        return ARC_START_DEG + i * each + ARC_GAP_DEG / 2 to each - ARC_GAP_DEG
-    }
+    const val ARC_CX = 222f
+    const val ARC_CY = 112f
+    /** 195°: from 150° (canvas angles, clockwise, bottom-left) to 345° (just above the right). */
+    const val ARC_START_DEG = 150f
+    const val ARC_SWEEP_DEG = 195f
+    const val ARC_TICKS = 50
+
+    /** Outer arc, power: thicker, longer ticks. */
+    const val ARC_POWER_R_IN = 44f
+    const val ARC_POWER_R_OUT = 52f
+    const val ARC_POWER_TICK_W = 1.3f
+
+    /** Inner arc, RPM: thinner, shorter ticks. */
+    const val ARC_RPM_R_IN = 35f
+    const val ARC_RPM_R_OUT = 39f
+    const val ARC_RPM_TICK_W = 0.8f
+    /** RPM arc full scale. */
+    const val ARC_RPM_MAX = 7_000
+
+    /** Canvas angle (degrees) of tick [i] of [ARC_TICKS], at the middle of its slot. */
+    fun arcTickDeg(i: Int): Float = ARC_START_DEG + (i + 0.5f) * ARC_SWEEP_DEG / ARC_TICKS
 
     /**
-     * Lit power segments on the outer arc. Drive fills from the left end, one segment per 10 %.
-     * Regen grows from the top centre towards both sides, one segment per side per 20 %.
-     * Empty for 0 %.
+     * Lit power ticks, from the left end: one per 2 % of [powerPercent] (drive blue, regen green,
+     * both filling from the left); at least one past 0 %, none at 0 %.
      */
-    fun arcPowerLit(percent: Int): IntRange {
-        if (percent == 0) return IntRange.EMPTY
-        if (percent > 0) return 0 until powerSegments(percent)
-        val half = ARC_POWER_STEPS / 2
-        val perSide = ((kotlin.math.abs(percent) + 10) / 20).coerceIn(1, half)
-        return (half - perSide) until (half + perSide)
+    fun arcPowerTicks(percent: Int): Int {
+        if (percent == 0) return 0
+        return ((kotlin.math.abs(percent) * ARC_TICKS + 50) / 100).coerceIn(1, ARC_TICKS)
     }
 
-    /** Lit RPM segments on the inner arc: one per 1000 rpm, at least one while turning. */
-    fun arcRpmLit(tenths: Int): Int {
+    /** Lit RPM ticks, from the left end, over 0..[ARC_RPM_MAX]; at least one while turning. */
+    fun arcRpmTicks(tenths: Int): Int {
         if (tenths <= 0) return 0
-        return ((tenths + 5) / 10).coerceIn(1, ARC_RPM_STEPS)
+        return (tenths * 100 * ARC_TICKS / ARC_RPM_MAX.toFloat()).roundToInt().coerceIn(1, ARC_TICKS)
     }
 
     /**
@@ -430,7 +433,9 @@ object HudOverlayModel {
         val exitNumber: Int? = null,
         /** Degrees travelled around the ring (1..360); set only with the ROUNDABOUT icon. */
         val exitAngle: Int? = null,
-        val roundaboutClockwise: Boolean = false
+        val roundaboutClockwise: Boolean = false,
+        /** AR roundabout: how much of the way round has been driven (0..1), estimated. */
+        val arProgress: Float = 0f
     ) {
         /** Draw the roundabout with its real exit instead of the static icon. */
         val dynamicRoundabout: Boolean get() = icon == "ROUNDABOUT" && exitAngle != null
@@ -515,9 +520,35 @@ object HudOverlayModel {
         val smallArrowWhenFar: Boolean = true,
         val trip: Boolean = true,
         val powerBar: Boolean = true,
-        val rpmBar: Boolean = true
+        val rpmBar: Boolean = true,
+        /** Power/RPM as arcs round the native speed instead of the bottom bars, per layout. */
+        val navArcs: Boolean = false,
+        val arArcs: Boolean = true
     ) {
         val active: Boolean get() = layout != Layout.ORIGINAL
+
+        /** Arcs for the current layout. */
+        val arcs: Boolean get() = when (layout) {
+            Layout.NAVIGATION -> navArcs
+            Layout.AR -> arArcs
+            Layout.ORIGINAL -> false
+        }
+    }
+
+    /**
+     * Android Auto sends a new maneuver (code 10) before its distance (code 11), so for a moment
+     * the new step carries the last one's (~0 m) and the AR arrow would show the turn as if it
+     * were here. True from such a step change until the distance moves.
+     */
+    fun distanceStale(
+        previous: AndroidAutoNavigationTelemetry.Directions?,
+        update: AndroidAutoNavigationTelemetry.Directions,
+        wasStale: Boolean
+    ): Boolean {
+        if (previous == null) return false
+        val sameDistance = previous.distanceM == update.distanceM && previous.distance == update.distance
+        val newStep = previous.turnId != update.turnId || previous.turn != update.turn || previous.street != update.street
+        return if (newStep) sameDistance else sameDistance && wasStale
     }
 
     fun tbtFor(d: AndroidAutoNavigationTelemetry.Directions, config: Config = Config()): Tbt? {
@@ -525,7 +556,12 @@ object HudOverlayModel {
         val (value, unit) = splitDistance(d.distance, d.distanceM)
         val lanes = d.lanes.map { laneArrows(it) }
         val meters = distanceMeters(d.distance, d.distanceM)
-        val arAngle = if (config.layout == Layout.AR) HudArArrow.angleFor(d.turn) else null
+        val icon = resolveTurnIcon(d.turn)
+        val exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null
+        // AR: turns by their bend angle; a roundabout with a known exit gets the 3D ring (angle 0
+        // here, the renderer draws it from exitAngle).
+        val arAngle = if (config.layout != Layout.AR) null
+        else HudArArrow.angleFor(d.turn) ?: if (exitAngle != null) 0f else null
         val style = when {
             // AR keeps the centre arrow with lanes too; the lanes go to the left column.
             arAngle != null && meters != null -> TbtStyle.AR
@@ -533,7 +569,6 @@ object HudOverlayModel {
             config.smallArrowWhenFar && meters != null && meters >= FAR_THRESHOLD_M -> TbtStyle.FAR
             else -> TbtStyle.HERO
         }
-        val icon = resolveTurnIcon(d.turn)
         return Tbt(
             icon = icon,
             distanceValue = value,
@@ -545,7 +580,7 @@ object HudOverlayModel {
             arMeters = meters?.toFloat().takeIf { style == TbtStyle.AR },
             street = d.street.trim(),
             exitNumber = d.exitNumber?.takeIf { icon == "ROUNDABOUT" && it > 0 },
-            exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null,
+            exitAngle = exitAngle,
             roundaboutClockwise = d.roundaboutClockwise == true
         )
     }
@@ -556,24 +591,32 @@ object HudOverlayModel {
         directions: AndroidAutoNavigationTelemetry.Directions?,
         powerPercent: Int,
         rpmTenths: Int?,
-        arMetersOverride: Float? = null
+        arMetersOverride: Float? = null,
+        arProgress: Float = 0f,
+        arDistanceKnown: Boolean = true
     ): Frame = Frame(
         tbt = if (config.navigation) {
             directions?.let { tbtFor(it, config) }?.let { tbt ->
-                if (tbt.style == TbtStyle.AR && arMetersOverride != null) tbt.copy(arMeters = arMetersOverride) else tbt
+                if (tbt.style != TbtStyle.AR) tbt
+                else tbt.copy(
+                    arMeters = if (arDistanceKnown) arMetersOverride ?: tbt.arMeters else null,
+                    arProgress = arProgress
+                )
             }
         } else null,
         powerPercent = if (config.powerBar) powerPercent else null,
         rpmTenths = if (config.rpmBar) rpmTenths else null,
-        arcs = config.layout == Layout.AR
+        arcs = config.arcs
     )
 
     /**
      * Scripted drive for the debug `hudDemo drive`: what the HUD would get [t] seconds into a
-     * 48 s loop at [speed] m/s. Right turn from 450 m (engine on, then regen into the turn), then
-     * a sharp left with lanes from 270 m (into the RPM red zone, then regen).
+     * 66 s loop at [speed] m/s. Right turn from 450 m (engine on, then regen into the turn), a
+     * sharp left with lanes from 270 m (into the RPM red zone, then regen), then a roundabout
+     * from 200 m taken at the 3rd exit (left, 270° round a counter-clockwise ring).
      */
     object DemoDrive {
+        const val LOOP_MS = 66_000L
         class Step(
             val directions: AndroidAutoNavigationTelemetry.Directions,
             val powerPercent: Int,
@@ -595,6 +638,15 @@ object HudOverlayModel {
                         else -> -40
                     },
                     rpmTenths = if (t < 12f) 28 else null
+                )
+            } else if (t >= 48f) {
+                val s = t - 48f
+                val d = (200f - speed * s).coerceAtLeast(0f)
+                Step(
+                    directions(d, "ROUNDABOUT", "Av. Brasil", 3_900f - speed * s, 600 - s.toInt(), emptyList())
+                        .copy(exitNumber = 3, turnAngle = 270, roundaboutClockwise = false),
+                    powerPercent = if (s < 6f) 30 else -30,
+                    rpmTenths = null
                 )
             } else {
                 val s = t - firstLeg
