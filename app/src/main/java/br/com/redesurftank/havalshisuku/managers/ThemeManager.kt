@@ -36,7 +36,10 @@ class ThemeManager private constructor(val context: Context) {
     companion object {
         private const val TAG = "ThemeManager"
         /** Audited package catalog published with the stable v301 integration branch. */
-        const val THEME_REPO_URL = "https://github.com/bobaoapae/haval-app-tool-multimidia/tree/preview/cluster-widgets/Themes/v1.0"
+        // Tema baixado da branch v9 do NETSEEK (não mais bobaoapae/preview, que estava atrasado:
+        // minimalist 1.0.3 lá vs 1.0.6 na v9, sem o radar novo). Assim o tema casa com o código que
+        // buildamos da v9. parseGithubUrl trata a branch de 2 segmentos (feature/...).
+        const val THEME_REPO_URL = "https://github.com/netseek/haval-app-tool-multimidia/tree/feature/new-screen-enhancements-v9/cluster-widgets/Themes/v1.0"
         /** Legacy Sport packages stay outside v1.0 and are accepted only through the pinned allowlist below. */
         const val TRUSTED_LEGACY_SPORT_REPO_URL = "https://github.com/bobaoapae/haval-app-tool-multimidia/tree/preview/cluster-widgets/Themes"
         const val CURRENT_CONTRACT_VERSION = "v1.0"
