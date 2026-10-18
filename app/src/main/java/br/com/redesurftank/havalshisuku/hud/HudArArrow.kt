@@ -25,8 +25,8 @@ import kotlin.math.sin
  *   through the windshield.
  */
 object HudArArrow {
-    /** Centred on the native speed and the power/RPM arcs (one axis, owner's request). */
-    const val CX = HudOverlayModel.ARC_CX
+    /** Centred on the native speed (one axis with it, owner's request). */
+    const val CX = HudOverlayModel.NATIVE_SPEED_CX
     // Viewport: the strip under the speed digits down to the bottom of the visible band.
     const val TOP = 126f
     const val BOTTOM = 200f
@@ -96,6 +96,79 @@ object HudArArrow {
     /** Real roundabout radius assumed for the progress estimate (m). A confirmar. */
     const val RB_RADIUS_M = 15f
 
+    // Destination flag, on the road beside the arrow's end.
+    /** From the ribbon's edge to the pole (world units). */
+    const val FLAG_GAP = 0.9f
+    /** Pole height (world units, drawn at the lateral scale of its depth). */
+    const val FLAG_H = 1.8f
+
+    /**
+     * Where the arrow sits on the HUD. CENTER: under the native speed, as computed. RIGHT:
+     * between the native lane-assist lines (x ~388..470, mock measured from the owner's photo,
+     * a confirmar): the same picture scaled about (CX, BOTTOM) by [sx] sideways and [sy]
+     * upwards, which is exactly the same road seen with a higher horizon, so it narrows like
+     * those lines. [top] is the band's top in the unscaled picture (RIGHT reaches y ~56 on
+     * screen); [roomLeft] / [roomRight] limit the sideways reach in it.
+     */
+    enum class Placement(
+        val key: String,
+        val cx: Float,
+        val sx: Float,
+        val sy: Float,
+        val top: Float,
+        val roomLeft: Float,
+        val roomRight: Float
+    ) {
+        CENTER("center", CX, 1f, 1f, TOP, ROOM_LEFT, ROOM_RIGHT),
+        RIGHT("right", 429f, 0.4f, 2.4f, 140f, 320f, 115f);
+
+        /** Screen point for a point of the unscaled picture. */
+        fun map(x: Float, y: Float): Pair<Float, Float> = cx + (x - CX) * sx to BOTTOM - (BOTTOM - y) * sy
+
+        companion object {
+            fun fromKey(key: String?): Placement? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    // Map streets (beta): real OpenStreetMap roads, in light grey under the arrow.
+    /** Half width of a drawn street, world units (thin next to the route's [HW]). */
+    const val STREET_HW = 0.3f
+    /** Streets further than this (world units) melt into the horizon: not drawn. */
+    const val STREET_FAR_Z = 60f
+
+    /**
+     * World units per metre for the map, tied to the arrow's corner: a maneuver [meters] ahead
+     * is drawn at [cornerDepth], so the real cross street lands under the arrow's turn. The map
+     * zooms in as the car closes in (real scale, 1, from ~5 m). Far or unknown: the 200 m scale.
+     */
+    fun mapScale(meters: Float?): Float =
+        if (meters == null || meters >= BEND_START_M) Z_CAP / BEND_START_M
+        else (cornerDepth(meters) / meters.coerceAtLeast(1f)).coerceAtMost(1f)
+
+    /** [lines] (car frame, metres: x right, y ahead, as x, y pairs) as thin grey ribbons. */
+    fun streets(lines: List<FloatArray>, meters: Float?): List<List<Pt>> {
+        val s = mapScale(meters)
+        val out = ArrayList<List<Pt>>()
+        for (line in lines) {
+            val pts = ArrayList<W>(line.size / 2)
+            for (k in 0 until line.size / 2) pts += W(line[2 * k] * s, line[2 * k + 1] * s)
+            if (pts.none { it.z in Z_CLIP..STREET_FAR_Z }) continue
+            out += ribbon(pts, STREET_HW, AHEAD)
+        }
+        return out
+    }
+
+    /** Destination flag: pole foot ([x], [y]) on the road, [height] of the pole, unscaled picture. */
+    data class Flag(val x: Float, val y: Float, val height: Float)
+
+    /** Side of the destination for a maneuver token: -1 left, +1 right, 0 unknown, null not one. */
+    fun destinationSide(turn: String?): Int? = when (turn.orEmpty().uppercase()) {
+        "DESTINATION_LEFT" -> -1
+        "DESTINATION_RIGHT" -> 1
+        "DESTINATION" -> 0
+        else -> null
+    }
+
     /**
      * One cross-section of a ribbon on screen: its left and right edge points. [x], [y] are the
      * middle, [w] the on-screen width.
@@ -114,7 +187,8 @@ object HudArArrow {
         val blue: List<Pt>,
         val head: FloatArray,
         val gray: List<List<Pt>> = emptyList(),
-        val grayAlpha: Float = 1f
+        val grayAlpha: Float = 1f,
+        val flag: Flag? = null
     )
 
     /**
@@ -157,12 +231,15 @@ object HudArArrow {
     fun project(x: Float, z: Float): Pair<Float, Float> =
         CX + F_X * x / z to HORIZON + (BOTTOM - HORIZON) * Z_NEAR / z
 
-    /** Row fade: in over [TOP]..[FADE_TOP_TO], out over [FADE_BOTTOM_FROM]..[BOTTOM]. */
-    fun rowAlpha(y: Float): Float = when {
-        y <= TOP || y >= BOTTOM -> 0f
-        y < FADE_TOP_TO -> (y - TOP) / (FADE_TOP_TO - TOP)
-        y > FADE_BOTTOM_FROM -> (BOTTOM - y) / (BOTTOM - FADE_BOTTOM_FROM)
-        else -> 1f
+    /** Row fade: in over [top]..[top] + 6, out over [FADE_BOTTOM_FROM]..[BOTTOM]. */
+    fun rowAlpha(y: Float, top: Float = TOP): Float {
+        val fadeTo = top + (FADE_TOP_TO - TOP)
+        return when {
+            y <= top || y >= BOTTOM -> 0f
+            y < fadeTo -> (y - top) / (fadeTo - top)
+            y > FADE_BOTTOM_FROM -> (BOTTOM - y) / (BOTTOM - FADE_BOTTOM_FROM)
+            else -> 1f
+        }
     }
 
     /** Gradient position for a row: 0 at the base (lighter blue) .. 1 at the top (deeper blue). */
@@ -268,10 +345,30 @@ object HudArArrow {
     }
 
     /** The arrow for [meters] to a maneuver bending by [angleDeg]. */
-    fun shape(meters: Float, angleDeg: Float): Shape {
+    fun shape(meters: Float, angleDeg: Float, placement: Placement = Placement.CENTER): Shape {
         val line = armCenterline(meters, angleDeg)
         val blue = ribbon(line, HW, AHEAD).lastOrNull().orEmpty()
-        return fit(Shape(blue, head(line, AHEAD)))
+        return fit(Shape(blue, head(line, AHEAD)), placement)
+    }
+
+    /**
+     * Arriving: a straight arrow up to the destination's depth and a flag on the road beside it,
+     * on [side] (-1 left, +1 right; 0 unknown: just past the head, on the road).
+     */
+    fun destination(meters: Float, side: Int, placement: Placement = Placement.CENTER): Shape {
+        val zc = cornerDepth(meters)
+        val line = ArrayList<W>()
+        var z = Z_CLIP - 0.1f
+        while (z < zc) {
+            line += W(0f, z)
+            z += 0.1f
+        }
+        line += W(0f, zc)
+        val blue = ribbon(line, HW, AHEAD).lastOrNull().orEmpty()
+        val fx = if (side == 0) 0f else side * (HW + FLAG_GAP)
+        val fz = if (side == 0) zc + HEAD_L + 0.6f else zc
+        val (sx, sy) = project(fx, fz)
+        return fit(Shape(blue, head(line, AHEAD), flag = Flag(sx, sy, FLAG_H * F_X / fz)), placement)
     }
 
     /** Cubic from [p0] heading [d0] to [p3] heading [d3], without [p0]. */
@@ -312,7 +409,8 @@ object HudArArrow {
         travelDeg: Float,
         clockwise: Boolean,
         passedDeg: List<Float>,
-        progress: Float = 0f
+        progress: Float = 0f,
+        placement: Placement = Placement.CENTER
     ): Shape {
         val bend = bendAmount(meters)
         val side = if (clockwise) -1f else 1f
@@ -368,27 +466,28 @@ object HudArArrow {
                 gray += ribbon((0..8).map { k -> ring(p, RING_R + STUB_LEN * k / 8) }, STUB_HW, cam)
             }
         }
-        return fit(Shape(blue, head(remaining, cam), gray, grayAlpha = bend))
+        return fit(Shape(blue, head(remaining, cam), gray, grayAlpha = bend), placement)
     }
 
     /**
      * Sharp turns, U-turns and roundabout exits near the corner could sweep past the room on
      * their side: squeeze everything sideways just enough. Measured on the route and its head.
      */
-    private fun fit(shape: Shape): Shape {
-        fun room(x: Float) = if (x < CX) ROOM_LEFT else ROOM_RIGHT
+    private fun fit(shape: Shape, placement: Placement): Shape {
+        fun room(x: Float) = if (x < CX) placement.roomLeft else placement.roomRight
         var squeeze = 1f
         fun take(x: Float) {
             val dxc = abs(x - CX)
             if (dxc > 0.01f) squeeze = min(squeeze, room(x) / dxc)
         }
-        for (p in shape.blue) if (p.y in TOP..BOTTOM) { take(p.lx); take(p.rx) }
+        for (p in shape.blue) if (p.y in placement.top..BOTTOM) { take(p.lx); take(p.rx) }
         for (k in 0 until shape.head.size / 2) take(shape.head[2 * k])
+        shape.flag?.let { take(it.x) }
         if (squeeze >= 1f) return shape
         fun sx(x: Float) = CX + (x - CX) * squeeze
         fun sq(list: List<Pt>) = list.map { it.copy(lx = sx(it.lx), rx = sx(it.rx)) }
         val head = shape.head.copyOf().also { for (k in 0 until it.size / 2) it[2 * k] = sx(it[2 * k]) }
-        return Shape(sq(shape.blue), head, shape.gray.map { sq(it) }, shape.grayAlpha)
+        return Shape(sq(shape.blue), head, shape.gray.map { sq(it) }, shape.grayAlpha, shape.flag?.let { it.copy(x = sx(it.x)) })
     }
 
     /**
