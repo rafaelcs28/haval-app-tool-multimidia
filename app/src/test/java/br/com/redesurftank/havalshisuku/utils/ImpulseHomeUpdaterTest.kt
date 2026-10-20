@@ -13,7 +13,8 @@ class ImpulseHomeUpdaterTest {
 
     private fun json(
         channel: String = "stable",
-        url: String = "https://github.com/netseek/impulse-home/releases/download/v1.0.0/impulse-home.apk",
+        url: String = "https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/download/" +
+            "home-stable/impulse-home.apk",
         hash: String = sha
     ) =
         """{"versionName":"1.0.0","versionCode":10000,"apkUrl":"$url","sha256":"$hash",
