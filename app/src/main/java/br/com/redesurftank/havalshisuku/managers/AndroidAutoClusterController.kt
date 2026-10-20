@@ -29,6 +29,8 @@ object AndroidAutoClusterController {
     private val started = AtomicBoolean(false)
     private val clusterRequested = AtomicBoolean(false)
     private val navigationActive = AtomicBoolean(false)
+    private val lastNavigationActiveAtMs = AtomicLong(0L)
+    private val sessionStopSuppressed = AtomicBoolean(false)
     /** An app sent to D1/D3 gets the cluster; the map steps aside until it leaves. */
     private val secondaryAppActive = AtomicBoolean(false)
     private val demandEpoch = AtomicLong()
@@ -87,7 +89,30 @@ object AndroidAutoClusterController {
     }
 
     fun onLinkStatus(status: Int?, nowMs: Long = SystemClock.elapsedRealtime()) {
-        val published = sessionDebouncer.onStatus(status, nowMs) ?: return
+        val navigationEvidenceRecent =
+            AndroidAutoSessionTelemetry.hasRecentNavigationEvidence(
+                lastActiveAtMs = lastNavigationActiveAtMs.get(),
+                nowMs = nowMs
+            )
+        val effectiveStatus = AndroidAutoSessionTelemetry.statusWithNavigationEvidence(
+            linkStatus = status,
+            navigationEvidenceRecent = navigationEvidenceRecent
+        )
+        if (effectiveStatus != status && sessionStopSuppressed.compareAndSet(false, true)) {
+            val navigationAgeMs = nowMs - lastNavigationActiveAtMs.get()
+            Log.w(
+                TAG,
+                "Ignoring transient AA stopped status while navigation evidence is fresh " +
+                    "status=$status navigationAgeMs=$navigationAgeMs"
+            )
+            ClusterPersistentEventLogger.log(
+                "aa_cluster_session_stop_suppressed",
+                mapOf("link_status" to status, "navigation_age_ms" to navigationAgeMs)
+            )
+        } else if (effectiveStatus == status) {
+            sessionStopSuppressed.set(false)
+        }
+        val published = sessionDebouncer.onStatus(effectiveStatus, nowMs) ?: return
         publishSession(published, force = false)
     }
 
@@ -136,7 +161,7 @@ object AndroidAutoClusterController {
     }
 
     fun onNavigationUpdate(update: AndroidAutoNavigationTelemetry.Directions, nowMs: Long = SystemClock.elapsedRealtime()) {
-        onNavigationActive(update.active)
+        onNavigationActive(update.active, nowMs)
         br.com.redesurftank.havalshisuku.hud.HudOverlayController.onDirections(update)
         publishDirections(update, nowMs, force = false)
         mainHandler.removeCallbacks(flushDirectionsRunnable)
@@ -154,8 +179,9 @@ object AndroidAutoClusterController {
         }
     }
 
-    private fun onNavigationActive(active: Boolean) {
+    private fun onNavigationActive(active: Boolean, nowMs: Long) {
         if (active) {
+            lastNavigationActiveAtMs.set(nowMs)
             mainHandler.removeCallbacks(navigationEndedRunnable)
             if (!navigationActive.getAndSet(true)) {
                 Log.w(TAG, "CLUSTER navigation started")
@@ -190,6 +216,8 @@ object AndroidAutoClusterController {
         if (clusterRequested.getAndSet(false)) demandEpoch.incrementAndGet()
         mainHandler.removeCallbacks(navigationEndedRunnable)
         navigationActive.set(false)
+        lastNavigationActiveAtMs.set(0L)
+        sessionStopSuppressed.set(false)
         liveSinceMs = 0L
         recoveryInFlight = false
         recoveryCount = 0
