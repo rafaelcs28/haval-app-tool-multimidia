@@ -38,11 +38,15 @@ val telemetryVinSalt =
 fun buildConfigString(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+val aaHardKeyToken = providers.gradleProperty("androidAutoHardKeyToken")
+    .orElse(providers.environmentVariable("IMPULSE_AA_HARDKEY_TOKEN")).orElse("")
+
 android {
     namespace = "br.com.redesurftank.havalshisuku"
     compileSdk = 36
 
     defaultConfig {
+        buildConfigField("String", "AA_HARDKEY_TOKEN", buildConfigString(aaHardKeyToken.get()))
         applicationId = "br.com.redesurftank.havalshisuku"
         minSdk = 28
         //noinspection ExpiredTargetSdkVersion
