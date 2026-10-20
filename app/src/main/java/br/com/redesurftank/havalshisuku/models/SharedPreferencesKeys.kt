@@ -417,6 +417,9 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     HUD_RPM_BAR("hudRpmBar", "HUD: barra de rotação do motor"),
     HUD_NAV_ARCS("hudNavArcs", "HUD Navegação: potência/rotação em arcos (senão barras)"),
     HUD_AR_ARCS("hudArArcs", "HUD Navegação AR: potência/rotação em arcos (senão barras)"),
+    // Replace the two above (read as a fallback): none | bars | arcs, per layout.
+    HUD_NAV_GAUGES("hudNavGauges", "HUD Navegação: indicadores de potência/RPM (none, bars, arcs)"),
+    HUD_AR_GAUGES("hudArGauges", "HUD Navegação AR: indicadores de potência/RPM (none, bars, arcs)"),
     HUD_AR_CHEVRONS("hudArChevrons", "HUD Navegação AR: setas animadas acima da velocidade perto da curva"),
     HUD_AR_PLACEMENT("hudArPlacement", "HUD Navegação AR: seta no centro (center) ou entre as linhas de faixa (right)"),
     HUD_AR_MAP("hudArMap", "HUD Navegação AR: ruas do OpenStreetMap em cinza (beta)"),
@@ -434,6 +437,7 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     RADAR_LAST_UPDATE_MS("radarLastUpdateMs", "Alerta de radar: última atualização bem-sucedida da base (controle interno)"),
     RADAR_LAST_ERROR("radarLastError", "Alerta de radar: último erro de atualização (controle interno)"),
     RADAR_ANTT_RESOURCE("radarAnttResource", "Alerta de radar: recurso ANTT já baixado (controle interno)"),
+    RADAR_ROADS_LAST_UPDATE_MS("radarRoadsLastUpdateMs", "Alerta de radar: última atualização das vias sob os radares (controle interno)"),
     CARPLAY_PATCH_AUTO_MOUNT("carPlayPatchAutoMount", "Habilitar montagem automática dos patches do CarPlay ao iniciar"),
     AMBIENT_LIGHT_BLE_ENABLED("ambientLightBleEnabled", "Ativar Ambient Light BLE"),
     AMBIENT_LIGHT_BLE_DEVICE_MAC("ambientLightBleDeviceMac", "MAC do dispositivo Ambient Light BLE"),
@@ -540,5 +544,9 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
     ANONYMOUS_TELEMETRY_FALLBACK_ID(
             "anonymousTelemetryFallbackId",
             "Identificador local usado apenas quando o ANDROID_ID não está disponível"
+    ),
+    CLUSTER_WARNING_DISMISSED_CARDS(
+            "clusterWarningDismissedCards",
+            "Avisos do cluster dispensados neste boot, restaurados se o app reiniciar no meio do trajeto"
     )
 }

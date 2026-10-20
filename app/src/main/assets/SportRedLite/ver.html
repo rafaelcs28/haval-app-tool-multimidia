@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Mac720 — conferencia do rodape</title>
+<!--
+  PAGINA DE CONFERENCIA, e nao parte do tema.
+  O index.html do tema abre no Grand Tourer e a classe do modo e posta em tempo de
+  execucao num div interno — abrindo direto nele nao da para ver o Mac720. Esta pagina
+  carrega o tema num quadro e troca o modo assim que ele monta.
+  As reguas existem porque o problema em discussao e de ALINHAMENTO: sem uma referencia
+  desenhada, julgar "esta baixo?" e olhar e achar. Com as duas linhas do desenho na tela,
+  da para ver se a tinta esta no meio delas.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #05070A; color: #cfd6df;
+               font-family: "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #palco { position: absolute; inset: 0 0 46px 0; display: grid; place-items: center; overflow: hidden; }
+  #caixa { position: relative; width: 1920px; height: 720px; transform-origin: center; }
+  iframe { width: 1920px; height: 720px; border: 0; display: block; }
+  /* As duas bordas do vao em que o rodape vive, mais o eixo entre elas. */
+  .regua { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+  .regua::after {
+    content: attr(data-nome);
+    position: absolute; left: 8px; top: -18px;
+    font-size: 12px; letter-spacing: .6px;
+  }
+  .r-topo   { border-top: 1px dashed rgba(90,200,255,.85); }
+  .r-topo::after   { color: rgba(90,200,255,.95); }
+  .r-base   { border-top: 1px dashed rgba(255,170,60,.85); }
+  .r-base::after   { color: rgba(255,170,60,.95); }
+  .r-eixo   { border-top: 1px solid rgba(95,208,138,.95); }
+  .r-eixo::after   { color: rgba(95,208,138,1); }
+  #barra {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 46px;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: #0A0D12; border-top: 1px solid #161B23; font-size: 13px;
+  }
+  button {
+    padding: 7px 14px; border-radius: 7px; border: 1px solid #2C3542;
+    background: #131922; color: #cfd6df; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: #3C4756; color: #fff; }
+  #info { color: #7C8797; }
+</style>
+</head>
+<body>
+  <div id="palco">
+    <div id="caixa">
+      <iframe id="tema" src="index.html"></iframe>
+      <div class="regua r-topo" id="rTopo" data-nome="linha de cima do desenho — y 596"></div>
+      <div class="regua r-eixo" id="rEixo" data-nome="eixo"></div>
+      <div class="regua r-base" id="rBase" data-nome="borda de baixo"></div>
+    </div>
+  </div>
+  <div id="barra">
+    <button id="btReguas">Réguas: ligadas</button>
+    <button id="btBase">Borda de baixo: borda do casco (661,9)</button>
+    <span id="info"></span>
+  </div>
+
+<script>
+// A LINHA DE BAIXO E A BORDA DO CASCO — a vermelha logo abaixo dos numeros. As duas
+// curvas do capo passam POR TRAS do casco e nao delimitam nada para quem olha; foi contra
+// elas que eu media, e por isso o rodape ficava 11px baixo.
+const BASES = [
+  { nome: "borda do casco (a vermelha)", y: 661.9 },
+  { nome: "borda do preenchimento", y: 683.8 },
+  { nome: "curva traçada do capô", y: 691.7 },
+];
+const TOPO = 596;
+let baseAtual = 0;
+let reguas = true;
+
+function desenharReguas() {
+  const base = BASES[baseAtual].y;
+  const eixo = (TOPO + base) / 2;
+  rTopo.style.top = TOPO + "px";
+  rBase.style.top = base + "px";
+  rEixo.style.top = eixo + "px";
+  rBase.dataset.nome = "borda de baixo — " + BASES[baseAtual].nome + " — y " + base.toFixed(1);
+  rEixo.dataset.nome = "eixo — y " + eixo.toFixed(1);
+  [rTopo, rBase, rEixo].forEach((r) => (r.style.display = reguas ? "block" : "none"));
+  btBase.textContent = "Borda de baixo: " + BASES[baseAtual].nome + " (" + base.toFixed(1) + ")";
+}
+
+function escala() {
+  const p = document.getElementById("palco");
+  if (p.clientWidth < 40) return requestAnimationFrame(escala);
+  const e = Math.min(p.clientWidth / 1920, p.clientHeight / 720, 1);
+  document.getElementById("caixa").style.transform = "scale(" + e + ")";
+  info.textContent = "escala " + Math.round(e * 100) + "% · quadro de 1920 × 720";
+}
+
+// O modo do painel e uma classe posta em tempo de execucao num div interno; trocar antes
+// de o tema montar nao adianta, por isso a espera.
+function forcarMac720() {
+  const doc = document.getElementById("tema").contentDocument;
+  if (!doc) return;
+  const alvo = doc.querySelector('[class*="display-"]');
+  if (!alvo) return setTimeout(forcarMac720, 120);
+  alvo.className = alvo.className
+    .replace(/display-[a-z0-9-]+/i, "display-mac720s")
+    .replace(/warn-is-active/g, "")
+    .replace(/screen-main-menu/g, "");
+  if (!doc.querySelector(".mac720")) setTimeout(forcarMac720, 120);
+}
+
+document.getElementById("tema").addEventListener("load", () => setTimeout(forcarMac720, 150));
+btReguas.addEventListener("click", () => {
+  reguas = !reguas;
+  btReguas.textContent = "Réguas: " + (reguas ? "ligadas" : "desligadas");
+  desenharReguas();
+});
+btBase.addEventListener("click", () => {
+  baseAtual = (baseAtual + 1) % BASES.length;
+  desenharReguas();
+});
+window.addEventListener("resize", escala);
+desenharReguas();
+escala();
+</script>
+</body>
+</html>

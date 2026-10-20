@@ -52,9 +52,57 @@ object OsmRoads {
     }
 
     /** Overpass QL for the drivable roads of [tile], with their geometry inline. */
-    fun query(tile: Tile): String {
-        val bbox = "%.4f,%.4f,%.4f,%.4f".format(java.util.Locale.US, tile.south, tile.west, tile.north, tile.east)
-        return "[out:json][timeout:25];way[\"highway\"~\"^(${DRIVABLE.joinToString("|")})$\"]($bbox);out tags geom;"
+    fun query(tile: Tile): String = query(tile.south, tile.west, tile.north, tile.east)
+
+    /** Overpass QL for the drivable roads in a box (several tiles at once). */
+    fun query(south: Double, west: Double, north: Double, east: Double): String {
+        val bbox = "%.4f,%.4f,%.4f,%.4f".format(java.util.Locale.US, south, west, north, east)
+        // The server-side limit: at 25 s a busy overpass-api.de answered "200" with no roads.
+        return "[out:json][timeout:90];way[\"highway\"~\"^(${DRIVABLE.joinToString("|")})$\"]($bbox);out tags geom;"
+    }
+
+    /** The roads of a box answer that touch [tile] (their extent overlaps it; a road can be in several). */
+    fun inTile(roads: List<OsmRoad>, tile: Tile): List<OsmRoad> = roads.filter { r ->
+        var s = Double.MAX_VALUE; var n = -Double.MAX_VALUE; var w = Double.MAX_VALUE; var e = -Double.MAX_VALUE
+        for (k in 0 until r.latLon.size / 2) {
+            val la = r.latLon[2 * k]; val lo = r.latLon[2 * k + 1]
+            if (la < s) s = la; if (la > n) n = la; if (lo < w) w = lo; if (lo > e) e = lo
+        }
+        n >= tile.south && s <= tile.north && e >= tile.west && w <= tile.east
+    }
+
+    /**
+     * Whether an Overpass answer is a real one: a busy server answers "200" with a "remark" such
+     * as "runtime error: Query timed out" and no elements (2026-10-19, cached as empty tiles).
+     */
+    fun answerOk(json: String): Boolean = runCatching {
+        val remark = JSONObject(json).optString("remark")
+        !(remark.contains("error", ignoreCase = true) || remark.contains("timed out", ignoreCase = true))
+    }.getOrDefault(false)
+
+    /**
+     * Whether a tile's cache file can be trusted: one written from a checked answer carries
+     * [COMPLETE_MARK]; an older raw answer is fine unless it holds an error remark.
+     */
+    fun cacheOk(json: String): Boolean = runCatching {
+        val o = JSONObject(json)
+        o.optBoolean(COMPLETE_MARK) || (o.has("osm3s") && answerOk(json))
+    }.getOrDefault(false)
+
+    const val COMPLETE_MARK = "impulse_complete"
+
+    /** [roads] back as an Overpass-shaped answer, for one tile's cache file ([parse] reads it). */
+    fun toJson(roads: List<OsmRoad>): String {
+        val elements = org.json.JSONArray()
+        for (r in roads) {
+            val geometry = org.json.JSONArray()
+            for (k in 0 until r.latLon.size / 2) geometry.put(JSONObject().put("lat", r.latLon[2 * k]).put("lon", r.latLon[2 * k + 1]))
+            val tags = JSONObject().put("highway", r.highway)
+            if (r.name.isNotEmpty()) tags.put("name", r.name)
+            if (r.oneway) tags.put("oneway", "yes")
+            elements.put(JSONObject().put("type", "way").put("id", r.id).put("tags", tags).put("geometry", geometry))
+        }
+        return JSONObject().put(COMPLETE_MARK, true).put("elements", elements).toString()
     }
 
     /** Roads in an Overpass `out geom` answer. */
@@ -88,7 +136,7 @@ object OsmRoads {
      * [roads] in the car's frame, in metres: x to the right, y ahead, for a car at [lat], [lon]
      * heading [bearingDeg] (0 = north). Only what lies within [aheadM] ahead (and a little
      * behind) and [sideM] to each side; long segments are split to at most [stepM] so a later
-     * perspective projection can clip them near the car. Each polyline is x, y pairs.
+     * perspective projection can clip them near the car.
      */
     fun toLocal(
         roads: List<OsmRoad>,
@@ -98,15 +146,16 @@ object OsmRoads {
         aheadM: Double,
         sideM: Double,
         stepM: Double
-    ): List<FloatArray> {
+    ): List<LocalRoad> {
         val mLat = M_PER_DEG_LAT
         val mLon = M_PER_DEG_LON_EQ * cos(lat * PI / 180)
         val b = bearingDeg * PI / 180
         val sb = sin(b)
         val cb = cos(b)
         val behindM = 30.0
-        val out = ArrayList<FloatArray>()
+        val out = ArrayList<LocalRoad>()
         for (road in roads) {
+            val width = widthOf(road.highway)
             val n = road.latLon.size / 2
             val run = ArrayList<Float>()
             var px = 0.0
@@ -124,7 +173,7 @@ object OsmRoads {
                         val sx = px + (x - px) * t
                         val sy = py + (y - py) * t
                         if (sy < -behindM || sy > aheadM || abs(sx) > sideM) {
-                            if (run.size >= 4) out += run.toFloatArray()
+                            if (run.size >= 4) out += LocalRoad(run.toFloatArray(), width, road.name)
                             run.clear()
                         } else {
                             run += sx.toFloat(); run += sy.toFloat()
@@ -136,8 +185,49 @@ object OsmRoads {
                 px = x
                 py = y
             }
-            if (run.size >= 4) out += run.toFloatArray()
+            if (run.size >= 4) out += LocalRoad(run.toFloatArray(), width, road.name)
         }
         return out
+    }
+
+    /**
+     * Bearing (degrees, 0 = north) along the nearest street within [maxM] of the point, of its
+     * two directions the one closer to [prefer]; null when none is that close. For a car that
+     * stands still, so GPS gives no heading.
+     */
+    fun roadBearing(roads: List<OsmRoad>, lat: Double, lon: Double, prefer: Double, maxM: Double = 30.0): Double? {
+        val local = toLocal(roads, lat, lon, 0.0, 1_000.0, 1_000.0, 10.0)
+        var best = Double.MAX_VALUE
+        var bearing: Double? = null
+        for (road in local) {
+            if (road.minor) continue
+            for (k in 0 until road.pts.size / 2 - 1) {
+                val ax = road.pts[2 * k].toDouble(); val ay = road.pts[2 * k + 1].toDouble()
+                val bx = road.pts[2 * k + 2].toDouble(); val by = road.pts[2 * k + 3].toDouble()
+                val dx = bx - ax; val dy = by - ay
+                val len2 = dx * dx + dy * dy
+                if (len2 <= 0.0) continue
+                val t = (-(ax * dx + ay * dy) / len2).coerceIn(0.0, 1.0)
+                val d = hypot(ax + dx * t, ay + dy * t)
+                if (d < best && d <= maxM) {
+                    best = d
+                    bearing = Math.toDegrees(kotlin.math.atan2(dx, dy))
+                }
+            }
+        }
+        val b = bearing ?: return null
+        // The two directions along the street: the one nearer [prefer].
+        fun diff(x: Double) = abs(((x - prefer) % 360 + 540) % 360 - 180)
+        val other = (b + 180) % 360
+        return if (diff(b) <= diff(other)) (b + 360) % 360 else other
+    }
+
+    /** Drawn width relative to the route's: avenues wider, driveways narrower. */
+    fun widthOf(highway: String): Float = when (highway) {
+        "motorway", "trunk" -> 1.5f
+        "primary" -> 1.3f
+        "secondary", "tertiary" -> 1.15f
+        "service" -> 0.55f
+        else -> if (highway.endsWith("_link")) 0.8f else 1f
     }
 }

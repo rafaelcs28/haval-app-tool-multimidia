@@ -1,5 +1,6 @@
 package br.com.redesurftank.havalshisuku.managers
 
+import br.com.redesurftank.havalshisuku.BuildConfig
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -26,7 +27,7 @@ object AndroidAutoHardKeyPolicyBridge {
     private const val EXTRA_TARGET_DISPLAY = "targetDisplay"
     private const val EXTRA_TOKEN = "token"
     private const val EXTRA_MEDIA_BUTTON = "mediaButton"
-    private const val TOKEN = "impulse-aa-media-v1"
+    private val TOKEN: String get() = BuildConfig.AA_HARDKEY_TOKEN.trim()
     private const val RESULT_DISPATCHED = 1
     private const val ACK_TIMEOUT_MS = 900L
 
@@ -37,6 +38,7 @@ object AndroidAutoHardKeyPolicyBridge {
         reason: String
     ): Boolean =
         withContext(Dispatchers.IO) {
+            if (TOKEN.isEmpty()) return@withContext false
             if (!isSupportedHardKey(keyCode)) {
                 Log.w(TAG, "[$reason] Unsupported patched Android Auto hardkey keyCode=$keyCode")
                 return@withContext false
@@ -123,6 +125,7 @@ object AndroidAutoHardKeyPolicyBridge {
      * kept going to YouTube. The AA App patch (v3.4) takes the buttons exclusively on claim.
      */
     fun sendMediaButtonOwnership(context: Context, claim: Boolean, reason: String) {
+        if (TOKEN.isEmpty()) return
         val intent =
             Intent(ACTION_MEDIA_COMMAND).apply {
                 setPackage(ANDROID_AUTO_PACKAGE)

@@ -7,6 +7,8 @@ import android.util.Log
 import android.view.Surface
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.api.AaClusterProtocol
+import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
+import br.com.redesurftank.havalshisuku.models.CarConstants
 import br.com.redesurftank.havalshisuku.projectors.AaClusterVideoHost
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -33,12 +35,22 @@ object AndroidAutoClusterController {
     private val surfaceAttached = AtomicBoolean(false)
     private var deliveredGeneration = -1L // main-thread Surface lifecycle token
     private var deliveredDemandEpoch = -1L
+    private var liveSinceMs = 0L
+    private var recoveryInFlight = false
+    private var recoveryCount = 0
+    private var lastRecoveryAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val client by lazy {
         AndroidAutoClusterClient(App.getContext()) { state, reason ->
             val live = state == AaClusterProtocol.LIVE && wantsOutput() &&
                 AaClusterVideoHost.peekSurface()?.isValid == true
-            surfaceAttached.set(live)
+            val wasLive = surfaceAttached.getAndSet(live)
+            if (live) {
+                if (!wasLive) liveSinceMs = SystemClock.elapsedRealtime()
+                recoveryInFlight = false
+            } else {
+                liveSinceMs = 0L
+            }
             AaClusterVideoHost.setLive(live)
             notifyHostProjectionFlag(live)
             Log.w(TAG, "CLUSTER state=$state live=$live reason=$reason")
@@ -57,6 +69,7 @@ object AndroidAutoClusterController {
             if (next != null) {
                 onLinkStatus(next)
             }
+            checkClusterStreamHealth()
             mainHandler.postDelayed(this, 1_500L)
         }
     }
@@ -177,6 +190,10 @@ object AndroidAutoClusterController {
         if (clusterRequested.getAndSet(false)) demandEpoch.incrementAndGet()
         mainHandler.removeCallbacks(navigationEndedRunnable)
         navigationActive.set(false)
+        liveSinceMs = 0L
+        recoveryInFlight = false
+        recoveryCount = 0
+        lastRecoveryAtMs = 0L
         detachSurface("session_stopped")
         br.com.redesurftank.havalshisuku.hud.HudOverlayController.onDirections(AndroidAutoNavigationTelemetry.inactive())
         directionsPublisher.reset()
@@ -264,6 +281,56 @@ object AndroidAutoClusterController {
         mainHandler.post {
             reconcileOutput(reason)
         }
+    }
+
+    private fun checkClusterStreamHealth() {
+        if (!surfaceAttached.get() || !wantsOutput() || recoveryInFlight) return
+
+        val nowMs = SystemClock.elapsedRealtime()
+        val lastFrameAtMs = AaClusterVideoHost.lastFrameElapsedRealtimeMs()
+        val speedKmh = ServiceManager.getInstance()
+            .getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
+            ?.replace(',', '.')
+            ?.toFloatOrNull()
+        if (!AndroidAutoClusterStreamHealth.shouldRecover(
+                nowMs = nowMs,
+                liveSinceMs = liveSinceMs,
+                lastFrameAtMs = lastFrameAtMs,
+                lastRecoveryAtMs = lastRecoveryAtMs,
+                recoveryCount = recoveryCount,
+                speedKmh = speedKmh
+            )) return
+
+        val surface = AaClusterVideoHost.peekOutput() ?: return
+        val frameAgeMs = nowMs - maxOf(liveSinceMs, lastFrameAtMs)
+        recoveryInFlight = true
+        recoveryCount++
+        lastRecoveryAtMs = nowMs
+        demandEpoch.incrementAndGet()
+        deliveredGeneration = -1L
+        surfaceAttached.set(false)
+        AaClusterVideoHost.setLive(false)
+        notifyHostProjectionFlag(false)
+        Log.w(
+            TAG,
+            "CLUSTER frame stall ageMs=$frameAgeMs speedKmh=$speedKmh recovery=$recoveryCount; recycling output"
+        )
+        ClusterPersistentEventLogger.log(
+            "aa_cluster_frame_stall_recovery",
+            mapOf(
+                "frame_age_ms" to frameAgeMs,
+                "speed_kmh" to speedKmh,
+                "recovery_count" to recoveryCount
+            )
+        )
+        client.setOutput(null)
+        mainHandler.postDelayed({
+            if (wantsOutput() && surface.isAvailable) {
+                reconcileOutput("frame_stall_recovery")
+            } else {
+                recoveryInFlight = false
+            }
+        }, 250L)
     }
 
     private fun notifyHostProjectionFlag(enabled: Boolean) {

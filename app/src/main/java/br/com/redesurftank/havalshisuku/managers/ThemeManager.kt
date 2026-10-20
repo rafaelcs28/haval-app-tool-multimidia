@@ -51,7 +51,7 @@ class ThemeManager private constructor(val context: Context) {
 
         private val TRUSTED_LEGACY_SPORT_METADATA = mapOf(
             "sportred" to TrustedLegacySportMetadata("Sport Colors", "0.16.44"),
-            "sportredlite" to TrustedLegacySportMetadata("Sport Colors Leve", "0.16.44")
+            "sportredlite" to TrustedLegacySportMetadata("Sport Colors Leve", "0.16.216")
         )
 
         private val TRUSTED_LEGACY_SPORT_HASHES = mapOf(
@@ -61,11 +61,22 @@ class ThemeManager private constructor(val context: Context) {
                 "thumbnail.png" to "33b048b571cf8d6d11dc14fe328aeb3115adf0ff7b0e12f82017f29e424dd0c6"
             ),
             "sportredlite" to mapOf(
-                "index.html" to "9a5ced2244f589c78fba3b3cca2b1f2c4f67739d41a251b66da93418d9c8c630",
-                "theme.xml" to "f8a7330ad7dcf32bf37151a5c06483d8fc44208ad8981539d4e17e79526f2a7b",
-                "thumbnail.png" to "33b048b571cf8d6d11dc14fe328aeb3115adf0ff7b0e12f82017f29e424dd0c6"
+                "NOTICE-VOLTDASH.md" to "6d73cb96874607dd4ddc8fdd6328b6f759b4c6abda59fc5e6d5254ec9b73f7f7",
+                "carro3d-aro-gt.js" to "38bfb1a1a0b063e2f2a7008f2a212868780e3180ed9da281997b001a070ed7ba",
+                "carro3d-aro-hev.js" to "15aa5078c4ba250858645f86e3488b51e62345196fa7da7c9c8bf31e3f59efd9",
+                "carro3d-aro-phev19.js" to "18516b4805f4a6d4b869fbbaa9c84acd8bd5c14b13b192d496d4f38449fd88b6",
+                "carro3d-aro-phev34.js" to "9063f3f7126e74417576a1cabfb38e2f8a65ea98dd763e2db67c84c96b3c8a71",
+                "carro3d-gt.js" to "5b19d0b5e861de7d262d8a70943668a0d185b70df8e31388cc41f6a048d3f68d",
+                "carro3d-h6.js" to "0d3d41f610c035efea2de080b6089d7ba38939106f3c24c259bfc2adba9e903d",
+                "carro3d-motor.js" to "48e9aa88a952d4590b3c0d39b1dec4f5487316b39280231b610e30a17e354a6b",
+                "index.html" to "6cd124a06b975de1c0b8603507003bdf44016b6b491c594cbe90ae907a18de14",
+                "theme.xml" to "a3956421c421e9cacc077f81cc95648be4b6e4cc873c13212e43c2ddbbba6b5a",
+                "thumbnail.png" to "33b048b571cf8d6d11dc14fe328aeb3115adf0ff7b0e12f82017f29e424dd0c6",
+                "ver.html" to "45edc2a395b9bae59b400d8476c76de055c5cc2f6fcc23c65f3bf4a7f53f15c3"
             )
         )
+
+        private const val BUNDLED_SPORT_RED_LITE_FOLDER = "SportRedLite"
 
         /** HttpURLConnection defaults to no timeout at all, so a stalled car connection
          *  would spin the refresh indicator forever with nothing shown to the user. */
@@ -323,8 +334,55 @@ class ThemeManager private constructor(val context: Context) {
             )
             return false
         }
+        ensureBundledSportRedLiteInstalled()
         sanitizeActiveThemeContract()
         return true
+    }
+
+    private fun ensureBundledSportRedLiteInstalled(): Boolean {
+        val expectedFiles = TRUSTED_LEGACY_SPORT_HASHES["sportredlite"] ?: return false
+        val destination = resolveThemeDirectory(BUNDLED_SPORT_RED_LITE_FOLDER) ?: return false
+        if (hasTrustedLegacySportFiles(destination, expectedFiles)) return true
+
+        val staging = File(themesDir, ".staging-bundled-sportredlite-${System.nanoTime()}")
+        val backup = File(themesDir, ".backup-bundled-sportredlite-${System.nanoTime()}")
+        var destinationBackedUp = false
+        return try {
+            if (!staging.mkdirs()) return false
+            expectedFiles.keys.forEach { fileName ->
+                context.assets.open("$BUNDLED_SPORT_RED_LITE_FOLDER/$fileName").use { input ->
+                    FileOutputStream(File(staging, fileName)).use { output -> input.copyTo(output) }
+                }
+            }
+            if (!hasTrustedLegacySportFiles(staging, expectedFiles)) {
+                Log.e(TAG, "Bundled SportRedLite package failed integrity validation")
+                return false
+            }
+            if (destination.exists()) {
+                if (!destination.renameTo(backup)) {
+                    Log.e(TAG, "Unable to back up existing SportRedLite theme")
+                    return false
+                }
+                destinationBackedUp = true
+            }
+            if (!staging.renameTo(destination)) {
+                if (destinationBackedUp) backup.renameTo(destination)
+                Log.e(TAG, "Unable to activate bundled SportRedLite theme")
+                return false
+            }
+            if (backup.exists()) backup.deleteRecursively()
+            ClusterPersistentEventLogger.log(
+                "bundled_theme_installed",
+                mapOf("folder" to BUNDLED_SPORT_RED_LITE_FOLDER, "version" to "0.16.216")
+            )
+            true
+        } catch (error: Exception) {
+            Log.e(TAG, "Unable to install bundled SportRedLite theme", error)
+            if (destinationBackedUp && !destination.exists()) backup.renameTo(destination)
+            false
+        } finally {
+            if (staging.exists()) staging.deleteRecursively()
+        }
     }
 
     fun sanitizeActiveThemeContract(@Suppress("UNUSED_PARAMETER") context: Context? = null) {

@@ -65,11 +65,15 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private val PROJECTION_D3_FALSE_NEGATIVE_HOLD_MS = 12_000L
     private val PERF_HEARTBEAT_INTERVAL_MS = 60_000L
     /** How long a warning must have been standing before BACK is allowed to dismiss it, so
-     *  a BACK press already in flight cannot swallow a warning the driver never saw. */
-    private val WARNING_DISMISS_LOCKOUT_MS = 2500L
+     *  a BACK press already in flight cannot swallow a warning the driver never saw. Matches
+     *  the car's own cooldown; see ClusterWarningPolicy.DISMISS_LOCKOUT_MS. */
+    private val WARNING_DISMISS_LOCKOUT_MS = ClusterWarningPolicy.DISMISS_LOCKOUT_MS
     /** Grace period before the layout follows a warning that cleared by itself, so it does
      *  not snap back while the car's own popup is still finishing its own close. */
     private val WARNING_CLEAR_HOLDOFF_MS = 2000L
+
+    /** Cap on the traced alarm-list payload, so one line stays readable. */
+    private val ALARM_LIST_TRACE_MAX_CHARS = 400
     /** Mask crossfade when an app/map hole opens or closes; in step with the theme's own fades. */
     private val MASK_FADE_MS = 300L
     private val MAX_PENDING_JS_COMMANDS = 250
@@ -148,6 +152,33 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private val dismissedCards: MutableSet<String> =
             java.util.Collections.newSetFromMap(
                     java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+    /**
+     * What every key behind each acknowledged card read when it was dismissed. Saved with the boot
+     * identity so a mid-drive restart can tell the same standing condition from a new one; see
+     * ClusterWarningPolicy.dismissalsToRestore.
+     */
+    private val dismissedCardSnapshots =
+            java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
+    /** Elapsed-realtime ms each gate lamp was last seen lit; see ClusterWarningPolicy.LAMP_OFF_LATCH_MS. */
+    private val lampLastLitAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /**
+     * Re-judges the badge once a lamp's latch has run out. A lamp that stays dark sends no more
+     * telemetry, so without this a gated vector would keep the label up until some other key moved.
+     */
+    private val lampLatchExpired = Runnable {
+        for (cardId in dismissedCards.toList()) {
+            if (!isCardConditionStanding(cardId)) {
+                dismissedCards.remove(cardId)
+                dismissedCardSnapshots.remove(cardId)
+            }
+        }
+        persistDismissals()
+        recomputeWarningState("LAMP_LATCH_EXPIRED")
+    }
+    /** Saved acknowledgements read back once; null until loaded. */
+    private var savedDismissals: List<ClusterWarningPolicy.SavedDismissal>? = null
+    private var savedDismissalsSameBoot = false
+    private var dismissalsRestored = false
     override var isWarningDismissed = false
     private var lastWarningActiveTime = 0L
     /** Last value seen per monitored warning key, so a re-emission of an unchanged value
@@ -1503,6 +1534,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         handler.removeCallbacks(clockRunnable)
         handler.removeCallbacks(watchdogRunnable)
         cancelPendingWarningClear()
+        handler.removeCallbacks(lampLatchExpired)
         handler.removeCallbacks(mediaRunnable)
         clearPendingSportTelemetryBatch()
         tsrJob?.cancel()
@@ -1565,6 +1597,27 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     }
 
     private fun handleDataChanged(key: String, value: String) {
+
+            // Trace only, changes nothing. car.ipk_setting.alarm_his_info_list is the cluster's own
+            // list of active warnings (Msg_IP_Notification_Important_NNN — BeanAdapterService
+            // enumerates 001..118). The badge reconstructs that list from individual CAN keys and
+            // gets it wrong both ways: on 2026-10-19 a per-wheel tyre vector stayed set whether or
+            // not the car was showing its card. Log every change so the IDs can be matched against
+            // the keys that move with them.
+            if (key == CarConstants.CAR_IPK_SETTING_ALARM_HIS_INFO_LIST.value &&
+                            value != lastTracedAlarmList
+            ) {
+                logClusterPerfEvent(
+                        "alarm_list_changed",
+                        mapOf(
+                                "value" to value.take(ALARM_LIST_TRACE_MAX_CHARS),
+                                "previous" to
+                                        (lastTracedAlarmList?.take(ALARM_LIST_TRACE_MAX_CHARS)
+                                                ?: "none")
+                        )
+                )
+                lastTracedAlarmList = value
+            }
 
             if (isNativeProjectionPanelKey(key)) {
                 ensureUi {
@@ -1775,6 +1828,22 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     val currentValue = value?.toString() ?: "0"
                     val cardId = ClusterWarningPolicy.cardIdFor(key)
                     val cardWasStanding = isCardConditionStanding(cardId)
+                    if (key in ClusterWarningPolicy.vectorLampGates.values) {
+                        // Stamp before the new value lands: a blink's dark phase must still read
+                        // as lit, or it looks like the warning clearing and drops the dismissal.
+                        if (ClusterWarningPolicy.isWarningValueActive(currentWarningValue(key)) ||
+                                        ClusterWarningPolicy.isWarningValueActive(currentValue)
+                        ) {
+                            lampLastLitAt[key] = SystemClock.elapsedRealtime()
+                        }
+                        handler.removeCallbacks(lampLatchExpired)
+                        if (!ClusterWarningPolicy.isWarningValueActive(currentValue)) {
+                            handler.postDelayed(
+                                    lampLatchExpired,
+                                    ClusterWarningPolicy.LAMP_OFF_LATCH_MS + 100
+                            )
+                        }
+                    }
                     trackWarningOnset(key, currentValue)
                     val cardStanding = isCardConditionStanding(cardId)
 
@@ -1787,6 +1856,8 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     if (cardId in dismissedCards && !cardStanding) {
                         Log.d(TAG, "Card $cardId cleared; acknowledgement dropped")
                         dismissedCards.remove(cardId)
+                        dismissedCardSnapshots.remove(cardId)
+                        persistDismissals()
                     }
 
                     // A different card newly rising is another matter: the car brings the
@@ -1801,6 +1872,8 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                 )
                         if (rearmed.isNotEmpty()) {
                             dismissedCards.removeAll(rearmed)
+                            rearmed.forEach { dismissedCardSnapshots.remove(it) }
+                            persistDismissals()
                             logClusterPerfEvent(
                                     "warning_rearm",
                                     mapOf(
@@ -2324,6 +2397,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
      */
     private fun syncInitialWarnings() {
         val webView = this.webView ?: return
+        restoreDismissalsIfDue()
 
         for (key in monitoredWarningKeys) {
             // Momentary alerts reach the theme from live telemetry only — never replayed
@@ -2351,6 +2425,8 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
      * lists to drift apart. The backend owns it now; themes render what they are told.
      */
     private fun recomputeWarningState(reason: String, immediate: Boolean = false) {
+        // Retried here because theme load can come before the car connection has any values.
+        restoreDismissalsIfDue()
         refreshWarningCardTopAnchor()
         val active = unacknowledgedBadgeWarnings().isNotEmpty()
 
@@ -2456,7 +2532,16 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                             }
                                             .take(10)
                                             .joinToString("|")
-                                            .ifEmpty { "none" }
+                                            .ifEmpty { "none" },
+                            // Vectors reading active while their lamp is dark, so a badge the
+                            // gate held back is never silent.
+                            "gated" to
+                                    ClusterWarningPolicy.lampGatedKeys(::currentWarningValue, ::isLampLit)
+                                            .joinToString("|")
+                                            .ifEmpty { "none" },
+                            // Trace only: what the car itself says is active, next to what the
+                            // CAN keys above made of it.
+                            "alarmList" to alarmListForTrace()
                     )
             )
             val postPushWorkStartedAt = SystemClock.elapsedRealtime()
@@ -2576,12 +2661,132 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     private fun currentWarningValue(key: String): String? =
             lastWarningValues[key] ?: ServiceManager.getInstance().getData(key)
 
+    /** Android's boot counter; -1 when unavailable, which restores nothing. */
+    private fun currentBootCount(): Int =
+            runCatching {
+                        android.provider.Settings.Global.getInt(
+                                outerContext.contentResolver,
+                                android.provider.Settings.Global.BOOT_COUNT,
+                                -1
+                        )
+                    }
+                    .getOrDefault(-1)
+
+    /** Save the current acknowledgements, tagged with this boot. */
+    private fun persistDismissals() {
+        val cards = JSONObject()
+        for ((cardId, values) in dismissedCardSnapshots) {
+            if (cardId in dismissedCards) cards.put(cardId, JSONObject(values))
+        }
+        val json =
+                JSONObject()
+                        .put("bootCount", currentBootCount())
+                        .put("elapsedMs", SystemClock.elapsedRealtime())
+                        .put("cards", cards)
+        preferences
+                .edit()
+                .putString(SharedPreferencesKeys.CLUSTER_WARNING_DISMISSED_CARDS.key, json.toString())
+                .apply()
+    }
+
+    /**
+     * Bring back acknowledgements made before the app restarted, once per process.
+     *
+     * Waits until every saved key has a value: right after a restart the car connection may not
+     * be up yet, and judging then would read every key as missing and restore nothing for good.
+     */
+    private fun restoreDismissalsIfDue() {
+        if (dismissalsRestored) return
+        val saved = savedDismissals ?: loadSavedDismissals().also { savedDismissals = it }
+        if (saved.isEmpty() || !savedDismissalsSameBoot) {
+            dismissalsRestored = true
+            if (saved.isNotEmpty()) logDismissalRestore(saved, emptySet())
+            return
+        }
+        if (saved.any { dismissal -> dismissal.values.keys.any { currentWarningValue(it) == null } }) {
+            return
+        }
+        dismissalsRestored = true
+        val restored = ClusterWarningPolicy.dismissalsToRestore(saved, true, ::currentWarningValue)
+        for (dismissal in saved) {
+            if (dismissal.cardId !in restored) continue
+            dismissedCards.add(dismissal.cardId)
+            dismissedCardSnapshots[dismissal.cardId] = dismissal.values
+        }
+        logDismissalRestore(saved, restored)
+        // Rewrite, so a card that did not survive is not offered again.
+        persistDismissals()
+    }
+
+    private fun loadSavedDismissals(): List<ClusterWarningPolicy.SavedDismissal> {
+        val raw =
+                preferences.getString(SharedPreferencesKeys.CLUSTER_WARNING_DISMISSED_CARDS.key, null)
+                        ?: return emptyList()
+        return runCatching {
+                    val json = JSONObject(raw)
+                    savedDismissalsSameBoot =
+                            ClusterWarningPolicy.isSameBoot(
+                                    json.optInt("bootCount", -1),
+                                    json.optLong("elapsedMs", Long.MAX_VALUE),
+                                    currentBootCount(),
+                                    SystemClock.elapsedRealtime()
+                            )
+                    val cards = json.optJSONObject("cards") ?: JSONObject()
+                    cards.keys().asSequence().map { cardId ->
+                        val values = cards.getJSONObject(cardId)
+                        ClusterWarningPolicy.SavedDismissal(
+                                cardId,
+                                values.keys().asSequence().associateWith { values.getString(it) }
+                        )
+                    }.toList()
+                }
+                .getOrElse {
+                    Log.w(TAG, "Saved warning dismissals unreadable; ignoring", it)
+                    emptyList()
+                }
+    }
+
+    private fun logDismissalRestore(
+            saved: List<ClusterWarningPolicy.SavedDismissal>,
+            restored: Set<String>
+    ) {
+        logClusterPerfEvent(
+                "warning_dismissals_restored",
+                mapOf(
+                        "saved" to saved.joinToString("|") { it.cardId },
+                        "restored" to restored.joinToString("|").ifEmpty { "none" },
+                        "sameBoot" to savedDismissalsSameBoot
+                )
+        )
+    }
+
+    /** The lamp is lit now, or was within ClusterWarningPolicy.LAMP_OFF_LATCH_MS. */
+    private fun isLampLit(lamp: String): Boolean =
+            ClusterWarningPolicy.isLampLitWithLatch(
+                    currentWarningValue(lamp),
+                    lampLastLitAt[lamp],
+                    SystemClock.elapsedRealtime()
+            )
+
+    /** Last alarm-list value traced, so the car re-emitting an unchanged list logs nothing. */
+    @Volatile private var lastTracedAlarmList: String? = null
+
+    /**
+     * The car's alarm list for a trace line. Live, not a first-read snapshot: the key is in
+     * ServiceManager.DEFAULT_KEYS, so every change the car pushes refreshes the cache this reads.
+     */
+    private fun alarmListForTrace(): String =
+            ServiceManager.getInstance()
+                    .getData(CarConstants.CAR_IPK_SETTING_ALARM_HIS_INFO_LIST.value)
+                    ?.take(ALARM_LIST_TRACE_MAX_CHARS)
+                    ?: "null"
+
     /** Warnings the driver can currently see and has not acknowledged, newest first. */
     private fun unacknowledgedBadgeWarnings(): List<Pair<String, String>> {
         return monitoredWarningKeys
                 .mapNotNull { key -> currentWarningValue(key)?.let { key to it } }
                 .filter { (key, value) ->
-                    ClusterWarningPolicy.raisesWarningBadge(key, value) &&
+                    ClusterWarningPolicy.raisesWarningBadge(key, value, ::isLampLit) &&
                             ClusterWarningPolicy.cardIdFor(key) !in dismissedCards
                 }
                 .sortedByDescending { (key, _) -> warningOnsetTimes[key] ?: 0L }
@@ -2618,7 +2823,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
     /** True while any key behind [cardId] still reports an active value. */
     private fun isCardConditionStanding(cardId: String): Boolean =
             ClusterWarningPolicy.cardKeysFor(cardId).any { key ->
-                ClusterWarningPolicy.raisesWarningBadge(key, currentWarningValue(key))
+                ClusterWarningPolicy.raisesWarningBadge(key, currentWarningValue(key), ::isLampLit)
             }
 
     private fun getClusterFuelDisplayUnit(): String {
@@ -3757,6 +3962,9 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     mapOf(
                             "card" to cardId,
                             "cardsShowing" to cardsShowing,
+                            // Trace only: [cardId] is inferred from CAN keys; this is the car's own
+                            // list at the moment of the press, so a mismatch is visible.
+                            "alarmList" to alarmListForTrace(),
                             "timeSinceWarningMs" to timeSinceWarning,
                             "keyOnsetAgeMs" to
                                     (keyOnsetMs?.let { System.currentTimeMillis() - it } ?: -1L),
@@ -3764,7 +3972,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                                     (topSinceMs?.let { System.currentTimeMillis() - it } ?: -1L)
                     )
             )
-            if (timeSinceWarning < WARNING_DISMISS_LOCKOUT_MS) {
+            if (ClusterWarningPolicy.isDismissLockedOut(timeSinceWarning)) {
                 Log.w(
                         TAG,
                         "DISMISS_WARNING ignored: card=$cardId timeSinceWarning=${timeSinceWarning}ms < ${WARNING_DISMISS_LOCKOUT_MS}ms lockout"
@@ -3785,6 +3993,11 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             }
 
             dismissedCards.add(cardId)
+            dismissedCardSnapshots[cardId] =
+                    ClusterWarningPolicy.cardKeysFor(cardId).associateWith {
+                        currentWarningValue(it) ?: ""
+                    }
+            persistDismissals()
             Log.d(TAG, "dismissWarnings: acknowledged card=$cardId; ${cardsShowing - 1} card(s) still showing")
             // No hold-off here: that card closes with the same BACK press.
             recomputeWarningState("DISMISS", immediate = true)

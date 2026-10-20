@@ -13,6 +13,7 @@ import android.graphics.SurfaceTexture
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.Surface
@@ -26,6 +27,7 @@ import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
 import br.com.redesurftank.havalshisuku.managers.ClusterSurfaceOutput
 import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicLong
 
 /** D3 video under the existing masks/WebView, with retained consumer ownership. */
 object AaClusterVideoHost {
@@ -60,6 +62,7 @@ object AaClusterVideoHost {
     private var mapLayer: MapLayer? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val lastFrameAtMs = AtomicLong()
 
     /** Map fade in once frames flow, and out before it hides; matches the D3 mask crossfade. */
     private const val MAP_FADE_MS = 300L
@@ -150,6 +153,7 @@ object AaClusterVideoHost {
         aboveRef = null
         shown = false
         live = false
+        lastFrameAtMs.set(0L)
         generation++
         mapLayer?.let { parent?.removeView(it) }
         mapLayer = null
@@ -182,6 +186,7 @@ object AaClusterVideoHost {
             mainHandler.post { setLive(isLive) }
             return
         }
+        if (!isLive) lastFrameAtMs.set(0L)
         if (live == isLive) return
         live = isLive
         if (isLive && shown) {
@@ -193,6 +198,7 @@ object AaClusterVideoHost {
         val wasShown = shown
         shown = false
         live = false
+        lastFrameAtMs.set(0L)
         val view = textureView
         if (!wasShown || view == null || view.visibility != View.VISIBLE) {
             view?.visibility = View.GONE
@@ -216,6 +222,7 @@ object AaClusterVideoHost {
         layerViews().forEach { it.alpha = alpha }
     }
     fun isShown(): Boolean = shown
+    fun lastFrameElapsedRealtimeMs(): Long = lastFrameAtMs.get()
     fun peekSurface(): Surface? = output?.takeIf { it.isAvailable }?.surface
     internal fun peekOutput(): ClusterSurfaceOutput? = output?.takeIf { it.isAvailable }
     internal fun surfaceGeneration(): Long = generation
@@ -283,7 +290,9 @@ object AaClusterVideoHost {
             return false
         }
         override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
-            // Framework RenderThread owns updateTexImage and GL attachment.
+            if (texture === currentTexture && view === textureView) {
+                lastFrameAtMs.set(SystemClock.elapsedRealtime())
+            }
         }
     }
 

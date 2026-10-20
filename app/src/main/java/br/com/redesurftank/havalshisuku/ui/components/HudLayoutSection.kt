@@ -4,6 +4,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import br.com.redesurftank.havalshisuku.hud.PreviewFocus
+import br.com.redesurftank.havalshisuku.hud.previewFocusIndex
 import br.com.redesurftank.havalshisuku.hud.previewScenarios
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
@@ -27,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -124,25 +127,41 @@ fun HudLayoutSection(modifier: Modifier = Modifier) {
 
 /** How long each sample scenario stays up in a preview before the next one fades in. */
 private const val PREVIEW_CYCLE_MS = 3_000L
+/** After a settings change: the focused example is held this long before cycling again. */
+private const val PREVIEW_FOCUS_HOLD_MS = 4_000L
+/** ...and the change shows this long after the preview moved to it (owner: ~300 ms). */
+private const val PREVIEW_APPLY_DELAY_MS = 300L
 
 /**
  * The layout preview, cycling through its sample scenarios (town turn, highway exit, roundabout
  * regen...) with a crossfade. Bitmaps are rendered once per [config] by the HUD's own renderer.
  */
 @Composable
-private fun HudPreview(config: HudOverlayModel.Config, description: String, modifier: Modifier = Modifier) {
+private fun HudPreview(
+    config: HudOverlayModel.Config,
+    description: String,
+    modifier: Modifier = Modifier,
+    focus: Int? = null,
+    focusTick: Int = 0
+) {
     val frames = remember(config) {
         val renderer = HudOverlayRenderer()
         previewScenarios(config.layout).map { renderer.preview(config, it).asImageBitmap() }
     }
-    var index by remember(config) { mutableIntStateOf(0) }
-    LaunchedEffect(frames) {
+    var index by remember { mutableIntStateOf(0) }
+    // A settings change: jump to the example that shows it (the dialog applies it ~300 ms later).
+    LaunchedEffect(focusTick) {
+        if (focusTick > 0 && focus != null) index = focus.coerceIn(0, frames.size - 1)
+    }
+    LaunchedEffect(frames.size, focusTick) {
+        // Hold the focused example a while, then cycle again.
+        if (focusTick > 0) delay(PREVIEW_FOCUS_HOLD_MS)
         while (true) {
             delay(PREVIEW_CYCLE_MS)
             index = (index + 1) % frames.size
         }
     }
-    Crossfade(targetState = index, animationSpec = tween(600), label = "hudPreview", modifier = modifier) { i ->
+    Crossfade(targetState = index.coerceIn(0, frames.size - 1), animationSpec = tween(600), label = "hudPreview", modifier = modifier) { i ->
         Image(
             bitmap = frames[i],
             contentDescription = description,
@@ -210,7 +229,7 @@ private fun HudLayoutCard(
 }
 
 /** Tabs of the Navegação settings dialog. */
-private enum class HudSettingsTab(val title: String) { NAVIGATION("Navegação"), ARROW("Seta AR"), BARS("Barras") }
+private enum class HudSettingsTab(val title: String) { NAVIGATION("Navegação"), ARROW("Seta AR"), BARS("Indicadores") }
 
 /**
  * Wide two-pane dialog for the 1920x720 head unit: the options on the left split into tabs so
@@ -225,6 +244,28 @@ private fun HudNavigationSettingsDialog(
     onDismiss: () -> Unit
 ) {
     var tab by remember { mutableStateOf(HudSettingsTab.NAVIGATION) }
+    // The preview shows [shown]: a change is saved at once, but the preview first moves to the
+    // example where it is visible and applies it ~300 ms later (owner), so it reads as a change.
+    var shown by remember { mutableStateOf(config) }
+    var focus by remember { mutableStateOf<Int?>(null) }
+    var focusTick by remember { mutableIntStateOf(0) }
+    var pending by remember { mutableStateOf<HudOverlayModel.Config?>(null) }
+    LaunchedEffect(focusTick) {
+        val next = pending ?: return@LaunchedEffect
+        delay(PREVIEW_APPLY_DELAY_MS)
+        shown = next
+        pending = null
+    }
+    fun change(next: HudOverlayModel.Config, what: PreviewFocus? = null) {
+        onChange(next)
+        if (what == null) {
+            shown = next
+        } else {
+            focus = previewFocusIndex(layout, what)
+            pending = next
+            focusTick++
+        }
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(
             modifier = Modifier.fillMaxWidth(0.82f).padding(16.dp),
@@ -256,80 +297,89 @@ private fun HudNavigationSettingsDialog(
                         Spacer(Modifier.height(8.dp))
                         when (tab) {
                             HudSettingsTab.NAVIGATION -> {
-                                OptionRow("Mostrar navegação", "Seta, distância e faixas enquanto o Android Auto guia.", config.navigation) {
-                                    onChange(config.copy(navigation = it))
-                                }
+                                OptionRow(
+                                    "Mostrar navegação",
+                                    "Seta, distância e faixas do Android Auto.",
+                                    config.navigation,
+                                    info = "Mostra a próxima manobra enquanto o Android Auto está guiando: seta, distância, faixas e a rua."
+                                ) { change(config.copy(navigation = it)) }
                                 // The AR arrow already shows distance by itself (straight when far).
                                 if (layout != HudOverlayModel.Layout.AR) {
                                     OptionRow(
                                         "Seta menor quando longe",
-                                        "Seta pequena até faltar 1 km para a manobra; depois fica grande.",
+                                        "Pequena até faltar 1 km.",
                                         config.smallArrowWhenFar,
-                                        enabled = config.navigation
-                                    ) { onChange(config.copy(smallArrowWhenFar = it)) }
+                                        enabled = config.navigation,
+                                        info = "A seta fica pequena até faltar 1 km para a manobra; depois fica grande."
+                                    ) { change(config.copy(smallArrowWhenFar = it), PreviewFocus.FAR) }
                                 }
                                 OptionRow(
                                     "Distância e tempo restantes",
-                                    "Quanto falta até o destino, ex.: 4.8 km · 12 min.",
+                                    "Até o destino, ex.: 4.8 km · 12 min.",
                                     config.trip,
                                     enabled = config.navigation
-                                ) { onChange(config.copy(trip = it)) }
+                                ) { change(config.copy(trip = it)) }
                             }
                             HudSettingsTab.ARROW -> {
-                                OptionRow(
-                                    "Seta à direita, entre as linhas de faixa",
-                                    "Seta menor sobre as linhas do assistente de faixa do HUD; desligado, no centro sob a velocidade.",
-                                    config.arPlacement == HudArArrow.Placement.RIGHT,
-                                    enabled = config.navigation
-                                ) {
-                                    onChange(config.copy(arPlacement = if (it) HudArArrow.Placement.RIGHT else HudArArrow.Placement.CENTER))
-                                }
+                                ChoiceRow(
+                                    "Tipo das setas",
+                                    "Onde fica a seta azul.",
+                                    listOf("Ao centro", "À direita"),
+                                    if (config.arPlacement == HudArArrow.Placement.RIGHT) 1 else 0,
+                                    enabled = config.navigation,
+                                    info = "Ao centro: sob a velocidade do carro. À direita: menor, entre as linhas do assistente de faixa do HUD."
+                                ) { change(config.copy(arPlacement = if (it == 1) HudArArrow.Placement.RIGHT else HudArArrow.Placement.CENTER), PreviewFocus.ARROW) }
                                 OptionRow(
                                     "Ruas do mapa (beta)",
-                                    "Ruas reais em volta do carro, em cinza claro, do OpenStreetMap. Usa o GPS e baixa a região (~1 km) pela internet do celular.",
+                                    "Ruas reais em cinza, rota em azul.",
                                     config.mapStreets,
-                                    enabled = config.navigation
-                                ) { onChange(config.copy(mapStreets = it)) }
+                                    enabled = config.navigation,
+                                    info = "Troca as setas pelo mapa: ruas reais em volta do carro em cinza e a rota em azul sobre elas, até onde dá para desenhar. Usa o GPS e o OpenStreetMap (baixado pela internet do celular)."
+                                ) { change(config.copy(mapStreets = it)) }
                                 OptionRow(
-                                    "Setas animadas na curva",
-                                    "Setas azuis acima da velocidade a partir de 120 m; deslizam para o lado da curva e piscam mais rápido ao chegar.",
+                                    "Setas de aproximação",
+                                    "Piscam rumo ao lado da curva, perto dela.",
                                     config.chevrons,
-                                    enabled = config.navigation
-                                ) { onChange(config.copy(chevrons = it)) }
+                                    enabled = config.navigation,
+                                    info = "Setas azuis no alto do HUD quando a sua rua é a próxima do lado da curva (sem mapa, nos últimos 40 m). Deslizam para o lado da curva e piscam mais rápido ao chegar."
+                                ) { change(config.copy(chevrons = it), PreviewFocus.CHEVRONS) }
                             }
                             HudSettingsTab.BARS -> {
-                                // Each layout keeps its own style: Navegação bars, Navegação AR arcs by default.
-                                val arcs = config.copy(layout = layout).arcs
-                                OptionRow(
-                                    "Arcos em volta da velocidade",
-                                    "Potência e rotação em arcos sobre a velocidade do carro; desligado, barras nos cantos de baixo.",
-                                    arcs
-                                ) {
-                                    onChange(if (layout == HudOverlayModel.Layout.AR) config.copy(arArcs = it) else config.copy(navArcs = it))
-                                }
+                                // Each layout keeps its own: Navegação bars, Navegação AR arcs by default.
+                                val gauges = config.copy(layout = layout).gauges
+                                val arcs = gauges == HudOverlayModel.Gauges.ARCS
+                                ChoiceRow(
+                                    "Exibir indicadores de potência e RPM",
+                                    "Como mostrar potência e rotação.",
+                                    listOf("Nenhum", "Barras", "Arcos"),
+                                    HudOverlayModel.Gauges.entries.indexOf(gauges),
+                                    info = "Barras: nos cantos de baixo do HUD. Arcos: em volta da velocidade do carro."
+                                ) { change(config.withGauges(layout, HudOverlayModel.Gauges.entries[it]), PreviewFocus.GAUGES) }
                                 OptionRow(
                                     "Potência / regeneração",
-                                    if (arcs) "Arco externo. Azul acelerando, verde regenerando." else "Canto inferior esquerdo. Azul acelerando, verde regenerando.",
-                                    config.powerBar
-                                ) {
-                                    onChange(config.copy(powerBar = it))
-                                }
+                                    if (arcs) "Arco externo." else "Canto inferior esquerdo.",
+                                    config.powerBar,
+                                    enabled = gauges != HudOverlayModel.Gauges.NONE,
+                                    info = "Azul acelerando, verde regenerando."
+                                ) { change(config.copy(powerBar = it), PreviewFocus.GAUGES) }
                                 OptionRow(
                                     "Rotação do motor",
-                                    if (arcs) "Arco interno, só com o motor ligado." else "Canto inferior direito, só com o motor ligado.",
-                                    config.rpmBar
-                                ) {
-                                    onChange(config.copy(rpmBar = it))
-                                }
+                                    if (arcs) "Arco interno, com o motor ligado." else "Canto inferior direito, com o motor ligado.",
+                                    config.rpmBar,
+                                    enabled = gauges != HudOverlayModel.Gauges.NONE,
+                                    info = "Só aparece com o motor a combustão ligado; vermelho a partir de 5 mil rpm."
+                                ) { change(config.copy(rpmBar = it), PreviewFocus.GAUGES) }
                             }
                         }
                     }
                     // Right: what the HUD will show with these options.
                     Column(modifier = Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         HudPreview(
-                            config = config.copy(layout = layout),
+                            config = shown.copy(layout = layout),
                             description = "Prévia com estas opções",
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                            focus = focus,
+                            focusTick = focusTick
                         )
                         Text(
                             "Prévia com estas opções, alternando cidade, rodovia e rotatória. O Impulse desenha só nos cantos livres do HUD.",
@@ -367,27 +417,98 @@ private fun HudTabs(selected: HudSettingsTab, tabs: List<HudSettingsTab>, onSele
     }
 }
 
+/**
+ * Title and a one-line description, readable at arm's length; the longer explanation sits behind
+ * the (i) and opens under the row.
+ */
+@Composable
+private fun OptionText(title: String, description: String, enabled: Boolean, info: String?, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = if (enabled) Color.White else ImpTokens.TextMuted, fontSize = 16.sp)
+            if (info != null) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "Mais informações sobre $title",
+                    tint = if (open) ImpTokens.Accent else ImpTokens.TextSecondary,
+                    modifier = Modifier.padding(start = 8.dp).size(22.dp).clip(RoundedCornerShape(11.dp)).clickable { open = !open }
+                )
+            }
+        }
+        Text(
+            description,
+            color = if (enabled) ImpTokens.TextSecondary else ImpTokens.TextMuted,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        if (open && info != null) {
+            Text(info, color = ImpTokens.TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** An on/off option; tapping anywhere on the row toggles it. */
 @Composable
 private fun OptionRow(
     title: String,
     description: String,
     checked: Boolean,
     enabled: Boolean = true,
+    info: String? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(vertical = 6.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = if (enabled) Color.White else ImpTokens.TextMuted, fontSize = 14.sp)
-            Text(description, color = if (enabled) ImpTokens.TextSecondary else ImpTokens.TextMuted, fontSize = 12.sp)
-        }
+        OptionText(title, description, enabled, info, Modifier.weight(1f))
         Switch(
             checked = checked,
             enabled = enabled,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ImpTokens.Accent)
         )
+    }
+}
+
+/** A pick among a few options, as chips beside the title. */
+@Composable
+private fun ChoiceRow(
+    title: String,
+    description: String,
+    options: List<String>,
+    selected: Int,
+    enabled: Boolean = true,
+    info: String? = null,
+    onSelect: (Int) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        OptionText(title, description, enabled, info, Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEachIndexed { i, label ->
+                val on = i == selected
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (on && enabled) ImpTokens.Accent.copy(alpha = 0.25f) else Color.Transparent)
+                        .border(1.dp, if (on && enabled) ImpTokens.Accent else ImpTokens.TrackOff, RoundedCornerShape(16.dp))
+                        .clickable(enabled = enabled) { onSelect(i) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        label,
+                        color = if (!enabled) ImpTokens.TextMuted else if (on) Color.White else ImpTokens.TextSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
     }
 }

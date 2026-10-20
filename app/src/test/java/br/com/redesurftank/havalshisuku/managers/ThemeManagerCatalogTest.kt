@@ -10,8 +10,8 @@ class ThemeManagerCatalogTest {
     @Test
     fun `default catalog uses upstream preview contract v1 release branch`() {
         assertEquals(
-            "https://github.com/bobaoapae/haval-app-tool-multimidia/tree/" +
-                "preview/cluster-widgets/Themes/v1.0",
+            "https://github.com/netseek/haval-app-tool-multimidia/tree/" +
+                "feature/new-screen-enhancements-v9/cluster-widgets/Themes/v1.0",
             ThemeManager.THEME_REPO_URL
         )
     }
@@ -36,7 +36,7 @@ class ThemeManagerCatalogTest {
     fun `legacy Sport allowlist rejects renamed repackaged or unrelated themes`() {
         assertTrue(
             ThemeManager.isTrustedLegacySportCatalogEntry(
-                legacySportMetadata("SportRedLite", "Sport Colors Leve")
+                legacySportMetadata("SportRedLite", "Sport Colors Leve", "0.16.216")
             )
         )
         assertFalse(
@@ -74,10 +74,14 @@ class ThemeManagerCatalogTest {
         )
     }
 
-    private fun legacySportMetadata(folderName: String, name: String) = ThemeMetadata(
+    private fun legacySportMetadata(
+        folderName: String,
+        name: String,
+        version: String = "0.16.44"
+    ) = ThemeMetadata(
         name = name,
         description = "",
-        version = "0.16.44",
+        version = version,
         thumbnailUrl = "thumbnail.png",
         mainFile = "index.html",
         folderName = folderName,
