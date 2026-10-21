@@ -23,6 +23,15 @@ The retained Haval Impulse policy:
 
 The upstream `AaClusterStallPolicy.kt` and its test were intentionally omitted. `AndroidAutoClusterController.kt` and `AaClusterVideoHost.kt` retain the Haval Impulse implementation.
 
+## Follow-up — 2026-10-21
+
+- Imported upstream commit: `4cc5798898e0862c03e5559bce64ebf7c3a664ef`.
+- The commit keeps the HUD route visible through junctions and roundabouts and advances the
+  Augusta demo after its initial 300 m segment.
+- The upstream patch applied without conflicts and with an identical stable patch ID.
+- The bundled SportRedLite theme, the Haval Impulse CLUSTER watchdog and the transient Android
+  Auto session-stop guard remain unchanged.
+
 ## Validation requirement
 
 This workspace is a sanitized snapshot without Git metadata. Android/Gradle/Kotlin validation must not run on the coordinator. Before release, move the reviewed changes into an immutable commit and submit that exact commit through `scripts/build-on-mac-mini.sh`, following `docs/BUILD_ANDROID_ON_MAC_MINI.md`.
