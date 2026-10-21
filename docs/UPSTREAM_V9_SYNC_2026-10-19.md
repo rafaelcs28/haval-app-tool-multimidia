@@ -32,6 +32,15 @@ The upstream `AaClusterStallPolicy.kt` and its test were intentionally omitted. 
 - The bundled SportRedLite theme, the Haval Impulse CLUSTER watchdog and the transient Android
   Auto session-stop guard remain unchanged.
 
+## Radar refresh follow-up — 2026-10-21
+
+- Integrated Netseek PR 13 commit `749e34e500bdf85616abe473b50ace6eedcd1df9` onto the private
+  `74121` source base.
+- The change separates OSM, ANTT and road refresh state, retries only failed sources, validates
+  downloaded caches and preserves the last valid file when replacement fails.
+- CarPlay, Android Auto, themes, alert thresholds and bundled radar datasets remain unchanged.
+- Release validation is assigned to the authorized Mac Mini queue before OTA publication.
+
 ## Validation requirement
 
 This workspace is a sanitized snapshot without Git metadata. Android/Gradle/Kotlin validation must not run on the coordinator. Before release, move the reviewed changes into an immutable commit and submit that exact commit through `scripts/build-on-mac-mini.sh`, following `docs/BUILD_ANDROID_ON_MAC_MINI.md`.
