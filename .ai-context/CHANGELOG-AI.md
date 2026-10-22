@@ -1,5 +1,13 @@
 # AI change log
 
+## 2026-10-22 — experimental native CarPlay HUD text (local preparation)
+
+- Added session-only opt-in text feed, generation/expiry/priority policy and regression tests.
+- Only AA native-HUD deliveries use the selector; all AA fields and telemetry remain intact.
+- Shared theme arrow fallback makes unknown CarPlay codes unsafe; therefore no CP JSON or guessed arrows are published.
+- State-1 text only; arrival/pending/recalc/null/unknown states withdraw input, with documented existing HUD hide delay.
+- Updated private-session evidence and architecture; no raw route data committed. Mac Mini tests/build not yet run.
+
 ## 2026-10-22 — OTA 74126 diagnostic preparation on 74125
 
 - Compared 74125 against 74124; preserved HEV overlay crash fix and readability changes.

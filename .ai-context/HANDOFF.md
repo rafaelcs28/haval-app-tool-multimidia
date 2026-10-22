@@ -2,6 +2,26 @@
 
 ## Current task
 
+Current follow-up: user requested experimental CarPlay guidance. Local uncommitted code
+adds CarPlayHudPolicy, CarPlayExperimentalHud and tests, routes only the two AA native-HUD
+calls through a priority selector, and adds a session-only switch in CarPlayCaptureScreen.
+Capture lifecycle supplies generation-scoped inputs. This phase is native HUD text only;
+no arrows/codes/ETA are inferred, no theme/bridge/telemetry or AA map change. Full design,
+cleanup limits and test procedure: docs/architecture/carplay-experimental-hud.md.
+Source diff validation pending below; Android/unit execution requires the Mac Mini queue.
+User approved commit/push and signed 74127 generation, without automatic installation.
+Audit the immutable commit and use the Mac Mini release queue; verify tests, production
+certificate and downloaded OTA before reporting readiness. No live validation claimed.
+
+Latest 74126 vehicle tests: Waze-only 6 inactive callbacks; mixed Waze/Maps 31 callbacks
+with 14 state-1 (source app unidentified); Maps-only 109 with 98 state-1 and two state-2
+arrival payloads that retained populated road/maneuver fields. No errors/drops; all three
+manually stopped. Private raw source: coordinator test-artifacts/carplay-navigation/
+20261022-126-three-tests/capture-0.jsonl (479 cumulative records, 212 new).
+SHA-256 31bc64b6ed2a086ce2a7a50c0a50698089c50c6629f20e8696542d5c67db922a.
+
+## Previous 74126 task
+
 User authorized commit/push and signed OTA 74126 based on private 74125 commit
 `0fcb11d03671eb89f3689bb55386bb1ea9963386`. Compared with 74124: two commits add the HEV
 long-press overlay crash fix and readability UI changes; retain all 24 changed files.

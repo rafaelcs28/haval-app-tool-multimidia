@@ -1,5 +1,12 @@
 # Next steps
 
+Current experimental text code: user approved commit/push/build. Review diff and tests,
+then run authorized Mac Mini unit/release validation
+before any 74127 publication. No installation authorization is implied. Native HUD only,
+default off, no theme contract changes or turn-code guesses. See carplay-experimental-hud.md.
+
+## Previous 74126 delivery
+
 Current 74126: Mac Mini tests/release passed (812 tests, zero failures/errors, one skipped).
 Returned certificate/APK, published download and fixed OTA manifest verified. Install only parked in P.
 Apple Maps already delivered active-state text/distance data on 74124; next compare Waze
