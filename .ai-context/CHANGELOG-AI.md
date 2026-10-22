@@ -1,5 +1,14 @@
 # AI change log
 
+## 2026-10-22 — OTA 74126 diagnostic preparation on 74125
+
+- Compared 74125 against 74124; preserved HEV overlay crash fix and readability changes.
+- Added pure, tested diagnostic payload classification; raw values and wire transport remain unchanged.
+- Added null/inactive/candidate/unconfirmed counters, duration and route start/end markers.
+- Prevented misleading “Orientações recebidas” status for non-null inactive/default callbacks.
+- Waze vehicle capture confirmed Binder delivery only; active route/map video remain unproven.
+- No private raw logs/report committed; Mac Mini unit/release validation pending.
+
 ## 2026-10-22 — OTA 74124 preparation
 
 - Imported upstream `97f8ef1cbfbc45545a7581a950c9eb77a8448c0a` and `414a20fb2a99cbceaacad753d522289945f420b8` without conflicts.

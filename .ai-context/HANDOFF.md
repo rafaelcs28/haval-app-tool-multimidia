@@ -2,6 +2,24 @@
 
 ## Current task
 
+User authorized commit/push and signed OTA 74126 based on private 74125 commit
+`0fcb11d03671eb89f3689bb55386bb1ea9963386`. Compared with 74124: two commits add the HEV
+long-press overlay crash fix and readability UI changes; retain all 24 changed files.
+Only CarPlay diagnostic screen/collector, a pure summary classifier and tests are modified.
+No map-clean activation, AA, OEM APK, display/Surface/focus or bridge change is planned.
+Added exclusive diagnostic payload counts, session duration and route start/end markers.
+Full unit/release validation must run through the authorized Mac Mini queue before publication.
+
+Real capture on 2026-10-22 was Waze (user confirmed): two inactive/default callbacks during
+546.715 seconds, zero errors/drops, clean manual stop. No useful active-route data or video
+stream proven. Raw captures/report remain private on VPS, not in Git. Apple Maps should
+be tested separately; 74125 already supports that capture without waiting for 74126.
+Installation requires a fresh parked-in-P check. This trip was user-driven; do not start
+or stop the car. For future agent-initiated maintenance startup, user requires shutdown
+on completion unless explicitly requested otherwise, after confirming stationary in P.
+
+## Previous task (historical)
+
 Prepare signed OTA `1.0.0.74.124-preview` from the private signed `74123` base with the remaining v9 HUD updates and two protective fixes.
 
 User requested all reviewed v9 changes with protections, explicitly including `97f8ef1c`.
