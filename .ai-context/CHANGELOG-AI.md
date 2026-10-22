@@ -11,6 +11,7 @@
 - `git diff --check` passed. Android unit tests and signed release build are assigned to the Mac Mini queue.
 - The static CarPlay regression lock reports five missing legacy tokens/paths. All five are identical in the 74122 baseline; protected source bytes and OEM APK hashes are unchanged.
 - First Mac Mini run compiled production and tests, then reported 791 tests, one failure and one skip. The new filesystem-failure test exposed rotation accepting a directory in place of a log file. Added explicit regular-file checks; rerun required. No failed artifact was published.
+- Final Mac Mini run on `8918d3a771acb0ab21f717a01e0583840a53f02a`: 791 tests, zero failures/errors, one skipped; signed release, R8 and lint vital passed. Production certificate matched the pinned identity. Published 74123 and verified both downloaded APK SHA-256 and fixed OTA manifest. Vehicle installation, Android self-test execution and real guidance delivery remain pending.
 
 ## 2026-10-21 — OTA 74122
 

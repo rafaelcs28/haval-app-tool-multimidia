@@ -22,10 +22,19 @@ then have the user start Resources > Diagnóstico de navegação CarPlay > Inici
 - Binding uses flags zero and transactions 7/8 only. No service auto-start, focus, Surface or video commands.
 - Check actual callback counts before the drive; oneway subscription success alone is insufficient.
 
-## Pending diagnostic validation
+## Delivery and remaining vehicle validation
 
-- Mac Mini full unit suite and signed release assembly required before publishing 74123.
-- Confirm production certificate equals 74117–74122, then publish the versioned release and fixed OTA manifest.
+- Built commit: `8918d3a771acb0ab21f717a01e0583840a53f02a`.
+- Mac Mini job: `haval-v9-sync-20261021-8918d3a771acb0ab-20261022T002004Z-18745`.
+- JUnit XML: 88 reports, 791 tests, zero failures/errors and one skipped. Release, R8 and lint vital passed.
+- The first run exposed accepting directories as rotating log files; regular-file guards fixed the regression before publication.
+- Certificate SHA-256 matches 74117–74122: `5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0`.
+- Published release: `https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.123-preview`.
+- APK SHA-256: `49835cf40f4a307be98b5e81d831a0c32746d0a881b938d6800964fad0d4b526`.
+- Downloaded APK matched the hash before updating app-latest. Downloaded fixed OTA manifest matches the local 74123 manifest.
+- Source is saved in private branch `rafaelcs28/haval-impulse:release/impulse-74123-carplay-capture`; the post-build handoff commit changes documentation only.
+- Coordinator artifacts and detailed signing handoff remain under `/root/projects/haval-impulse`.
+- Installation is still pending the user's car-online message. The diagnostic remains off by default until the user starts it.
 - User will message at arrival; collect all private JSONL files via authorized Telnet/Tailscale.
 - Do not claim live monitoring, successful Binder delivery, or parser self-test execution until the car is online.
 
