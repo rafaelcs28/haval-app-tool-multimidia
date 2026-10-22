@@ -2,11 +2,23 @@
 
 ## Current task
 
-Prepare signed OTA `1.0.0.74.123-preview` from the private signed `74122` base with manual CarPlay navigation capture.
+Prepare signed OTA `1.0.0.74.124-preview` from the private signed `74123` base with the remaining v9 HUD updates and two protective fixes.
 
-User approved OTA generation/signing and installation after notifying them that the APK is ready.
-The car was offline during implementation. Wait for the user to turn it on; install while stopped,
-then have the user start Resources > Diagnóstico de navegação CarPlay > Iniciar captura.
+User requested all reviewed v9 changes with protections, explicitly including `97f8ef1c`.
+The car is offline. Do not install 74124 automatically; publish/verify OTA and report readiness.
+74123 was installed on 2026-10-21 21:32:20 -03 after the user confirmed parked in P.
+User did not drive and capture was not started. A fresh manual capture is still needed at departure.
+
+## 74124 changes and pending validation
+
+- Imported `97f8ef1cbfbc45545a7581a950c9eb77a8448c0a` and `414a20fb2a99cbceaacad753d522289945f420b8` as clean cherry-picks.
+- AR navigation map stays visible beside a radar card; roundabout progress retains approach history through exit-road renaming.
+- Ordinary/non-roundabout steps reset the tracker before any new entry detection.
+- Radar warning thresholds/output have a clamped 20-metre lead, but geometry/minima and passed-camera timing retain original coordinates.
+- Added regression tests for reset boundaries, early warnings, real-position retention and late acquisition for cameras with/without road geometry.
+- No changes to CarPlay capture, cluster recovery, OEM assets, theme sources or bridge contract.
+- `git diff --check` and full Mac Mini unit/release validation required before publication.
+- Signing identity remains the pinned 74117 certificate. Release code 74124 must exceed the current OTA 74123.
 
 ## Diagnostic extension
 
@@ -34,7 +46,7 @@ then have the user start Resources > Diagnóstico de navegação CarPlay > Inici
 - Downloaded APK matched the hash before updating app-latest. Downloaded fixed OTA manifest matches the local 74123 manifest.
 - Source is saved in private branch `rafaelcs28/haval-impulse:release/impulse-74123-carplay-capture`; the post-build handoff commit changes documentation only.
 - Coordinator artifacts and detailed signing handoff remain under `/root/projects/haval-impulse`.
-- Installation is still pending the user's car-online message. The diagnostic remains off by default until the user starts it.
+- 74123 installation was confirmed via Package Manager; the diagnostic remains off until manually started.
 - User will message at arrival; collect all private JSONL files via authorized Telnet/Tailscale.
 - Do not claim live monitoring, successful Binder delivery, or parser self-test execution until the car is online.
 

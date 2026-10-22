@@ -1,5 +1,14 @@
 # AI change log
 
+## 2026-10-22 — OTA 74124 preparation
+
+- Imported upstream `97f8ef1cbfbc45545a7581a950c9eb77a8448c0a` and `414a20fb2a99cbceaacad753d522289945f420b8` without conflicts.
+- Kept AR map/radar coexistence and roundabout countdown changes.
+- Guarded null roundabout steps before carrying approach minima across identities.
+- Kept raw radar geometry and passed-camera thresholds while applying the 20-metre lead once to warning thresholds and displayed distance.
+- Added six roundabout regression tests and three radar tests, each radar case exercising both road geometry and line fallback.
+- Updated radar architecture and upstream provenance. Full unit tests and signed release assembly are assigned to the Mac Mini queue.
+
 ## 2026-10-21 — OTA 74123 preparation
 
 - Imported Netseek PR 14 at `15ce75fa07d4cbe4bedd00f308a9ce2e298a6cf0` onto the signed 74122 base.

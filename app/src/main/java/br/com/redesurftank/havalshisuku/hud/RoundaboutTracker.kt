@@ -26,6 +26,12 @@ class RoundaboutTracker {
      * detected on this call.
      */
     fun onUpdate(step: String?, meters: Float?): Boolean {
+        if (step == null) {
+            key = null
+            startM = null
+            minM = Float.MAX_VALUE
+            return false
+        }
         if (step != key) {
             val previousMin = if (key != null && startM == null) minM else Float.MAX_VALUE
             key = step
@@ -38,7 +44,7 @@ class RoundaboutTracker {
                 return true
             }
         }
-        if (step == null || meters == null) return false
+        if (meters == null) return false
         if (startM == null && isEntry(minM, meters)) {
             startM = meters
             return true

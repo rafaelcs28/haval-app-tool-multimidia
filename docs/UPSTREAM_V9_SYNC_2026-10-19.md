@@ -41,6 +41,24 @@ The upstream `AaClusterStallPolicy.kt` and its test were intentionally omitted. 
 - CarPlay, Android Auto, themes, alert thresholds and bundled radar datasets remain unchanged.
 - Release validation is assigned to the authorized Mac Mini queue before OTA publication.
 
-## Validation requirement
+## HUD/radar follow-up — 2026-10-22
+
+- Imported `97f8ef1cbfbc45545a7581a950c9eb77a8448c0a` and
+  `414a20fb2a99cbceaacad753d522289945f420b8` in order, both without conflicts.
+- The AR map remains visible beside the radar card, roundabout progress follows the
+  exit countdown across road-label changes, and warnings/display advance by 20 metres.
+- Impulse guard: `RoundaboutTracker` clears its key, minimum and entered state on any
+  non-roundabout step before considering distance jumps. A renamed roundabout still
+  carries the approach minimum as upstream intended.
+- Impulse guard: radar geometry, target minima, approach-confirmation samples and
+  passed-camera decisions retain the original distances. Only warning thresholds
+  and the output distance use the clamped 20-metre lead, exactly once.
+- Regression tests cover leaving roundabouts and reset boundaries; radar tests cover
+  both road-matched and straight-line cameras, early approach/near warnings, late
+  acquisition within 20 metres and retention until passing the real coordinate.
+- CarPlay capture, cluster watchdog, themes, OEM APKs and bridge contracts are unchanged.
+- Validation/build: authorized Mac Mini queue only; vehicle validation is still required.
+
+## Build validation requirement
 
 This workspace is a sanitized snapshot without Git metadata. Android/Gradle/Kotlin validation must not run on the coordinator. Before release, move the reviewed changes into an immutable commit and submit that exact commit through `scripts/build-on-mac-mini.sh`, following `docs/BUILD_ANDROID_ON_MAC_MINI.md`.
