@@ -1,9 +1,11 @@
 # Next steps
 
-Current experimental text code: user approved commit/push/build. Review diff and tests,
-then run authorized Mac Mini unit/release validation
-before any 74127 publication. No installation authorization is implied. Native HUD only,
-default off, no theme contract changes or turn-code guesses. See carplay-experimental-hud.md.
+74127 signed release/tests/OTA validation completed. User explicitly chose windshield
+HUD and later took over manual installation. Automatic installer stopped before package
+installation; do not issue further vehicle start/stop/install commands. Await manual
+version confirmation, then perform a separately coordinated parked/drive test with
+manual capture and feature opt-in. Native HUD 4096 only, not cluster 3, default off,
+no theme contract changes or turn-code guesses. See carplay-experimental-hud.md.
 
 ## Previous 74126 delivery
 

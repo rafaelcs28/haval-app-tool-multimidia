@@ -2,16 +2,38 @@
 
 ## Current task
 
-Current follow-up: user requested experimental CarPlay guidance. Local uncommitted code
+Current follow-up: user requested experimental CarPlay guidance. Built source
 adds CarPlayHudPolicy, CarPlayExperimentalHud and tests, routes only the two AA native-HUD
 calls through a priority selector, and adds a session-only switch in CarPlayCaptureScreen.
 Capture lifecycle supplies generation-scoped inputs. This phase is native HUD text only;
 no arrows/codes/ETA are inferred, no theme/bridge/telemetry or AA map change. Full design,
 cleanup limits and test procedure: docs/architecture/carplay-experimental-hud.md.
-Source diff validation pending below; Android/unit execution requires the Mac Mini queue.
+Source diff validation and full Mac Mini unit/release/R8/lint vital validation passed.
 User approved commit/push and signed 74127 generation, without automatic installation.
 Audit the immutable commit and use the Mac Mini release queue; verify tests, production
 certificate and downloaded OTA before reporting readiness. No live validation claimed.
+
+IMPORTANT scope clarification from TelasScreen: existing native HUD targets physical
+display 4096 (windshield), not cluster display 3. Current implementation does NOT add
+guidance to the cluster. User was informed and explicitly chose to receive 74127 for
+the windshield-HUD test; publication may proceed after artifact validation. Cluster
+integration is deferred separately. Unit results: 826 tests, zero failures/errors, one skipped; all 14
+new policy tests passed. Build source: 3fc8ce4f203655f7e0fb0128199793a6aed6b558;
+Mac Mini job haval-74126-work-3fc8ce4f203655f7-20261022T223038Z-14173.
+
+74127 published; downloaded APK and fixed OTA manifest independently verified.
+APK SHA-256 ccb606475373170680327dc96f93088955630afb0eb1f4229ef20ff1ea8bf0e3,
+76072475 bytes; certificate matches pinned 74117 identity. User explicitly authorized
+remote start, parked installation/version verification and shutdown afterwards.
+User later took over manual installation. Coordinator automation was terminated at
+download_started BEFORE any package install command. Do not claim 74127 installed.
+First start failed at Telnet and shutdown was confirmed after an off retry; second
+engine-on did not produce a started state and ended with fresh engine_state 0. Final
+download-only attempt used the already-online head unit in P/0 km/h with engine_state 0.
+Do not send further vehicle commands; user resumed control and is going to the car.
+Receipt/details: coordinator artifacts/ota-74127/install-receipt.json and
+manual-install-status.txt. Feature remains off by default. OTA 74127 is ready for manual
+installation while parked in P. No navigation/visual test of 74127 has been performed.
 
 Latest 74126 vehicle tests: Waze-only 6 inactive callbacks; mixed Waze/Maps 31 callbacks
 with 14 state-1 (source app unidentified); Maps-only 109 with 98 state-1 and two state-2

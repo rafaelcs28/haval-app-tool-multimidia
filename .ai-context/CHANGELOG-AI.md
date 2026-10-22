@@ -1,12 +1,13 @@
 # AI change log
 
-## 2026-10-22 — experimental native CarPlay HUD text (local preparation)
+## 2026-10-22 — experimental windshield HUD CarPlay text (74127)
 
 - Added session-only opt-in text feed, generation/expiry/priority policy and regression tests.
 - Only AA native-HUD deliveries use the selector; all AA fields and telemetry remain intact.
 - Shared theme arrow fallback makes unknown CarPlay codes unsafe; therefore no CP JSON or guessed arrows are published.
 - State-1 text only; arrival/pending/recalc/null/unknown states withdraw input, with documented existing HUD hide delay.
-- Updated private-session evidence and architecture; no raw route data committed. Mac Mini tests/build not yet run.
+- Updated private-session evidence and architecture; no raw route data committed. Mac Mini signed release/R8/lint vital passed, 826 tests, zero failures/errors, one skipped; all 14 policy tests passed.
+- User explicitly accepted windshield HUD display 4096 rather than cluster display 3 for this test. APK/OTA published and downloaded hashes verified; certificate matches 74117. User later took over manual installation; automation stopped at download_started before package install. Prior shutdown confirmed; no further vehicle commands authorized by this continuation.
 
 ## 2026-10-22 — OTA 74126 diagnostic preparation on 74125
 
