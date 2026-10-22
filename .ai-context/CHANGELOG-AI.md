@@ -6,8 +6,9 @@
 - Added pure, tested diagnostic payload classification; raw values and wire transport remain unchanged.
 - Added null/inactive/candidate/unconfirmed counters, duration and route start/end markers.
 - Prevented misleading “Orientações recebidas” status for non-null inactive/default callbacks.
-- Waze vehicle capture confirmed Binder delivery only; active route/map video remain unproven.
-- No private raw logs/report committed; Mac Mini unit/release validation pending.
+- Waze vehicle capture delivered inactive defaults; follow-up Apple Maps provided 177 callbacks including 158 active-state payloads with roads/distances. No video stream proven.
+- No private raw logs/report committed; Mac Mini unit/release/R8/lint vital passed: 812 tests, zero failures/errors, one skipped, including 11 new summary tests.
+- Signed 74126 published, downloaded APK hash matched and fixed OTA manifest verified; pinned certificate matches 74117. No installation or road validation of 74126 performed.
 
 ## 2026-10-22 — OTA 74124 preparation
 

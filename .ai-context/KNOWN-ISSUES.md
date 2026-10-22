@@ -1,6 +1,6 @@
 # Known issues
 
-- Vehicle session on 2026-10-22 confirmed external Binder delivery of two inactive/default Waze payloads; active-route delivery remains unvalidated.
+- Vehicle sessions on 2026-10-22 confirmed inactive/default Waze payloads and 158 Apple Maps state-1 payloads with roads/distances. Application and start/connect sequence differed; Waze limitations are not yet isolated. Maneuver/ETA semantics remain unvalidated.
 - A successful oneway registration is transport acceptance, not evidence of iPhone link or active route.
 - The device-side Parcel self-test passed 102 checks in that vehicle session; future firmware compatibility still requires a fresh capture, not just a successful build.
 - The legacy CarPlay regression checker has known base drift; compare its exact output with the 74122 base and do not weaken it.

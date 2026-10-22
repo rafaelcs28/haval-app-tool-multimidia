@@ -1,10 +1,10 @@
 # Next steps
 
-Current 74126: run full Mac Mini unit/release validation on an audited immutable commit,
-verify pinned production certificate, publish APK and independently verify OTA manifest.
-Then install only while parked in P. Test Apple Maps with capture started before route
-creation; compare Waze separately. 74125 already captures the raw fields for that test.
-Do not claim map-clean support or add display/video patches based on two inactive callbacks.
+Current 74126: Mac Mini tests/release passed (812 tests, zero failures/errors, one skipped).
+Returned certificate/APK, published download and fixed OTA manifest verified. Install only parked in P.
+Apple Maps already delivered active-state text/distance data on 74124; next compare Waze
+with identical capture-before-connection/route ordering. Investigate OEM maneuver/unit/time
+semantics before an opt-in TBT adapter; preserve AA and do not claim map-clean video support.
 
 ## Historical 74124 checklist
 

@@ -8,12 +8,31 @@ long-press overlay crash fix and readability UI changes; retain all 24 changed f
 Only CarPlay diagnostic screen/collector, a pure summary classifier and tests are modified.
 No map-clean activation, AA, OEM APK, display/Surface/focus or bridge change is planned.
 Added exclusive diagnostic payload counts, session duration and route start/end markers.
-Full unit/release validation must run through the authorized Mac Mini queue before publication.
+Built immutable source `68acf612a2dbcf9d744aaf8c7305eed4435b25a3` in Mac Mini job
+`haval-74126-work-68acf612a2dbcf9d-20261022T215909Z-9946`: release/R8/lint vital passed
+in 4m58s; 90 JUnit reports, 812 tests, zero failures/errors, one skipped (11 new summary tests passed).
+Subsequent documentation changes do not alter this built source.
+
+OTA 74126 published and independently downloaded/verified; fixed app-latest manifest
+verified byte-for-byte. APK size 76056095; SHA-256
+`4d2ed8b0ebe3a744f588c8e7f24565a4bee05f0e9bce732e462240151de51abc`.
+Production certificate matches 74117:
+`5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0`.
+Release: https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.126-preview.
+Coordinator artifacts: /root/projects/haval-impulse/artifacts/release-74126-68acf612
+and artifacts/ota-74126. No 74126 install or road validation claimed.
+Combined private report for download: /mnt/data/Relatorio-CarPlay-Haval-Waze-AppleMaps-2026-10-22.md.
+The collected cumulative JSONL contains 267 records (63 Waze plus 204 Apple Maps); its
+SHA-256 is da1eb760b58aa3b206be0c97d713cad3122230149f4b473f189ba323147ccdab.
 
 Real capture on 2026-10-22 was Waze (user confirmed): two inactive/default callbacks during
 546.715 seconds, zero errors/drops, clean manual stop. No useful active-route data or video
-stream proven. Raw captures/report remain private on VPS, not in Git. Apple Maps should
-be tested separately; 74125 already supports that capture without waiting for 74126.
+stream proven in that Waze session. Follow-up Apple Maps on installed 74124 delivered
+177 callbacks over 197.647s, including 158 state-1 payloads with roads/distances, zero
+errors/drops and a clean stop. Active maneuver IDs 1/2/29/47 remain raw, not mapped to AA
+arrows. No video stream proven. Raw records and combined downloadable report stay private
+on VPS. Compare Waze using the same start/connect ordering; no Apple Maps repeat is needed
+just to establish basic delivery. 74126 is diagnostic only, not runtime TBT integration.
 Installation requires a fresh parked-in-P check. This trip was user-driven; do not start
 or stop the car. For future agent-initiated maintenance startup, user requires shutdown
 on completion unless explicitly requested otherwise, after confirming stationary in P.
