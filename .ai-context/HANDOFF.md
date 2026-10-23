@@ -1,6 +1,31 @@
 # Handoff
 
-## Combined Mac Mini validation now authorized, pending submission
+## Combined Mini validation PASSED — source 1f1a1f7d
+
+Private immutable source 1f1a1f7d9d6bb063377da7a170da7ac55ae5f51e pushed to
+release/impulse-74125. Audited control digest
+2a5246d117daef016b4bf08d06883b7b0f80de7cdceeb4f58491a654b5f55819.
+Job haval-74126-work-1f1a1f7d9d6bb063-20261023T101355Z-5837 succeeded in 2m19s,
+47 tasks including Java/Kotlin, ARM64 JNI/CMake/link, testDebugUnitTest and Debug.
+XML totals: 93 suites, 837 tests, 0 failures, 0 errors, 1 skipped (RADAR_SEED_OUT
+unset for RadarSeedGenerator.generate). Seven experimental Debug JUnit methods
+actually executed and passed: policy 3, retirement 4. AA telemetry 12, roundabout
+tracker 6 and radar engine 19 also passed. This is not GPU/Binder/vehicle testing.
+
+Fetched SHA256SUMS verified. APK 148581473 bytes, SHA256
+8fd85d22552d39a757aa936d3063b500994e378e5d03b4be5633e4e4f825a125.
+Four ABIs retained, bridge/shared C++ runtime absent; four experimental classes
+present in Debug DEX. Manifest unchanged (a2565b90f5bb8bda888b424c18759c3a73a2e9db596ac84f65a24cdce1360e30).
+Actual linked AArch64 ELF SHA ee71ae6f66b23c6dc69c310724cc2efefee8da2f540ad0a54b6b5d9a06c0ddc3;
+both JNI exports and all runtime C entries verified on Mini. Native .so excluded.
+
+Private receipt/artifact: coordinator artifacts/carplay-combined-1f1a1f7d/VALIDACAO.md.
+Internal Debug only, NOT production-signed, do not install over vehicle release.
+No version bump, OTA, production signing, car commands or local Android builds.
+Next gates remain real getter ownership/module/live-principal proof, authenticated
+quiescent OEM loader, actual app/AA/safety provider and parked hardware negotiation.
+
+## Combined Mac Mini validation preparation (historical, completed above)
 
 User approved proceeding with compilation/JNI and unit validation, without version
 change or OTA. Preparing an audited immutable private commit containing the Netseek

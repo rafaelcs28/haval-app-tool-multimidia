@@ -2,6 +2,14 @@
 
 ## Independent CarPlay map experiment
 
+Combined compilation/unit gate is now complete for 1f1a1f7d: authorized Mini
+Java/Kotlin/JNI/ARM64 + Debug, 837 tests, zero failures/errors, one expected skip.
+All seven experimental Debug JUnit methods passed. Do not repeat earlier pending
+notes as current status. Next work is verifying actual OEM getter ownership/live
+principal/module evidence and implementing an authenticated quiescent installer,
+then authoritative app/AA/safety wiring and parked device testing. Debug artifact
+is validation-only, no version/OTA was published and no car was touched.
+
 OEM runtime C boundary and getter adapter now exist in source. Install nothing yet:
 verify real getter ownership and module/trampoline provenance. For warm install,
 capture and pin the current principal UUID plus live stream/epoch, adopt it without

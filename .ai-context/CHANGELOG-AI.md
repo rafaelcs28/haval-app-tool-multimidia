@@ -1,5 +1,17 @@
 # AI change log
 
+## 2026-10-23 — combined Mac Mini Java/JNI/ARM64 and unit validation passed
+
+- Source 1f1a1f7d pushed privately, exact build-control digest reviewed/allowlisted.
+  Debug now depends on testDebugUnitTest, so the authorized queue actually runs it.
+- Mini job finished successfully in 2m19s, 47 tasks. XML: 837 tests across 93 suites,
+  zero failures/errors, one intentionally skipped radar seed generator (unset output).
+  All seven experimental Debug unit tests executed/passed, plus AA/radar regressions.
+- Actual linked AArch64 ELF and JNI/runtime exports verified; fetched hashes passed.
+  Debug APK keeps four ABIs and unchanged manifest; native bridge remains excluded.
+- No version bump, production signing, publication, install or vehicle operation.
+  Debug artifact is internal and must not replace the vehicle release.
+
 ## 2026-10-23 — OEM C boundary, repeat getter and warm adoption source
 
 - Added noexcept adapter C entries, exact original error/array fallback and owned
