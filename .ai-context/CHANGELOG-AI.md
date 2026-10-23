@@ -5,8 +5,9 @@
 - Substituiu os controles separados de captura/HUD por um único botão de iniciar/encerrar.
 - A sessão combinada habilita o HUD automaticamente, delimita os logs existentes do cluster
   com o mesmo UUID e encerra por timeout monotônico exato de cinco minutos.
-- Preserva e restaura a preferência anterior do logger do cluster; Android Auto continua com
-  prioridade e nenhum contrato de tema, resolução, Surface ou handoff foi alterado.
+- Usa lease process-local do logger sem alterar a preferência persistida; leases concorrentes
+  não são desabilitadas ao final. Android Auto continua com prioridade e nenhum contrato de
+  tema, resolução, Surface ou handoff foi alterado.
 - Mantém seta desconhecida vazia e não anuncia mapa limpo: a ponte secundária continua
   default-off até existir uma Surface de produção validada.
 - Validação Android/Gradle e assinatura 74129 destinadas exclusivamente à fila do Mac Mini.

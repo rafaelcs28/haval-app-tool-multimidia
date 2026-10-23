@@ -5,10 +5,11 @@
 Recursos agora oferece `Iniciar teste CarPlay`; um toque inicia captura Binder privada,
 HUD textual experimental e logger correlacionado do cluster por cinco minutos. Durante a
 sessão o botão vira `Encerrar teste`. Timeout, parada manual e falha passam pela mesma limpeza,
-restaurando a preferência anterior do logger. O UUID aparece nos delimitadores do cluster.
+liberando somente sua lease process-local do logger. O UUID aparece nos delimitadores do cluster.
 
 Arquivos alterados: CarPlayCaptureScreen.kt, CarPlayNavigationCapture.kt,
 CarPlayExperimentalHud.kt, CarPlayHudPolicy.kt, CarPlayHudPolicyTest.kt,
+ClusterPersistentEventLogger.kt, ClusterPersistentEventLoggerTest.kt,
 FeaturesHubScreen.kt e docs/architecture/carplay-combined-five-minute-test.md.
 
 Risco restante: isto captura o estado real do cluster e testa o HUD no mesmo intervalo, mas
