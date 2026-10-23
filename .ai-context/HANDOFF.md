@@ -1,5 +1,28 @@
 # Handoff
 
+## 74130 — recuperação restrita ao mapa AA do cluster
+
+Durante uma viagem na 74129, o usuário observou o mapa limpo do Android Auto congelado
+somente no cluster. A tela principal do AA, o HUD nativo do para-brisa e o TBT sobre o tema
+Minimalist continuaram atualizando. Coleta read-only confirmou os processos vivos, a Activity
+principal em D0 apresentando frames e a Presentation de D3 montada. Isso isola a ocorrência no
+canal de vídeo CLUSTER/TextureView; não prova qual guarda interna encerrou a recuperação.
+
+Commit de runtime `7a588eed7bbb2e19aa2454844c7814d3eabcc9d1` corrige três falhas objetivas:
+o orçamento deixa de ser vitalício e rearma após 60 s de frames saudáveis; recuperação em voo
+expira em 15 s e faz uma segunda reconciliação limitada; ao sair de LIVE, o quadro antigo some
+sem desmontar o consumidor. Persistência agora registra estados, aceite, pedido/ACK de release,
+timeout e rearme. O ciclo continua restrito ao output CLUSTER e não reinicia AA, HUD ou TBT.
+
+Debug passou no Mac Mini em 2m11s/49 tarefas. Release passou em 4m44s/83 tarefas com unit tests,
+R8 e lint vital. Versão `74130` / `1.0.0.74.130-preview`, APK SHA-256
+`9a9a91f9526ff383c53c1dda7f3362643f28d92acc57e820e90615762b9b7237`, 76.072.923 bytes,
+certificado de produção `5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0`, igual à 74129
+e à identidade fixada desde 74117. Release pública e `app-latest/app-preview.json` foram
+publicados; ambos foram baixados e conferidos. Próximo passo é instalar manualmente a 74130 e
+repetir uma navegação AA após sono longo. Se houver nova ocorrência, recuperar o logger
+persistente antes de alternar a projeção.
+
 ## 74129 — teste combinado de um botão publicado
 
 Release concluída a partir do commit imutável `13fb570e6dc29d295fa9acd53f2bd0ab2e7d4840`.

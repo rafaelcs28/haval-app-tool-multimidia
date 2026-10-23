@@ -1,5 +1,20 @@
 # AI change log
 
+## 2026-10-23 — OTA 74130: recuperação do mapa AA congelado no cluster
+
+- Evidência de campo isolou o congelamento no vídeo CLUSTER: AA principal, HUD nativo e TBT
+  Minimalist continuaram atualizando, com processos e displays vivos.
+- Trocou o limite vitalício de duas recuperações por orçamento de rajada que rearma após
+  60 segundos de frames saudáveis; manteve backoff e exigência de movimento.
+- Adicionou timeout de 15 segundos para recuperação presa, com uma segunda reconciliação
+  limitada e sem reiniciar a sessão principal do Android Auto.
+- Ao perder LIVE, oculta o último frame em 300 ms, mantendo a Surface sob as regras existentes
+  de ownership/ACK. Adicionou eventos persistentes de estado, aceite, release e timeout.
+- Commit `7a588eed`; Debug/Release Mac Mini passaram, incluindo unit tests, R8 e lint vital.
+- APK 74130 assinado pela identidade de produção fixada e publicado com SHA-256
+  `9a9a91f9526ff383c53c1dda7f3362643f28d92acc57e820e90615762b9b7237`; download e OTA
+  fixo foram conferidos contra os artefatos locais.
+
 ## 2026-10-23 — fluxo único de teste CarPlay para 74129
 
 - Substituiu os controles separados de captura/HUD por um único botão de iniciar/encerrar.
