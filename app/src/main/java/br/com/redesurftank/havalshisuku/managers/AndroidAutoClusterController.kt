@@ -56,6 +56,18 @@ object AndroidAutoClusterController {
             AaClusterVideoHost.setLive(live)
             notifyHostProjectionFlag(live)
             Log.w(TAG, "CLUSTER state=$state live=$live reason=$reason")
+            ClusterPersistentEventLogger.log(
+                "aa_cluster_stream_state",
+                mapOf(
+                    "state" to state,
+                    "live" to live,
+                    "reason" to reason,
+                    "requested" to wantsOutput(),
+                    "surface_attached" to surfaceAttached.get(),
+                    "recovery_in_flight" to recoveryInFlight,
+                    "recovery_count" to recoveryCount
+                )
+            )
         }
     }
     private val sessionPollRunnable = object : Runnable {
@@ -312,10 +324,63 @@ object AndroidAutoClusterController {
     }
 
     private fun checkClusterStreamHealth() {
-        if (!surfaceAttached.get() || !wantsOutput() || recoveryInFlight) return
-
         val nowMs = SystemClock.elapsedRealtime()
         val lastFrameAtMs = AaClusterVideoHost.lastFrameElapsedRealtimeMs()
+        if (AndroidAutoClusterStreamHealth.shouldResetRecoveryBudget(
+                nowMs = nowMs,
+                liveSinceMs = liveSinceMs,
+                lastFrameAtMs = lastFrameAtMs,
+                lastRecoveryAtMs = lastRecoveryAtMs,
+                recoveryCount = recoveryCount
+            )) {
+            ClusterPersistentEventLogger.log(
+                "aa_cluster_recovery_budget_rearmed",
+                mapOf(
+                    "previous_recovery_count" to recoveryCount,
+                    "healthy_ms" to (nowMs - lastRecoveryAtMs),
+                    "frame_age_ms" to (nowMs - lastFrameAtMs)
+                )
+            )
+            recoveryCount = 0
+            lastRecoveryAtMs = 0L
+        }
+
+        if (recoveryInFlight) {
+            if (AndroidAutoClusterStreamHealth.isRecoveryTimedOut(nowMs, lastRecoveryAtMs)) {
+                recoveryInFlight = false
+                AaClusterVideoHost.setLive(false)
+                notifyHostProjectionFlag(false)
+                Log.w(TAG, "CLUSTER recovery timed out; reconciling requested output")
+                ClusterPersistentEventLogger.log(
+                    "aa_cluster_recovery_timeout",
+                    mapOf(
+                        "elapsed_ms" to (nowMs - lastRecoveryAtMs),
+                        "recovery_count" to recoveryCount,
+                        "requested" to wantsOutput()
+                    )
+                )
+                if (wantsOutput() &&
+                    recoveryCount < AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_BURST
+                ) {
+                    recoveryCount++
+                    lastRecoveryAtMs = nowMs
+                    recoveryInFlight = true
+                    demandEpoch.incrementAndGet()
+                    deliveredGeneration = -1L
+                    surfaceAttached.set(false)
+                    client.setOutput(null)
+                    mainHandler.postDelayed({ reconcileOutput("frame_stall_recovery_timeout") }, 250L)
+                } else {
+                    ClusterPersistentEventLogger.log(
+                        "aa_cluster_recovery_burst_exhausted",
+                        mapOf("recovery_count" to recoveryCount, "requested" to wantsOutput())
+                    )
+                }
+            }
+            return
+        }
+        if (!surfaceAttached.get() || !wantsOutput()) return
+
         val speedKmh = ServiceManager.getInstance()
             .getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
             ?.replace(',', '.')

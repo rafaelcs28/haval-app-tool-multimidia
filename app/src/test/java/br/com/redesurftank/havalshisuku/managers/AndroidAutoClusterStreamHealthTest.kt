@@ -62,7 +62,7 @@ class AndroidAutoClusterStreamHealthTest {
     }
 
     @Test
-    fun `backoff and session limit prevent recovery loops`() {
+    fun `backoff and burst limit prevent recovery loops`() {
         assertFalse(
             AndroidAutoClusterStreamHealth.shouldRecover(
                 nowMs = 70_000L,
@@ -79,9 +79,41 @@ class AndroidAutoClusterStreamHealthTest {
                 liveSinceMs = 1_000L,
                 lastFrameAtMs = 2_000L,
                 lastRecoveryAtMs = 20_000L,
-                recoveryCount = AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_SESSION,
+                recoveryCount = AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_BURST,
                 speedKmh = 40f
             )
         )
+    }
+
+    @Test
+    fun `healthy frames rearm a previously exhausted recovery budget`() {
+        assertTrue(
+            AndroidAutoClusterStreamHealth.shouldResetRecoveryBudget(
+                nowMs = 90_000L,
+                liveSinceMs = 25_000L,
+                lastFrameAtMs = 89_000L,
+                lastRecoveryAtMs = 20_000L,
+                recoveryCount = AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_BURST
+            )
+        )
+    }
+
+    @Test
+    fun `stale frames never rearm the recovery budget`() {
+        assertFalse(
+            AndroidAutoClusterStreamHealth.shouldResetRecoveryBudget(
+                nowMs = 90_000L,
+                liveSinceMs = 25_000L,
+                lastFrameAtMs = 70_000L,
+                lastRecoveryAtMs = 20_000L,
+                recoveryCount = AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_BURST
+            )
+        )
+    }
+
+    @Test
+    fun `recovery in flight expires only after its bounded timeout`() {
+        assertFalse(AndroidAutoClusterStreamHealth.isRecoveryTimedOut(34_999L, 20_000L))
+        assertTrue(AndroidAutoClusterStreamHealth.isRecoveryTimedOut(35_000L, 20_000L))
     }
 }

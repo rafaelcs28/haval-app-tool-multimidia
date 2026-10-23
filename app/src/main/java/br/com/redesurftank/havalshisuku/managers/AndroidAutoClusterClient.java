@@ -15,7 +15,9 @@ import android.os.RemoteException;
 import android.util.Log;
 import br.com.redesurftank.havalshisuku.api.AaClusterProtocol;
 import br.com.redesurftank.havalshisuku.api.ClusterReleaseLedger;
+import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger;
 import java.security.MessageDigest;
+import java.util.LinkedHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +55,13 @@ public final class AndroidAutoClusterClient {
     }
     public AndroidAutoClusterClient(Context context,Listener listener) {
         this.context=context.getApplicationContext(); this.listener=listener;
+    }
+    private static void logEvent(String event,Object... details) {
+        LinkedHashMap<String,Object> values=new LinkedHashMap<>();
+        for(int index=0;index+1<details.length;index+=2) {
+            values.put(String.valueOf(details[index]),details[index+1]);
+        }
+        ClusterPersistentEventLogger.log(event,values);
     }
     public void setOutput(ClusterSurfaceOutput output) {
         ClusterSurfaceOutput.Borrow next=null;
@@ -137,6 +146,7 @@ public final class AndroidAutoClusterClient {
                 ledger.quarantine(entry);
                 notifyCurrent(version,AaClusterProtocol.FAILED,"output retirement uncertain; consumer retained");
             }
+            logEvent("aa_cluster_output_retirement_requested","request",entry.request,"revision",version);
             return; // Only CALLBACK_RELEASED may make room for a new output.
         }
         if(closed) { finishClose(); return; }
@@ -157,6 +167,7 @@ public final class AndroidAutoClusterClient {
             notifyCurrent(version,AaClusterProtocol.WAITING_SESSION,"waiting for authenticated CLUSTER output");
             sendOutput(target,entry.request,true,inFlight.output);
             Log.w(TAG,"CLUSTER output accepted request="+entry.request);
+            logEvent("aa_cluster_output_accepted","request",entry.request,"revision",version);
         } catch(Throwable uncertain) {
             Log.w(TAG,"CLUSTER output transaction failed request="+entry.request,uncertain);
             ledger.quarantine(entry);
@@ -169,6 +180,7 @@ public final class AndroidAutoClusterClient {
         main.postDelayed(()->{
             if(ledger.active()!=entry || !ledger.isRetiring(entry)) return;
             ledger.quarantine(entry);
+            logEvent("aa_cluster_output_retirement_timeout","request",entry.request,"revision",currentRevision());
             notifyCurrent(currentRevision(),AaClusterProtocol.FAILED,"decoder retirement unconfirmed; consumer retained",entry);
         },5000);
         // This bounds waiting status only. It never frees a consumer, invents
@@ -298,6 +310,7 @@ public final class AndroidAutoClusterClient {
                             if(data.dataAvail()!=0) return false;
                             // Never filtered by current revision, closed or remote.
                             if(ledger.released(Binding.this,request)) {
+                                logEvent("aa_cluster_output_released","request",request,"revision",currentRevision());
                                 notifyNoRemoteOutput(currentRevision());
                                 retireBindingIfUnused(Binding.this); sync();
                             }

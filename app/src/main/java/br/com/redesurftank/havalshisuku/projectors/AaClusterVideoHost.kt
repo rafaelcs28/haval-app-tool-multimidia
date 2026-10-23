@@ -191,6 +191,12 @@ object AaClusterVideoHost {
         live = isLive
         if (isLive && shown) {
             layerViews().forEach { it.animate().alpha(1f).setDuration(MAP_FADE_MS).withLayer().start() }
+        } else if (shown) {
+            // Preserve the consumer for a bounded CLUSTER-only recovery, but never leave
+            // an unauthenticated last frame visible after the stream exits LIVE.
+            layerViews().forEach {
+                it.animate().alpha(0f).setDuration(MAP_FADE_MS).withLayer().start()
+            }
         }
     }
 
