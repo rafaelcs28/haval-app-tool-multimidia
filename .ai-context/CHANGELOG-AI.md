@@ -1,5 +1,22 @@
 # AI change log
 
+## 2026-10-23 — cold Frida initial interception and full executable attestation
+
+- Added inert cold-only installer with PID/cmdline validation, absent-module gate,
+  synchronous new-module observation, full file/mapped RX/function attestation,
+  bridge ELF validation and native pre-patching module pins. replaceFast originals
+  feed existing C bridge; no JavaScript frame callback path or new ARM64 relocator.
+- Added native prepare/bootstrap/release with exact RTLD_NOLOAD ownership and
+  CoreUtils dlsym checks. Partial failure reverts only in cold window; code must
+  reattest before releasing. Ambiguous state/rollback stays process/script pinned.
+- 26 Node model scenarios passed; native 15 modes passed ASan/UBSan + TSan;
+  Python 16 passed/1 existing converter skip. Warm-refusal test was updated to
+  account for the new read-only process identity check. No production behavior
+  changed, no Android build/version/signing/OTA or car operation.
+- REA traced pinned stack initializer roots/helpers/message constructor; no video
+  session or worker creation in inspected bodies. Frida API contracts checked
+  against official docs. Android/runtime compatibility remains unproven.
+
 ## 2026-10-23 — OEM ABI entries, callback session capture and Unix authorization
 
 - Added nine C entry thunks, gated observation/lifecycle boundary, retained CF UUID

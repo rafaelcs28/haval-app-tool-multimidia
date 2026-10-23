@@ -1,5 +1,14 @@
 # Known issues
 
+- Cold interception/loaded-code attestation now exist in source but are not Android
+  compiled or device-tested. Frida model tests do not prove real ARM64 trampolines,
+  module-observer/linker timing or protections. Installer refuses already-loaded
+  OEM modules; it must run before their cold load. Successful/uncertain script and
+  native ownership remain pinned; never detach/unload it under live callbacks.
+  Provisioning and actual teardown coverage remain absent. Full RX attestation is
+  not integrity proof for writable relocated data, other modules or hostile root.
+  Older missing-interceptor notes below describe previous implementation stages.
+
 - Native entry/capture/auth source is not an installed OEM hook. Cold interception,
   loaded-module attestation and app/token/channel provisioning remain absent.
   Capture refuses old/unscoped streams and cross-thread Start; actual disconnect

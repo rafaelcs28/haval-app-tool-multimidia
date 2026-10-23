@@ -1,5 +1,35 @@
 # Handoff
 
+## Cold initial interception and loaded-image attestation — source only
+
+Added cold_oem_interceptor.js, cold_profile.py and initial_entry_bootstrap.{h,cpp}.
+See native/COLD_INTERCEPTION.md for implementation/trust boundaries and seven
+private REA initializer Evidence IDs. Default inert; explicit expected PID and
+com.ts.carplay cmdline required. All OEM modules must be absent before observer
+registration; existing/warm/raced modules are refused. The last new onAdded event
+attests whole files, build notes, full RX segments and thirteen function bodies,
+pins the three OEM modules and bridge with native RTLD_NOLOAD, reattests, then
+uses replaceFast to obtain nine originals and creates/pins the passthrough bridge.
+
+Manifest v3 canonical digest 31b878ba35c1a7fec07d7e854264837ef3702962a1e059fa5d020afa0d7c4d0f.
+Earlier v1/v2 manifests unchanged. Bridge ELF executable bytes also checked against
+trusted build file/hash; original CF helpers checked against pinned dlsym symbols.
+Successful script/native ownership remains pinned. Rollback verifies pristine code
+before releasing preparation; uncertain publication/rollback keeps failed-pinned.
+No successful uninstall, warm replacement, force-stop/restart or car command.
+
+Final checks: 26 Node Frida-model cases, 15 native portable modes with ASan/UBSan
+and TSan (30 runs), Python 17 total/16 pass/1 converter skip. Binaries:
+/tmp/carplay-cold-final-{asan,tsan}. Native success on actual Android/ARM64 and
+Frida trampoline relocation/module-observer timing remain untested. Captured stack
+initializers traced through containers and CarPlayMsg mutex/cond setup; bounded
+static evidence, not live startup proof. No Android build/version/signing/OTA.
+
+Next is authorized Mini compilation/bridge ELF review when requested, then a
+controlled early cold-device passthrough test. Still need secure app/UID/token/
+socket provisioning, real disconnect/teardown source mapping and AA/safety feeds.
+Native library remains excluded and no production entry activates this script.
+
 ## OEM C entry bridge, live capture and Unix permit transport — source only
 
 Added live_session_capture, hook_permit, oem_entry_bridge, unix_hook_endpoint and

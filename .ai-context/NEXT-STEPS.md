@@ -2,6 +2,14 @@
 
 ## Independent CarPlay map experiment
 
+Current source now includes actual cold-only Frida replacement and full loaded
+code attestation (native/COLD_INTERCEPTION.md). 26 model cases and 15 native
+sanitizer modes pass; Python 16 pass/1 skip. Next: authorized Mini compile/bridge
+ELF receipt review when requested, then controlled early cold-device passthrough
+validation. Do not bypass absent-module gate to attach to an existing principal.
+App/token/socket provisioning, actual teardown and AA/safety feeds remain. Earlier
+missing-interceptor source-stage notes below are historical, not current status.
+
 Nine OEM ABI C entries, scoped live session capture, generation-bound permits and
 kernel-authenticated Unix packet transport now exist; see native/OEM_ENTRY_BINDING.md.
 14 host modes passed ASan/UBSan + TSan; Python 15 pass/1 converter skip. Next is
