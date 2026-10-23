@@ -1,5 +1,17 @@
 # Handoff
 
+## Static OEM getter caller contract traced — 2026-10-23
+
+See docs/architecture/carplay-getter-ownership.md for exact hashes, ELF/Ghidra
+coordinates and six retained REA Evidence IDs. New read-only REA xrefs/function
+queries traced getter -> stack displays delegate -> platform delegate -> server
+info dictionary. Getter-owned replacement/release-once is supported for the exact
+captured artifacts. Outer delegate adds CFRetain; do not duplicate or compensate
+it in the getter hook. Entire OEM lifetime/refcount balance remains unproven.
+No runtime source change/build/OTA/car operation. Existing Mini validation remains
+the tested baseline. Next: authenticated quiescent installation with attested
+live modules/principal identity, then real exclusive display ownership feeds.
+
 ## Combined Mini validation PASSED — source 1f1a1f7d
 
 Private immutable source 1f1a1f7d9d6bb063377da7a170da7ac55ae5f51e pushed to

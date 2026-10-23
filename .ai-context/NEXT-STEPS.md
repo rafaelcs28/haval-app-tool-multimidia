@@ -2,6 +2,12 @@
 
 ## Independent CarPlay map experiment
 
+Static getter caller ownership is now traced for the exact captured ARM64 hashes;
+see docs/architecture/carplay-getter-ownership.md. Preserve the outer delegate's
+retain/error handling. Next gate is actual loaded-module/target attestation and
+authenticated quiescent installation, not more getter-ownership guessing. Static
+evidence does not authorize arbitrary firmware, warm pointer adoption or activation.
+
 Combined compilation/unit gate is now complete for 1f1a1f7d: authorized Mini
 Java/Kotlin/JNI/ARM64 + Debug, 837 tests, zero failures/errors, one expected skip.
 All seven experimental Debug JUnit methods passed. Do not repeat earlier pending

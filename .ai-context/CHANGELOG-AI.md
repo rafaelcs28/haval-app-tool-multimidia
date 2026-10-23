@@ -1,5 +1,14 @@
 # AI change log
 
+## 2026-10-23 — exact OEM getter ownership and downstream caller analysis
+
+- REA/Ghidra read-only queries traced the captured getter through displays delegate,
+  platform copy-property and server info response. Getter call/status/extra retain
+  corroborated in assembly; inline CFL displays constants correlated from ELF.
+- Documented exact coordinates/hashes, six Evidence IDs, replacement ownership and
+  the unresolved overall OEM reference balance. No speculative compensating release.
+- No runtime edits, Android build, new version/OTA, library publication or car access.
+
 ## 2026-10-23 — combined Mac Mini Java/JNI/ARM64 and unit validation passed
 
 - Source 1f1a1f7d pushed privately, exact build-control digest reviewed/allowlisted.

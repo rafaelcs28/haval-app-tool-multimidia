@@ -1,5 +1,10 @@
 # Known issues
 
+- Static captured getter ownership is traced, but the outer OEM delegate retains
+  the result again. Overall reference balance is not established; preserve this
+  behavior and do not compensate in our getter adapter. Live module/target and
+  principal epoch attestation remain absent; see carplay-getter-ownership.md.
+
 - Warm native bridge installation requires fresh proof/adoption of the existing principal stream before hook switch; otherwise its old Initialize was never observed and frames would reject. The new adoption API does not prove pointer lifetime/epoch itself. No live installer/capture handshake exists yet.
 - Owned getter replacement is conditional on a verified owned-return contract and trusted nonthrowing release. C++ exception containment does not cover native pointer faults; an already committed response cannot be withdrawn by close.
 
