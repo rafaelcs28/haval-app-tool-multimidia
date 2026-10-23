@@ -360,3 +360,4 @@ vehicle runtime test claimed. Private coordinator receipt retained.
 - Added authenticated OEM-to-app endpoint transport, a dedicated display-3 consumer slot, and automatic gating from the five-minute CarPlay test.
 - Added live loaded-module display API resolution, type-111 advertisement preparation, JNI native registration, and a persistent OEM control script.
 - Kept native packaging excluded and activation default-off; Android compile and vehicle stream/frame evidence remain pending.
+- Follow-up `81923701` passed the authorized Mac Mini Debug build and JVM suite; extracted ARM64 bridge SHA-256 `aeefaa91be9dc805047e3006cfdb73ea45dd4b94ed67891d956f4cd40b534411` is now the controller default.
