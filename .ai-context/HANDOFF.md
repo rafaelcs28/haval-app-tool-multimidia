@@ -724,3 +724,9 @@ The first `--copy-original` retry still relinked because resources had already
 been decoded. Next source follow-up adds decode `--no-res`, the documented pair
 that keeps `resources.arsc`/binary manifest intact. Second failed job also made
 no artifact or vehicle change.
+
+The `--no-res` job rebuilt and signed SHA60e1fd8e... but failed closed in final
+verification: comments/sentinel are intentionally absent after smali round-trip,
+although both the helper class and service class were present. Follow-up verifies
+the exact normalized helper plus the one call ordered strictly between Service
+super.onCreate and mContext assignment. The rejected artifact was not embedded.
