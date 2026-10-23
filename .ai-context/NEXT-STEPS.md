@@ -2,6 +2,14 @@
 
 ## Independent CarPlay map experiment
 
+Real Android preflight/isolated smoke now passed; see carplay-android-validation-
+2026-10-23.md. Source9ceda01b compiled Mini, actual ELF loaded in disposable sleep,
+real ARM64 synthetic trampoline tested; OEM only read, all3 RX/13 bodies verified.
+Next is controlled cold OEM passthrough before modules load, not a restart forced
+while user away/charging. Then app/token/channel/Surface/exclusive cluster/video
+wiring before a useful combined release. User authorizes new version if useful;
+no activation caller exists yet, so no release now. Same .117 signing requirement.
+
 Current source now includes actual cold-only Frida replacement and full loaded
 code attestation (native/COLD_INTERCEPTION.md). 26 model cases and 15 native
 sanitizer modes pass; Python 16 pass/1 skip. Next: authorized Mini compile/bridge

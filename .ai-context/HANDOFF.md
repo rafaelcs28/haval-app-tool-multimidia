@@ -1,5 +1,42 @@
 # Handoff
 
+## Real Android preflight + isolated ARM64 smoke PASSED — 2026-10-23
+
+See docs/architecture/carplay-android-validation-2026-10-23.md. Car user says off,
+charging, not inside. Fresh telemetry before/after P/0/engine0, age1s. No power,
+charging, OEM restart or APK-install command. Do not turn the car off on our behalf:
+we did not start it. Resident CarPlay service is not proof a phone is connected.
+
+Android9/API28/ARM64, installed74127, OEM PID6495/app6170. Existing Frida17.5.2.
+Real bounded /proc/PID/mem reads verified all 3 complete RX segments +13 bodies
+against v3; same process start throughout. No Frida injection into OEM. Cold
+installer rightly requires an earlier startup window, unavailable in loaded process.
+
+Audited 9ceda01b Mini job haval-74126-work-9ceda01bac59c0b9-20261023T124407Z-5277
+passed in2m14s/47 tasks, scanner1063. JVM837 total/0 failures/errors/1 radar seed skip.
+Native ELF5477688B SHA e7c12e3b520a704aa3dc81ae9cc2e35965896b1d7c9890407b690af80db66223.
+Debug APK unchanged byte-for-byte 8fd85d...; native remains excluded. Internal only.
+
+Source32a030d8 adds guarded Android smoke JS. Ran actual new ELF in disposable
+sleep PID1874 only: ABI1, invalid/missing-OEM bootstrap rejection, existing-module
+observer, real ARM64 PC-relative literal replacement/original trampoline/revert all
+passed. No active native bootstrap/OEM module in probe. Child exited naturally;
+temporary files removed. OEM start/version unchanged and no experimental mapping.
+
+Transport lesson: this Telnet retains IUCLC, corrupting Base64 even after stty
+attempts. Lowercasing local Base64 reproduced exact wrong hashes. Gzip/lowercase
+hex over noninteractive awk/xxd receiver passed size/SHA. Failed copies removed.
+HTTP temporary port timed out, ADB unauthorized; no security/key/firewall changes.
+Private receipts test-artifacts/carplay-android-preflight/20261023T123756Z, build
+artifacts/carplay-android-9ceda01b. Local reusable driver /tmp/run-isolated-android-hex.py.
+
+Latest user asks next step and authorizes a new version if useful for CarPlay.
+No release yet: no app activation caller, packaging excluded/Debug-only consumers.
+Next real gate is controlled cold OEM passthrough, then authenticated app/Surface/
+exclusive cluster and secondary-video integration. Do not promise clean-map APK
+from successful isolated smoke. Future useful combined release: same .117 key,
+next free version, no automatic car power/install while user absent/charging.
+
 ## Cold initial interception and loaded-image attestation — source only
 
 Added cold_oem_interceptor.js, cold_profile.py and initial_entry_bootstrap.{h,cpp}.

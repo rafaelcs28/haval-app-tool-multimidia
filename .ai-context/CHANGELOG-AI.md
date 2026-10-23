@@ -1,5 +1,21 @@
 # AI change log
 
+## 2026-10-23 — real Android loaded-code proof and isolated smoke passed
+
+- Read real Android9/API28/ARM64 OEM maps and bounded RX memory; all three segments
+  and13 bodies match v3 profile. Installed74127, resident OEM process unchanged.
+- Audited immutable9ceda01b compiled on authorized Mini, JVM837/0 failures/errors/
+  1 skip. New native ELF hash e7c12e3b... verified on Mini/VPS/car. Debug APK exactly
+  unchanged and not installed. Native packaging remains excluded, no release/OTA.
+- Added guarded isolated smoke JS in32a030d8; actual Android disposable sleep
+  process passed ABI/guards, module observer and ARM64 replacement/trampoline/revert.
+  Did not hook/inject into OEM or activate native bootstrap/secondary advertisement.
+- Resolved Telnet IUCLC/Base64 corruption via verified lowercase hex/gzip transfer;
+  discarded copies never loaded, temporary stage/child cleaned. HTTP/ADB attempts
+  did not change authorization or firewall. Fresh P/0/engine0 before/after; no power.
+- User permits a useful new CarPlay version; app activation/integration still missing,
+  so no misleading clean-map release. Full cold OEM passthrough remains device gate.
+
 ## 2026-10-23 — cold Frida initial interception and full executable attestation
 
 - Added inert cold-only installer with PID/cmdline validation, absent-module gate,

@@ -1,5 +1,14 @@
 # Known issues
 
+- Source9ceda01b now Android-compiled and smoke-tested in a disposable real ARM64
+  process, with genuine synthetic replaceFast/trampoline/revert. This still does
+  not validate nine OEM prologues, cold new-module timing, successful OEM namespace
+  pins/CF capture, Android Unix authorization, Surface/codec or iPhone negotiation.
+  Real OEM RX hashes match, but no hooks were applied there. App activation caller
+  remains missing and native library excluded. Older uncompiled notes are historical.
+- Telnet IUCLC persists: direct Base64 payloads corrupt deterministically. Use
+  verified lowercase-hex/gzip transfer with exact size/SHA before loading artifacts.
+
 - Cold interception/loaded-code attestation now exist in source but are not Android
   compiled or device-tested. Frida model tests do not prove real ARM64 trampolines,
   module-observer/linker timing or protections. Installer refuses already-loaded
