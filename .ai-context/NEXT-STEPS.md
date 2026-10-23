@@ -2,6 +2,14 @@
 
 ## Independent CarPlay map experiment
 
+Nine OEM ABI C entries, scoped live session capture, generation-bound permits and
+kernel-authenticated Unix packet transport now exist; see native/OEM_ENTRY_BINDING.md.
+14 host modes passed ASan/UBSan + TSan; Python 15 pass/1 converter skip. Next is
+actual cold entry interception with loaded module/original trampoline attestation,
+trusted signed-app UID/token/socket provisioning and app client. Map real session
+teardown into the gated invalidation entry and prove old callbacks are retired.
+No actual OEM hooks/car session, Android build, version or OTA occurred this turn.
+
 Concrete coordinated dispatch/publication is now implemented and eleven portable
 modes passed ASan/UBSan + TSan. See native/COORDINATED_DISPATCH.md. Next implement
 the platform cold-entry bootstrap with verified unhooked trampolines and prove all

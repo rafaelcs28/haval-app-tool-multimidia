@@ -1,5 +1,38 @@
 # Handoff
 
+## OEM C entry bridge, live capture and Unix permit transport — source only
+
+Added live_session_capture, hook_permit, oem_entry_bridge, unix_hook_endpoint and
+native/OEM_ENTRY_BINDING.md. Nine noexcept C entries now feed CoordinatedDispatch;
+its observation hooks retain UUID before original Start, capture only successful
+principal Start nested in observed same-thread StartSession, and invalidate on
+stop/finalize including a pending Start. Session replacement/old return races use
+separate nonwrapping session epoch/capture revisions. Explicit teardown entry is
+admitted through the same gate. No adoption of an old unobserved stream/log pointer.
+
+HookPermit checks exact OS UID, 32-byte token, request ID, deadline and capture
+revision, single-use under mutex. The authorized PreparedHooks wrapper rechecks
+the authorized generation and deadline through publication, not just initial auth.
+UnixHookEndpoint owns a duplicated connected local packet FD, validates kernel
+SCM_CREDENTIALS against SO_PEERCRED, rejects extra/oversized payloads/rights and
+closes received FD copies. No listener or Android client/socket provisioner exists.
+
+Offline entry_profile.py verifies nine actual target offsets plus four CoreUtils
+APIs on the exact captured ARM64 files. Canonical digest 2cd70fbc84b06ef7b69379f83f8629e0baea55a93704cfc852162dbea7c33940.
+Original seven-function observer digest remains unchanged. REA retained CFRetain
+and CFRelease wrappers verified; Evidence IDs are in OEM_ENTRY_BINDING.md.
+
+Final portable validation: 14 modes passed ASan/UBSan and TSan (28 executions);
+Python 16 tests, 15 passed/1 preexisting converter skip. Source uses fake OEM/CF
+APIs/module owners but real Linux socket credentials in unix-peer. No Android
+build, new version, signing, OTA, car access or production activation. Binary paths
+/tmp/carplay-oem-complete-{asan,tsan}. Prior Mini receipt covers older source only.
+
+Still missing: actual initial inline interceptor, attestation of loaded OEM module
+bytes/trampolines, trusted UID/signature/token/socket bootstrap, Android app client,
+real disconnect/teardown source mapping and proof all old calls retired. Native
+packaging remains excluded. Do not claim this source has installed hooks in OEM.
+
 ## Concrete dispatch admission/publication backend — source only
 
 Added coordinated_dispatch.{h,cpp} and COORDINATED_DISPATCH.md. Shared entry count

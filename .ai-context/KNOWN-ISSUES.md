@@ -1,5 +1,14 @@
 # Known issues
 
+- Native entry/capture/auth source is not an installed OEM hook. Cold interception,
+  loaded-module attestation and app/token/channel provisioning remain absent.
+  Capture refuses old/unscoped streams and cross-thread Start; actual disconnect
+  coverage still needs mapping. CF UUID retention does not retain the OEM stream.
+  Unix peer authentication is tested on Linux; Android SELinux/credentials are
+  untested. Token provisioner must use random secrets and a suspend-aware clock.
+  Permit principal revision differs from Surface/decoder generation. New source
+  has no Android compilation; native packaging/default-off safeguards remain.
+
 - Concrete dispatch quiescence only covers entries routed through its shared
   admission gate. It cannot drain calls predating interception or arbitrary OEM
   teardown/epoch events outside it. Initial OEM bootstrap/attestation/auth remains

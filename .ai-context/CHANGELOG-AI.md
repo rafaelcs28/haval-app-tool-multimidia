@@ -1,5 +1,21 @@
 # AI change log
 
+## 2026-10-23 — OEM ABI entries, callback session capture and Unix authorization
+
+- Added nine C entry thunks, gated observation/lifecycle boundary, retained CF UUID
+  capture with parent-session TLS/epochs and stop/finalize race invalidation.
+- Added single-use UID/token/request/revision/deadline permits, generation checks
+  through publication, and real kernel-credential Unix packet endpoint. Protocol
+  has no pointer/code/path fields; tokens are erased and ancillary rights rejected.
+- Added exact-artifact entry manifest/tests without changing the observer digest.
+  Fresh REA CF retain/release wrapper evidence retained privately.
+- Final 14 portable modes passed ASan/UBSan and TSan, Python 15 passed/1 skip.
+  An initial synthetic exception assertion was corrected to check runtime-level
+  containment (the inner boundary catches first); final suite passed. A socket
+  test helper name collision was qualified as ::send and recompiled successfully.
+- No actual OEM interceptor/module attestation/bootstrap provisioning or car use.
+  No Android build/version/signing/OTA; native packaging exclusion retained.
+
 ## 2026-10-23 — concrete callback dispatch admission and route publication
 
 - Added CoordinatedDispatch with RAII active calls, nonblocking freeze on idle,
