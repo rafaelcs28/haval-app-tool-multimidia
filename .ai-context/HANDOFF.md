@@ -719,3 +719,8 @@ relink the decoded manifest of this resource-less OEM APK and aapt2 could not
 resolve android:name. Source follow-up uses Apktool `--copy-original`, preserving
 the original binary manifest while rebuilding only DEX; it requires a new commit
 and queue run. Nothing was installed or copied into the bundled asset.
+
+The first `--copy-original` retry still relinked because resources had already
+been decoded. Next source follow-up adds decode `--no-res`, the documented pair
+that keeps `resources.arsc`/binary manifest intact. Second failed job also made
+no artifact or vehicle change.
