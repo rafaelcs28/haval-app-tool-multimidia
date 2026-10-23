@@ -11,6 +11,10 @@
 - Mantém seta desconhecida vazia e não anuncia mapa limpo: a ponte secundária continua
   default-off até existir uma Surface de produção validada.
 - Validação Android/Gradle e assinatura 74129 destinadas exclusivamente à fila do Mac Mini.
+- Debug passou no Mac Mini em 2m14s/49 tarefas; Release 74129 passou em 4m50s/83 tarefas,
+  incluindo unit tests, R8 e lint vital. Certificado de produção igual ao fixado.
+- APK publicado com SHA-256 `635a3b1b3ac55fe0c7a4a97ea61e863ebbaaf4861ba06e2049b91de3766ba932`;
+  manifesto OTA fixo atualizado e download CDN com query de versão conferido pelo mesmo hash.
 
 ## 2026-10-23 — real Android loaded-code proof and isolated smoke passed
 

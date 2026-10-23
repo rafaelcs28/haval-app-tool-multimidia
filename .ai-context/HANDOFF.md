@@ -1,6 +1,14 @@
 # Handoff
 
-## 74129 — teste combinado de um botão em preparação
+## 74129 — teste combinado de um botão publicado
+
+Release concluída a partir do commit imutável `13fb570e6dc29d295fa9acd53f2bd0ab2e7d4840`.
+Debug Mac Mini passou em 2m14s/49 tarefas; Release passou em 4m50s/83 tarefas com
+unit tests, R8 e lint vital. Versão `74129` / `1.0.0.74.129-preview`, APK SHA-256
+`635a3b1b3ac55fe0c7a4a97ea61e863ebbaaf4861ba06e2049b91de3766ba932`, 76.072.927 bytes,
+certificado de produção `5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0`.
+Release pública e manifesto OTA fixo foram publicados; download CDN com cache-buster foi
+baixado e conferido byte a byte pelo hash. O usuário fará a instalação manual mais tarde.
 
 Recursos agora oferece `Iniciar teste CarPlay`; um toque inicia captura Binder privada,
 HUD textual experimental e logger correlacionado do cluster por cinco minutos. Durante a
@@ -15,9 +23,9 @@ FeaturesHubScreen.kt e docs/architecture/carplay-combined-five-minute-test.md.
 Risco restante: isto captura o estado real do cluster e testa o HUD no mesmo intervalo, mas
 não ativa nem finge a Surface de vídeo secundária. O bridge nativo segue excluído da release e
 o host de Surface segue Debug-only/sem caller. Não chamar ausência de mapa de regressão da UI.
-Próximo passo obrigatório: commit imutável, allowlist do digest de build, fila Mac Mini Debug,
-depois Release 74129 assinada com a identidade de produção e verificação de certificado/hash.
-Não rodar Gradle na VPS.
+Próximo passo: instalar manualmente a 74129, tocar uma vez em Recursos > Teste CarPlay,
+conectar CarPlay, percorrer até cinco minutos e encerrar no mesmo botão. Depois recuperar os
+JSONL privados e o log do cluster delimitado pelo UUID. Não rodar Gradle na VPS.
 
 ## Real Android preflight + isolated ARM64 smoke PASSED — 2026-10-23
 
