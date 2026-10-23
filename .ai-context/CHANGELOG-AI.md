@@ -1,5 +1,16 @@
 # AI change log
 
+## 2026-10-23 — independent Surface transport prototype
+
+- Added explicit Debug-only Binder Surface endpoint and native bounded registry,
+  with UID/token checks, owner death, single claim and independent revoke.
+- Portable decoder lease passed ASan/UBSan and TSan, including blocked submission
+  revocation and an independent decoder continuing to submit. Python 14 and prior
+  bridge/ingress/observer host regressions passed; no Android runtime test claimed.
+- REA/DWARF verified alternate-display API/signature and captured type 111; common
+  dictionary builder accepts 110/111. No advertisement hook or runtime assumption.
+- Native library remains excluded; no loader, Surface consumer, OTA or car commands.
+
 ## 2026-10-22 — native bridge Mac Mini validation passed
 
 - Private source commit 07567766ab6746a5fcc10ca2dfa64a06463e9915 pushed with consent.

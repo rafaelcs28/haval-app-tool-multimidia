@@ -1,5 +1,26 @@
 # Handoff
 
+## Independent Surface transport implementation, Android compilation pending
+
+Added Debug/leanDebug-only CarPlaySurfaceEndpoint Binder class (no manifest,
+registration, call sites or implicit library load), exact UID/32-byte session
+token, single generation/grant, remote owner death and explicit revoke. Native
+bounded handle registry imports its own ANativeWindow reference; a one-shot
+surfaceDecoderFactory requires explicit clock conversion. Portable DecoderLease
+serializes revoke/submission and retires only its own backend. CMake includes
+both new native sources, still excludes .so from APK. Release Java unchanged.
+
+Host lease ASan/UBSan and TSan passed; existing Python 14, observer Node mocks,
+bridge/ingress host regressions passed. Actual Binder/Surface/JNI not exercised.
+Android compilation pending on authorized Mini. New consumer/cluster Surface,
+authenticated loader/bootstrap, clock validation and advertisement remain gates.
+Surface provenance must prove independent BufferQueue; pointer inequality cannot.
+
+Static REA confirmed captured AltScreen API passes type 111 to shared dictionary
+builder (accepts 110/111), with DWARF argument widths. Evidence retained privately;
+see architecture document. No iPhone acceptance proven, no advertisement enabled,
+no car access, OTA or installation. Production remains unchanged.
+
 ## OEM ingress adapter and bounded observer validated on Mac Mini
 
 Added native/oem_ingress.{h,cpp}, C ABI exception containment, pre-Initialize
