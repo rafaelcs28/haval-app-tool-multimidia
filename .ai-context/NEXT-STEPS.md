@@ -1,5 +1,18 @@
 # Next steps
 
+## Cold passthrough ready for the first controlled vehicle run
+
+The operator controller now exists and the exact 6d725462 ARM64 bridge was fetched
+from its successful authorized Mini job. When the head unit is online and no visual
+CarPlay/AA task is active, run stage-only first, then the explicit cold restart.
+Require `installed-pinned`, connect the iPhone on D0 and validate principal startup,
+video, disconnect and reconnect. Do not proceed to AltScreen on a passthrough failure.
+
+After a clean passthrough result, implement the authenticated OEM endpoint handoff
+and independent D3 Surface wiring. Only then switch the existing secondary runtime
+from default-off to one test generation and measure: advertisement accepted, type-111
+Start/config, frame arrival, first rendered D3 frame and uninterrupted principal D0.
+
 ## Independent CarPlay map experiment
 
 Real Android preflight/isolated smoke now passed; see carplay-android-validation-

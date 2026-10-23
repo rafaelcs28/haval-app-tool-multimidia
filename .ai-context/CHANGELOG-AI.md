@@ -1,5 +1,18 @@
 # AI change log
 
+## 2026-10-23 — controlador do primeiro passthrough frio CarPlay
+
+- Adicionou controlador operacional que pré-carrega bridge/launcher com hash,
+  recusa tasks visuais CarPlay/AA e coordena somente hooks OEM em passthrough.
+- A janela crítica especializa e confere o launcher pelo PID novo, exige módulos
+  OEM ainda ausentes e estados `armed`/`installed-pinned`; limpa o opt-in em toda saída.
+- Não anuncia segundo display, não cria decoder/Surface e não toca D3, resolução,
+  SystemUI ou handoff atual. `failed-pinned` nunca reinicia ou tenta novamente sozinho.
+- Quatro testes novos, 24 testes Python e 26 modelos Node passaram. ELF ARM64 exato
+  do job Mini da branch 131 foi recuperado e teve SHA/exports conferidos.
+- Preflight somente-leitura no carro não ocorreu porque o Tailscale estava offline;
+  nenhum processo ou arquivo da central foi alterado.
+
 ## 2026-10-23 — OTA 74130: recuperação do mapa AA congelado no cluster
 
 - Evidência de campo isolou o congelamento no vídeo CLUSTER: AA principal, HUD nativo e TBT

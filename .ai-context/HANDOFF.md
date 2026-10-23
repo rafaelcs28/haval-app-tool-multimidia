@@ -1,5 +1,30 @@
 # Handoff
 
+## Cold passthrough controller prepared — no vehicle run yet
+
+Added `scripts/carplay-native-analysis/cold_passthrough_controller.py` and four
+tests. It stages verified inputs over Telnet, validates the exact mounted/staged
+cold-gate patch, refuses visual CP/AA tasks, terminates only the idle OEM host,
+specializes the launcher for the fresh PID and requires `armed` then
+`installed-pinned`. Property/nonce cleanup runs on every exit; failed-pinned is
+never killed/retried automatically. No AltScreen, Surface, decoder, D3, SystemUI,
+resolution or handoff action exists in this controller.
+
+Authorized Mini job for source `6d7254627a97c9843c182709e5360976ccba3c3b`
+was already successful. Its exact ARM64 bridge was copied read-only from the job
+work directory into the coordinator artifact store; SHA-256
+`015beb71138ce812fb25f3c2fd9afaa304a064e7859b534154c6c9981a2f0eac`, expected
+bootstrap/data/display exports present. This file is not tracked or published.
+
+Validation: four controller tests passed; complete Python suite in a fresh isolated
+venv passed 24 with one optional converter skip; all 26 cold-interceptor Node models
+passed; `git diff --check` passed. Car read-only preflight timed out because Tailscale
+was offline, so no device state changed and OEM passthrough remains unvalidated.
+
+Next: commit/push this source, then with the head unit online run `--stage-only` and
+the explicit cold passthrough. Validate principal CarPlay D0 startup/disconnect/
+reconnect before implementing endpoint delivery and the independent D3 Surface.
+
 ## 74130 — recuperação restrita ao mapa AA do cluster
 
 Durante uma viagem na 74129, o usuário observou o mapa limpo do Android Auto congelado
