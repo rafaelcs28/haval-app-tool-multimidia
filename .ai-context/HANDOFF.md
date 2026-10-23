@@ -694,3 +694,22 @@ User did not drive and capture was not started. A fresh manual capture is still 
 1. Submit the immutable final commit as release `74122` / `1.0.0.74.122-preview`.
 2. Verify queue tests, release APK, SHA-256 and production certificate fingerprint.
 3. Publish the versioned GitHub prerelease and then atomically update the fixed `app-latest/app-preview.json` OTA manifest.
+# Cold-start controller source staged — 2026-10-23
+
+Implemented a deterministic, default-off gate immediately after
+`CarPlayService.onCreate()` calls `super` and before `init()`. REA of the exact
+embedded service APK found `carplay_jni` is loaded later from the
+`CarPlayNative` constructor. Evidence and limitations are in
+`docs/architecture/carplay-cold-start-controller.md`.
+
+New patch helper waits at most 10s for `release.<pid>.<32hex nonce>`, cancels if
+the property changes and otherwise continues stock. It does not load native
+code. New launcher generator accepts only canonical v3 profile digest31b878...,
+fixed private bridge path/hash/size, explicit PID and bounded principal UUID.
+Six Python tests and all26 existing Node cold models pass locally.
+
+Gradle Debug now also builds a staged OEM service patch into
+`build/outputs/carplay-patches/`; it does not replace the bundled asset. Apktool
+3.0.2 was copied on the authorized Mini into `$HOME/BuildQueue/tools` from an
+existing trusted copy after SHA-256 eee4669... verification. Next: commit, audit
+build-control digest, queue Debug, inspect staged output. No APK/OTA/car change.

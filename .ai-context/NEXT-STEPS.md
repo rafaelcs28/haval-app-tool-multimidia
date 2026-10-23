@@ -124,3 +124,14 @@ semantics before an opt-in TBT adapter; preserve AA and do not claim map-clean v
 3. Notify the user. Car is currently offline; installation is a separate parked-car step.
 4. During a real trip, validate roundabout progress and radar/map coexistence, including radar retention through its true coordinate.
 5. Start the manual CarPlay diagnostic in Resources only when the user is ready to drive; verify callbacks and later retrieve private JSONL.
+# Cold passthrough gate — next
+
+1. Run the immutable source through the authorized Mac Mini queue and inspect
+   the staged `TsCarPlayService-cold-gate.apk` plus bridge receipts.
+2. Keep the staged service outside the bundled asset until its smali, manifest,
+   certificate and hash are reviewed.
+3. Then wire a dedicated controller that refuses active CarPlay/AA, stages the
+   exact bridge/launcher, and coordinates only the OEM host PID. No SystemUI,
+   display, Surface or secondary advertisement actions.
+4. First vehicle run validates cold `armed -> installed-pinned` passthrough and
+   the principal D0 route before any D3 work.

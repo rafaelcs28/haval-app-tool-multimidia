@@ -286,3 +286,15 @@ Private source 8e2f204 compiled/linked ARM64 and assembled Debug on Mac Mini in
 2m; all 11 C exports verified. New native code remains excluded, so APK is byte
 identical to the previous validation build. Checksums verified; no JVM suite or
 vehicle runtime test claimed. Private coordinator receipt retained.
+# Cold CarPlay startup gate and auto-arm tooling — source staged, 2026-10-23
+
+- Added an opt-in 10-second gate before `CarPlayService.init()` in a staged OEM
+  service patch. Default startup remains immediate; release requires PID plus a
+  fresh 32-hex nonce and otherwise times out to stock.
+- Added a reviewed-profile launcher generator with fixed bridge bounds and
+  phase-only status messages.
+- Added a Mac Mini build task that produces, signs and re-decodes the staged OEM
+  APK without replacing the currently bundled asset.
+- Local validation: six Python tests, 26 existing cold-interceptor Node models,
+  shell syntax and diff checks passed. Android/Mini build still pending at this
+  changelog entry; no APK, OTA or vehicle change was made.
