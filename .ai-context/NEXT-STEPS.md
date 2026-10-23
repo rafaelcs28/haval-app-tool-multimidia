@@ -150,3 +150,9 @@ this release.
 The first parked vehicle run validates cold `armed -> installed-pinned`
 passthrough and the principal D0 route before any D3 work. Clear the nonce and
 property on every exit and do not retry a `failed-pinned` process.
+## CarPlay clean map
+
+1. Compile this checkpoint on the authorized Mac Mini and inspect the ARM64 exports/classes without changing APK packaging.
+2. Extend the cold controller to stage and pin `carplay_clean_map_endpoint.js` after passthrough installation.
+3. On parked hardware, prove in order: endpoint offered, Surface imported, getter advertisement accepted, type-111 Start/config, secondary frame callbacks, first D3 frame, uninterrupted D0.
+4. Exercise End, disconnect/reconnect, long sleep/wake and switch to Android Auto before enabling outside the explicit test flow.

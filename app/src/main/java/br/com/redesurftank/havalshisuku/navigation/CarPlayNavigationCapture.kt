@@ -13,6 +13,7 @@ import android.os.Parcel
 import android.os.SystemClock
 import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
+import br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapCoordinator
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -133,6 +134,7 @@ object CarPlayNavigationCapture {
                     startedAtMs = SystemClock.elapsedRealtime()
                     view = view.copy(startedAtMs = startedAtMs)
                     if (enableHudImmediately) {
+                        CarPlayCleanMapCoordinator.setExperimentEnabled(true)
                         clusterCaptureLease = ClusterPersistentEventLogger.acquireCaptureLease("carplay-combined-$id")
                         ClusterPersistentEventLogger.log(
                             "carplay_combined_test_start",
@@ -391,6 +393,7 @@ object CarPlayNavigationCapture {
             if (ended) return
             ended = true
             if (enableHudImmediately) {
+                CarPlayCleanMapCoordinator.setExperimentEnabled(false)
                 ClusterPersistentEventLogger.log(
                     "carplay_combined_test_stop",
                     mapOf(

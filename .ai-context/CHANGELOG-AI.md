@@ -354,3 +354,9 @@ vehicle runtime test claimed. Private coordinator receipt retained.
   passthrough-only test; no D3 Surface, second-display announcement or clean map.
 - Debug and Release builds now re-decode and semantically verify the committed
   artifact instead of patching/re-signing it a second time.
+## 2026-10-23 — CarPlay clean-map runtime handoff (source checkpoint)
+
+- Connected the pinned cold entry bridge to Surface-backed runtime preparation without restarting the principal stream.
+- Added authenticated OEM-to-app endpoint transport, a dedicated display-3 consumer slot, and automatic gating from the five-minute CarPlay test.
+- Added live loaded-module display API resolution, type-111 advertisement preparation, JNI native registration, and a persistent OEM control script.
+- Kept native packaging excluded and activation default-off; Android compile and vehicle stream/frame evidence remain pending.
