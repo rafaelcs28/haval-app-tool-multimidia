@@ -1,5 +1,15 @@
 # AI change log
 
+## 2026-10-22 — native bridge Mac Mini validation passed
+
+- Private source commit 07567766ab6746a5fcc10ca2dfa64a06463e9915 pushed with consent.
+- Audited/allowlisted Mac Mini job built and linked ARM64 backend and assembled
+  Debug successfully in 2m9s; no Android build occurred on the coordinator.
+- Fetched hashes verified; bridge .so/C++ shared runtime excluded from APK and
+  all four existing APK ABIs retained. Debug artifact is not an OTA candidate.
+- Native bridge passed ThreadSanitizer; all host ASan/UBSan and 12 Python tests
+  passed. No Android runtime/CarPlay or vehicle validation claimed.
+
 ## 2026-10-22 — default-off native bridge prototype
 
 - Implemented fixed-route OEM/secondary core, identity-before-creation gate,

@@ -1,5 +1,30 @@
 # Handoff
 
+## Native bridge validation completed on Mac Mini
+
+Built source 07567766ab6746a5fcc10ca2dfa64a06463e9915, pushed privately to
+release/impulse-74125 after explicit authorization. Reviewed control digest
+cc9c51fc77190f0f698437021ee3a7ba59b4c56536681efdbd087c958ceb8f15
+allowlisted. Job haval-74126-work-07567766ab6746a5-20261023T011011Z-24713
+succeeded: ARM64 CMake configure/build/link and assembleDebug, 2m9s. No new
+Android JVM unit suite was run by this Debug job.
+
+Fetched artifact and checksums verified; ZIP confirms bridge .so and shared C++
+runtime absent, existing four ABIs retained. APK is internal Debug validation,
+NOT production-signed OTA and must not be installed over the car release.
+SHA256 befc0fc48f44901f2dedf39fb85d267de6cbcccc22ea15a9b36082da96342fab,
+148548705 bytes. Private receipts at coordinator artifacts/carplay-native-bridge-0756776.
+
+Host bridge also passed ThreadSanitizer in addition to ASan/UBSan. AVC parser
+10,000 seeded cases; NAL converter 14 fixtures + 10,000 cases; Python 12 passed.
+Runtime remains entirely unwired/excluded. No loader, Surface transfer, clock
+calibration, secondary advertisement, user toggle or Android runtime test yet.
+No OTA publication or vehicle operation; do not imply clean-map functionality.
+
+Mac job native output also inspected directly (read-only): ELF64 AArch64 shared
+object SHA256 839d58ce5a8e2759e7d2fbce19e47e1c1c7942103facd63fb193cfa1cd54e174.
+This confirms an actual linked native binary, intentionally excluded from APK.
+
 ## Experimental native bridge implementation and authorized validation
 
 User authorized commit/push to private repository and Mac Mini compilation,
