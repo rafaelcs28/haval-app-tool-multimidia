@@ -1,5 +1,26 @@
 # Handoff
 
+## OEM ingress adapter and bounded observer, pending Android build
+
+Added native/oem_ingress.{h,cpp}, C ABI exception containment, pre-Initialize
+thread-local identity, captured 32-bit CFL string API and one-shot process pin.
+C bootstrap is passthrough only; no OEM hooks installed or APK inclusion enabled.
+Original targets must be unmodified/trampolines and stay loaded; no unload API.
+Added hash-pinned offline profile generator, inert explicit-start Frida observer
+and Node mock tests. Hooks instrument code and need parked validation; no pixels
+or raw UUIDs captured. Finalize event denotes entry, not resource-release proof.
+
+Validation: Python 14/14 with private binaries and converter; Node syntax/mock
+tests passed; ingress passthrough/enabled tests passed ASan/UBSan and TSan.
+New CMake source still needs authorized Mac Mini compilation. No local Android
+build, OTA, install or vehicle command performed. Production 127 stays unchanged.
+Static REA decompilation confirms captured UpTicks uses monotonic nanoseconds;
+frame path also supports synchronized NTP conversion. Runtime calibration pending.
+
+Remaining gates: actual loader/interception, independent Surface IPC, second-video
+advertisement/negotiation and parked lifecycle/priority tests. Do not claim clean
+CarPlay map works. Current sources keep Android runtime and OEM packages untouched.
+
 ## Native bridge validation completed on Mac Mini
 
 Built source 07567766ab6746a5fcc10ca2dfa64a06463e9915, pushed privately to

@@ -95,3 +95,10 @@
 - Scope is limited to radar cache validation, per-source refresh/retry state, settings text, tests and radar documentation.
 - Preserved Android Auto cluster recovery, CarPlay, themes, alert thresholds and bundled radar datasets unchanged.
 - Validation is delegated to the authorized Mac Mini release queue for unit tests, R8, lint vital, release assembly and signing-certificate verification.
+
+## OEM ingress and observation preparation
+
+Added bounded pre-creation identity adapter and exception-safe C ABI, default
+passthrough, plus exact-library profile generator and manual bounded observer.
+Python 14 tests, Node observer mocks and native ingress ASan/UBSan + TSan passed.
+No runtime integration, OTA publication or vehicle operation. See README and handoff.
