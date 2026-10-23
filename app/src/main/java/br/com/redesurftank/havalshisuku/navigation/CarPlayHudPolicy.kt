@@ -11,10 +11,10 @@ class CarPlayHudPolicy {
     private var carPlay = AndroidAutoNavigationTelemetry.inactive()
     private var androidAuto = AndroidAutoNavigationTelemetry.inactive()
 
-    fun begin(id: String) {
+    fun begin(id: String, enableImmediately: Boolean = false) {
         capture = id
         generation = null
-        enabled = false
+        enabled = enableImmediately
         clearCarPlay()
     }
 

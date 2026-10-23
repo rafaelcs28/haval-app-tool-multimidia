@@ -1,5 +1,23 @@
 # Handoff
 
+## 74129 — teste combinado de um botão em preparação
+
+Recursos agora oferece `Iniciar teste CarPlay`; um toque inicia captura Binder privada,
+HUD textual experimental e logger correlacionado do cluster por cinco minutos. Durante a
+sessão o botão vira `Encerrar teste`. Timeout, parada manual e falha passam pela mesma limpeza,
+restaurando a preferência anterior do logger. O UUID aparece nos delimitadores do cluster.
+
+Arquivos alterados: CarPlayCaptureScreen.kt, CarPlayNavigationCapture.kt,
+CarPlayExperimentalHud.kt, CarPlayHudPolicy.kt, CarPlayHudPolicyTest.kt,
+FeaturesHubScreen.kt e docs/architecture/carplay-combined-five-minute-test.md.
+
+Risco restante: isto captura o estado real do cluster e testa o HUD no mesmo intervalo, mas
+não ativa nem finge a Surface de vídeo secundária. O bridge nativo segue excluído da release e
+o host de Surface segue Debug-only/sem caller. Não chamar ausência de mapa de regressão da UI.
+Próximo passo obrigatório: commit imutável, allowlist do digest de build, fila Mac Mini Debug,
+depois Release 74129 assinada com a identidade de produção e verificação de certificado/hash.
+Não rodar Gradle na VPS.
+
 ## Real Android preflight + isolated ARM64 smoke PASSED — 2026-10-23
 
 See docs/architecture/carplay-android-validation-2026-10-23.md. Car user says off,

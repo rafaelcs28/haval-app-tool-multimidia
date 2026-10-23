@@ -1,5 +1,16 @@
 # AI change log
 
+## 2026-10-23 — fluxo único de teste CarPlay para 74129
+
+- Substituiu os controles separados de captura/HUD por um único botão de iniciar/encerrar.
+- A sessão combinada habilita o HUD automaticamente, delimita os logs existentes do cluster
+  com o mesmo UUID e encerra por timeout monotônico exato de cinco minutos.
+- Preserva e restaura a preferência anterior do logger do cluster; Android Auto continua com
+  prioridade e nenhum contrato de tema, resolução, Surface ou handoff foi alterado.
+- Mantém seta desconhecida vazia e não anuncia mapa limpo: a ponte secundária continua
+  default-off até existir uma Surface de produção validada.
+- Validação Android/Gradle e assinatura 74129 destinadas exclusivamente à fila do Mac Mini.
+
 ## 2026-10-23 — real Android loaded-code proof and isolated smoke passed
 
 - Read real Android9/API28/ARM64 OEM maps and bounded RX memory; all three segments

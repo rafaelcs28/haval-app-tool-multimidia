@@ -14,7 +14,9 @@ object CarPlayExperimentalHud {
         private set
     private val expire = Runnable { publish() }
 
-    fun begin(id: String) = change { policy.begin(id) }
+    fun begin(id: String, enableImmediately: Boolean = false) = change {
+        policy.begin(id, enableImmediately)
+    }
 
     fun setEnabled(value: Boolean) = change { policy.setEnabled(value) }
 
