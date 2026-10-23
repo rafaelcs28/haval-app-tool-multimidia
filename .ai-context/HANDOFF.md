@@ -1,6 +1,106 @@
 # Handoff
 
+## Experimental native bridge implementation and authorized validation
+
+User authorized commit/push to private repository and Mac Mini compilation,
+explicitly without OTA publication/vehicle installation for this stage.
+
+New VideoBridge core defaults to OEM passthrough; enabled mode requires identity
+before Initialize, independent secondary factory, bounded copies and no OEM
+fallback for retired secondary streams. Includes AVC configuration parser and
+AndroidSecondaryDecoder (own codec/window/worker, explicit tick converter).
+Host ASan/UBSan bridge fixtures and AVC parser tests passed; backend requires Mac
+Mini ARM64 compilation. Android build config pins installed NDK27.1/CMake3.22.1,
+builds only this native ARM64 target with static C++ runtime and excludes its .so
+from APK packaging. No runtime loader/JNI/IPC/advertisement or UI added.
+
+Remaining integration gates are explicit in README/architecture: pre-creation
+OEM interception, independent Surface transfer, clock calibration, ABI-boundary
+exception handling and callback quiescence on pointer reuse/destruction. Host
+tests use synthetic decoder/factory; they do not prove AMediaCodec behavior.
+Do not install a build or remove the native packaging exclusion as a shortcut.
+
+## Native component implemented; initialization-order gate identified
+
+Added native/packet_conversion.{h,cpp}, observed_video_abi.h, host CLI and C++
+fixtures under scripts/carplay-native-analysis. No Android linkage or hook.
+ASan/UBSan: 14 fixtures + 10,000 seeded malformed-input cases passed. Actual
+C++ conversion of a ten-frame H.264 fixture preserved decoded hashes. Twelve
+Python tests passed with CARPLAY_NATIVE_DIR and CARPLAY_PACKET_CONVERTER supplied.
+
+Ghidra 12.1.4 now installed privately at /root/.local/share/haval-analysis, official
+archive checksum verified; existing JDK 21 used with command-local environment.
+No persistent REA/global Java changes. REA CLI full Evidence/snapshots privately
+beside native capture; corrected Ghidra base is 0x100000, not ELF zero base.
+Stack DWARF confirms callback ABI and 96-byte ScreenStreamPrivate. Header is an
+observed layout, not permission to cast/hook arbitrary builds.
+
+Critical next design constraint: StartSession calls Create/Initialize BEFORE
+SetDelegateContext/Start(UUID). A seven-slot hook that classifies only at Start
+would already have touched the singleton decoder. Need identity above creation,
+verified lifecycle/reentrancy, then isolated AMediaCodec receiver and reversible
+startup integration before secondary-display negotiation. No APK/OTA or car access.
+
+## Continued native investigation and real host decoder experiment
+
+Completed a further offline pass rather than requesting another continuation.
+CoreUtils ScreenStreamCreate explicitly dlopens libcarplay_proxy_ts.so and dlsyms
+ScreenStream callbacks. AirPlay maintains per-string stream contexts; the string
+and integer propagate through StartSession/Start to the stack, whose observed Start
+body discards their meaning and retains the shared platform context. Numeric type
+semantics and replacement/namespace safety remain unproven. On the inspected
+ProcessFrame branch, completion/context are null; do not generalize to every caller.
+
+audit.py now preserves adjacent printable ADRP/ADD literals; added an exact-library
+loader regression and test_dual_decoder.py. Eleven tests passed (5 portable,
+5 captured-artifact, 1 real FFmpeg H.264 decoder isolation experiment). Secondary
+stop/restart with changed dimensions did not stop the principal Linux process.
+This is NOT OEM/Android decoder validation or map-clean support. No Android build,
+APK, commit/push or car command. Private lifecycle/frame/CoreUtils disassembly and
+loader-audit JSON are beside the native capture on coordinator.
+
+Remaining engineering gate: real native receiver/loader integration preserving
+the principal OEM video, and verified advertisement/negotiation. Host decoding is
+not a reason to ship a flag-only APK. See the architecture report for exact limits.
+
+## Autonomous clean-map investigation follow-up
+
+User requested continuing useful work without repeated follow-up commands. No
+vehicle operations are needed for the current offline stage. Captured native
+libraries are private on coordinator in test-artifacts/carplay-apks/20261022-205614-telnet;
+car was shut down with fresh P/0 km/h telemetry after collection.
+
+Added scripts/carplay-native-analysis/{audit.py,test_audit.py,requirements.txt,README.md}
+and docs/architecture/carplay-secondary-video-investigation.md. Read-only hash-pinned
+AArch64 audit validates PLT→GOT and resolves the seven gVideoCallback relocations.
+Nine tests passed, including four using exact captured binaries; git diff --check
+passed. No Android build, source commit/push, OTA or runtime modifications.
+
+New finding: proxy CarPlayVideoInit stores a callback table; ScreenStream wrappers
+forward to seven stack callbacks. Candidate integration boundary only: indirect
+linker resolution, ABI, lifetimes, completion and stream identity remain gates.
+Existing global media codec/window/platform context prevents assuming a flag-only
+second stream. Next: ABI/ownership analysis, then actual offline dual-decoder proof
+and reversible native integration design. No generic synthetic policy test can
+prove actual independent video or clean-map support from the iPhone.
+
 ## Current task
+
+Offline APK analysis completed after the 74127 drive; no new APK built. Private technical
+report and 61 REA/JADX Evidence records are on coordinator under test-artifacts/carplay-apks/
+analysis-20261022. NavigationProxy confirms raw 1 left, 2 right, 4 driving-side-dependent
+U-turn, 12 destination flag, 47 sharp-left. Raw 28..46 encode roundabout exit raw-27;
+compact image table has 35 entries with index raw-19 for 47..53. Four central methods
+match the located stock app reference; nine selected glyphs have identical decoded pixels.
+Installed APKs match the fork's bundled carplay_patches assets. Original service binary
+03cc69d1... not found; don't claim a full original-service diff or factory authenticity.
+Time units remain unconfirmed. Cache is composed from partial updates; stale text/angles
+can survive state changes. SourceName/description upstream are dropped before the public
+11-field Binder, so do not extend the Parcel reads. METER/HUD RemoteViews path exists
+statically but no secondary video/map or active cluster integration is proven. Next proposed
+release would add only verified HUD glyphs, with unknowns blank and no ETA, preserving AA.
+
+## Previous delivery status
 
 Current follow-up: user requested experimental CarPlay guidance. Built source
 adds CarPlayHudPolicy, CarPlayExperimentalHud and tests, routes only the two AA native-HUD

@@ -1,5 +1,43 @@
 # AI change log
 
+## 2026-10-22 — default-off native bridge prototype
+
+- Implemented fixed-route OEM/secondary core, identity-before-creation gate,
+  per-stream serialized decoder ownership and independent secondary shutdown.
+- Added bounded avcC SPS/PPS parser and Android codec/window/worker backend,
+  requiring explicit timestamp conversion; unknown completion variants rejected.
+- Host ASan/UBSan routing/failure/concurrency tests and AVC fuzz fixtures passed.
+- Added compile-only ARM64 CMake integration, excluding the result from APK and
+  statically linking C++ to preserve existing runtime dependencies/ABIs.
+- User approved private commit/push and Mac Mini validation only; no OTA/install.
+
+## 2026-10-22 — first isolated native component and recovered callback ABI
+
+- Recovered exact callback signatures/layout from captured stack DWARF and
+  cross-checked main display/Start/ProcessData with Ghidra through REA CLI.
+- Identified Initialize-before-UUID ordering; table-only routing is unsafe.
+- Added bounded native NAL conversion and observed ABI header, not linked to app.
+- Host ASan/UBSan passed 14 fixtures + 10,000 seeded cases; twelve Python tests
+  passed, including real H.264 native-conversion/decode hash equality.
+- No Android build, interception, vehicle change, publication or clean-map claim.
+
+## 2026-10-22 — native loader/identity tracing and dual host decoder test
+
+- Traced explicit CoreUtils proxy dlopen/dlsym and AirPlay per-string identity path.
+- Extended audit with adjacent printable literal evidence and loader regression.
+- Added real synthetic H.264 FFmpeg decoder lifecycle test with independent
+  secondary stop/restart and changed dimensions; all 11 tests passed.
+- No OEM/Android decoder, second CarPlay negotiation, vehicle or APK claims.
+
+## 2026-10-22 — offline CarPlay secondary-video audit
+
+- Added hash-pinned, read-only AArch64 function/PLT/callback-table auditor and tests.
+- Identified seven stack video callbacks forwarded by the native proxy, without
+  treating that boundary as a safe hook or proven second stream.
+- Nine Python tests passed with private captured binaries; no OEM files committed.
+- Documented native singleton blockers, loader/ABI/ownership gates and real
+  dual-decoder validation requirements; no Android/runtime/vehicle changes.
+
 ## 2026-10-22 — experimental windshield HUD CarPlay text (74127)
 
 - Added session-only opt-in text feed, generation/expiry/priority policy and regression tests.
