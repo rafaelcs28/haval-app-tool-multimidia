@@ -81,7 +81,7 @@ object AndroidAutoClusterController {
                 sessionActive = isSessionActive()
             )
             if (next != null) {
-                onLinkStatus(next)
+                onLinkStatus(next, availabilityObserved = status != null || dcmEvidenceRecent)
             }
             checkClusterStreamHealth()
             mainHandler.postDelayed(this, 1_500L)
@@ -100,7 +100,11 @@ object AndroidAutoClusterController {
         mainHandler.post(sessionPollRunnable)
     }
 
-    fun onLinkStatus(status: Int?, nowMs: Long = SystemClock.elapsedRealtime()) {
+    fun onLinkStatus(
+        status: Int?,
+        nowMs: Long = SystemClock.elapsedRealtime(),
+        availabilityObserved: Boolean = status != null
+    ) {
         val navigationEvidenceRecent =
             AndroidAutoSessionTelemetry.hasRecentNavigationEvidence(
                 lastActiveAtMs = lastNavigationActiveAtMs.get(),
@@ -110,6 +114,10 @@ object AndroidAutoClusterController {
             linkStatus = status,
             navigationEvidenceRecent = navigationEvidenceRecent
         )
+        if (availabilityObserved || navigationEvidenceRecent) {
+            br.com.redesurftank.havalshisuku.navigation.CarPlayExperimentalHud
+                .onAndroidAutoAvailability(AndroidAutoSessionTelemetry.isLinkActive(effectiveStatus), nowMs)
+        }
         if (effectiveStatus != status && sessionStopSuppressed.compareAndSet(false, true)) {
             val navigationAgeMs = nowMs - lastNavigationActiveAtMs.get()
             Log.w(

@@ -139,6 +139,7 @@ object CarPlayNavigationCapture {
                             mapOf("session" to id, "durationMs" to maxDurationMs, "versionCode" to BuildConfig.VERSION_CODE)
                         )
                     }
+                    CarPlayExperimentalHud.start(context)
                     CarPlayExperimentalHud.begin(id, enableHudImmediately)
                     if (!record("capture_start", JSONObject().put("versionCode", BuildConfig.VERSION_CODE)
                         .put("versionName", BuildConfig.VERSION_NAME)
