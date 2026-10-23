@@ -203,7 +203,7 @@ dependencies {
     debugImplementation(libs.ui.test.manifest)
 }
 
-tasks.matching { it.name == "assembleDebug" }.configureEach {
+tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
     dependsOn("testDebugUnitTest")
     dependsOn("buildCarPlayColdGatePatch")
 }

@@ -126,12 +126,14 @@ semantics before an opt-in TBT adapter; preserve AA and do not claim map-clean v
 5. Start the manual CarPlay diagnostic in Resources only when the user is ready to drive; verify callbacks and later retrieve private JSONL.
 # Cold passthrough gate — next
 
-1. Run the immutable source through the authorized Mac Mini queue and inspect
-   the staged `TsCarPlayService-cold-gate.apk` plus bridge receipts.
-2. Keep the staged service outside the bundled asset until its smali, manifest,
-   certificate and hash are reviewed.
-3. Then wire a dedicated controller that refuses active CarPlay/AA, stages the
-   exact bridge/launcher, and coordinates only the OEM host PID. No SystemUI,
-   display, Surface or secondary advertisement actions.
-4. First vehicle run validates cold `armed -> installed-pinned` passthrough and
-   the principal D0 route before any D3 work.
+The staged service passed the authorized Mini round trip and was incorporated
+byte-for-byte as the default-off bundled service asset. The immutable combined
+commit still needs the Mini Debug/release gate. After the signed release is
+available, use a dedicated operator controller that refuses active CarPlay/AA,
+stages the exact bridge/launcher and coordinates only the exact OEM host PID.
+No SystemUI, display, Surface or secondary-advertisement actions are part of
+this release.
+
+The first parked vehicle run validates cold `armed -> installed-pinned`
+passthrough and the principal D0 route before any D3 work. Clear the nonce and
+property on every exit and do not retry a `failed-pinned` process.

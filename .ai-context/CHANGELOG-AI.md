@@ -302,3 +302,11 @@ vehicle runtime test claimed. Private coordinator receipt retained.
 - First immutable Mini run failed at aapt2 manifest relinking because the OEM
   APK has no resources table. Follow-up preserves the original binary manifest
   with Apktool `--copy-original`; no staged APK was produced by the failed run.
+# 2026-10-23 — embed reviewed default-off CarPlay cold gate
+
+- Incorporated the exact Mini-validated `TsCarPlayService` cold-gate artifact,
+  SHA-256 `ad019ce091ef55bbf57f7e242ce9cdb647a8596f1e1f7d28d0c7f340957dba01`.
+- The gate is inert without an explicit 32-hex nonce property and remains a
+  passthrough-only test; no D3 Surface, second-display announcement or clean map.
+- Debug and Release builds now re-decode and semantically verify the committed
+  artifact instead of patching/re-signing it a second time.
