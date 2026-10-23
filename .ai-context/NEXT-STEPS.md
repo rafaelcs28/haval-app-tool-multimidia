@@ -1,5 +1,18 @@
 # Next steps
 
+## Independent CarPlay map experiment
+
+Continue from the Debug-only explicit Surface transport and portable lease, not
+from the production fullscreen handoff. Keep native APK exclusion and no manifest
+registration until the authenticated OEM loader and a fresh independent cluster
+consumer are implemented/reviewed. Never reuse the principal Surface/BufferQueue.
+Validate JNI/Binder grant/revoke, process death and codec stop with a controlled
+parked test before advertising secondary video. No Android runtime test yet.
+Verify clock against captured frames. Preserve the principal display capabilities
+and ownership when preparing a secondary announcement; captured alternate API
+uses type 111, but actual iPhone acceptance and delivered identity remain unproven.
+No automatic OTA/install/car commands authorized by this experimental build step.
+
 74127 signed release/tests/OTA validation completed. User explicitly chose windshield
 HUD and later took over manual installation. Automatic installer stopped before package
 installation; do not issue further vehicle start/stop/install commands. Await manual

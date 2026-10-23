@@ -1,6 +1,6 @@
 # Handoff
 
-## Independent Surface transport implementation, Android compilation pending
+## Independent Surface transport compiled on Mac Mini
 
 Added Debug/leanDebug-only CarPlaySurfaceEndpoint Binder class (no manifest,
 registration, call sites or implicit library load), exact UID/32-byte session
@@ -12,7 +12,17 @@ both new native sources, still excludes .so from APK. Release Java unchanged.
 
 Host lease ASan/UBSan and TSan passed; existing Python 14, observer Node mocks,
 bridge/ingress host regressions passed. Actual Binder/Surface/JNI not exercised.
-Android compilation pending on authorized Mini. New consumer/cluster Surface,
+Source 7e707bccc120d0eab4319a1d02ea1cc2e1bbfbc5 pushed privately. Mac Mini job
+haval-74126-work-7e707bccc120d0ea-20261023T083027Z-20507 passed Java compilation,
+ARM64 CMake/link and assembleDebug in 1m55s (40 tasks). Native ELF64 AArch64 SHA
+cf576150f93cb2f6d0ba088b2aa4cfa6bd95d574a97a926d6b44c12ea610841c;
+both JNI Surface exports and surfaceDecoderFactory verified. Fetched checksums
+passed; APK SHA bc136b0c1b375bc27a7d0462e9945dc18b01866542efa7ae1083f251ab7ec01f,
+148548705 bytes. Debug class present in DEX; manifest unchanged from prior build,
+four ABIs preserved, native bridge/shared C++ runtime absent. Internal Debug only,
+not production signed or installable OTA; no JVM test suite in this job.
+Receipt: artifacts/carplay-surface-7e707bc/VALIDACAO.md on coordinator.
+New consumer/cluster Surface,
 authenticated loader/bootstrap, clock validation and advertisement remain gates.
 Surface provenance must prove independent BufferQueue; pointer inequality cannot.
 

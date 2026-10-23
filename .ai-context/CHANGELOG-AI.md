@@ -10,6 +10,9 @@
 - REA/DWARF verified alternate-display API/signature and captured type 111; common
   dictionary builder accepts 110/111. No advertisement hook or runtime assumption.
 - Native library remains excluded; no loader, Surface consumer, OTA or car commands.
+- Source 7e707bc passed authorized Mac Mini Java/ARM64/assembleDebug in 1m55s.
+  JNI exports and DEX class verified, manifest unchanged, four ABIs retained;
+  native bridge still excluded. Fetched checksums verified, internal Debug only.
 
 ## 2026-10-22 — native bridge Mac Mini validation passed
 
