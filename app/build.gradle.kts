@@ -202,3 +202,7 @@ dependencies {
     debugImplementation(libs.ui.tooling)
     debugImplementation(libs.ui.test.manifest)
 }
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    dependsOn("testDebugUnitTest")
+}

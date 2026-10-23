@@ -1,5 +1,11 @@
 # Known issues
 
+- Warm native bridge installation requires fresh proof/adoption of the existing principal stream before hook switch; otherwise its old Initialize was never observed and frames would reject. The new adoption API does not prove pointer lifetime/epoch itself. No live installer/capture handshake exists yet.
+- Owned getter replacement is conditional on a verified owned-return contract and trusted nonthrowing release. C++ exception containment does not cover native pointer faults; an already committed response cannot be withdrawn by close.
+
+- The Debug-only consumer, host and seven JUnit methods are source-only, not compiled/executed. No application call site exists. Revoke failure intentionally retains one queue/view/context and blocks further consumers; a hung Binder holds its worker/gate until recovery/peer death. Device lifecycle validation is required.
+- Host AA/safety guards are not an atomic global display arbiter. A real exclusive slot, authoritative fresh elapsedRealtime snapshots and immediate owner/AA/safety events remain mandatory before activation.
+
 - Experimental Binder/Surface/JNI transport has compile/portable-test validation only; no actual Android lifecycle, queue independence or iPhone secondary-video negotiation has been tested. It is Debug-only and the native library remains excluded.
 - Different Surface wrappers or ANativeWindow pointers do not prove independent BufferQueues. A fresh consumer and coordinated destruction/revocation are required before deployment.
 

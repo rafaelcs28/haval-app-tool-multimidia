@@ -2,6 +2,42 @@
 
 ## Independent CarPlay map experiment
 
+OEM runtime C boundary and getter adapter now exist in source. Install nothing yet:
+verify real getter ownership and module/trampoline provenance. For warm install,
+capture and pin the current principal UUID plus live stream/epoch, adopt it without
+reinitialization, then switch callbacks only under a quiescent installer protocol.
+The current observer's logged hashes/sequences are not sufficient live pointer
+proof. No automated installer or authenticated app/native bootstrap exists yet.
+Getter repeats intentionally reuse one immutable generation, not a new decoder.
+
+Native SecondaryRuntime now links the source pipeline and passes synthetic end-to-end
+tests. Use runtimeForSurface with verified original targets, explicit clock/geometry
+and real retained CFL/module ownership. Secondary initialization is gated on committed
+advertisement; no enabled C/JNI bootstrap/getter hook installs it yet. A future C
+adapter must contain exceptions, preserve original array ownership and await callback
+quiescence before unload/reuse. Do not remove native packaging exclusion to deploy.
+
+Debug-only dedicated-slot host now connects the consumer in source. Do not wire
+it into production layout yet: provide real ownership/safety/AA observation events,
+fresh elapsedRealtime snapshots (not uptime across sleep) and authenticated OEM
+bootstrap. Host callbacks distinguish view hidden from resources retired. Cached
+default AA STOPPED is not evidence of inactivity; no automatic resume is allowed.
+Seven new Debug JUnit methods and host/consumer source await Mini compilation and
+tests in the later combined build. Still no new version/build or car operations.
+
+Source now includes the generation-scoped session coordinator and a Surface binding
+that closes it on revoke. Wire the future OEM adapter through session.advertise,
+not raw prepareSecondaryDisplay/readiness checks. Publisher is a prompt noexcept
+ownership handoff only; no codec/OEM reentry while holding guards. No runtime
+adapter yet. Fresh consumer source now exists in internalDebug but is uncompiled,
+unwired and not exercised on Android. No new build/version until combined validation.
+
+Integrate the fresh consumer only through a reviewed host that owns display-3
+visibility/AA priority. Close and detach it on exit; onReady is not proof of video.
+Validate grant, concurrent detach/revoke, peer death and unconfirmed-revoke quarantine
+on a parked device after the single combined Mini build/test step. Do not bypass
+the quarantine gate or release buffers without confirmed producer retirement.
+
 Continue from the Debug-only explicit Surface transport and portable lease, not
 from the production fullscreen handoff. Keep native APK exclusion and no manifest
 registration until the authenticated OEM loader and a fresh independent cluster

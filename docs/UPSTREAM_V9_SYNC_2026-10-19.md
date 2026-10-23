@@ -59,6 +59,20 @@ The upstream `AaClusterStallPolicy.kt` and its test were intentionally omitted. 
 - CarPlay capture, cluster watchdog, themes, OEM APKs and bridge contracts are unchanged.
 - Validation/build: authorized Mac Mini queue only; vehicle validation is still required.
 
+## Roundabout telemetry follow-up — 2026-10-23, source only
+
+- Manually ported the functional changes of Netseek
+  `7c4f9fc6ff84e2d16fa676d7afa4f037e93cc4ce` (2026-10-22 20:14:51 -03:00).
+- HUD tracker progress no longer requires this tick's angle once entry is known.
+- Impulse narrows retention to a zero/zero EXIT of the same travel direction,
+  with a complete prior pair. A new ENTER, non-roundabout, reset/end of route,
+  direction change or partial/invalid pair does not inherit old values.
+- Added four test methods covering held exit/renamed road/code 8 and boundaries.
+  New Kotlin tests are not yet executed: user asked to defer new version/build.
+- RoundaboutTracker and physical radar-pass guards from 6712de86 are unchanged.
+  No version bump, APK, signing, OTA or vehicle operation. Combined validation
+  on the authorized Mini remains required before the eventual single release.
+
 ## Build validation requirement
 
 This workspace is a sanitized snapshot without Git metadata. Android/Gradle/Kotlin validation must not run on the coordinator. Before release, move the reviewed changes into an immutable commit and submit that exact commit through `scripts/build-on-mac-mini.sh`, following `docs/BUILD_ANDROID_ON_MAC_MINI.md`.

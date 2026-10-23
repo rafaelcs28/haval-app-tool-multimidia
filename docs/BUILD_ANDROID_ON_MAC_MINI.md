@@ -14,6 +14,10 @@ The coordinator resolves the full commit SHA, checks tracked filenames and file 
 
 Use the returned job identifier:
 
+For this project, `assembleDebug` also depends on `testDebugUnitTest`. The Debug
+queue therefore validates the full JVM suite, including `src/testDebug`, before
+reporting success. It does not change production signing, version or OTA metadata.
+
 ```sh
 mac-mini-build status "$JOB_ID"
 mac-mini-build fetch "$JOB_ID" "$NEW_EMPTY_DESTINATION"

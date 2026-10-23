@@ -426,10 +426,22 @@ object AndroidAutoNavigationTelemetry {
         }
 
         private fun setRoundaboutExit(event: Int, number: Int, angle: Int) {
+            if (!isRoundabout(event)) {
+                exitNumber = null
+                turnAngle = null
+                roundaboutClockwise = null
+                return
+            }
             val (exit, exitAngle) = roundaboutExit(event, number, angle)
-            exitNumber = exit
-            turnAngle = exitAngle
-            roundaboutClockwise = if (isRoundabout(event)) isClockwiseRoundabout(event) else null
+            val clockwise = isClockwiseRoundabout(event)
+            val exitStep = event == MANEUVER_ROUNDABOUT_EXIT_CW || event == MANEUVER_ROUNDABOUT_EXIT_CCW
+            val keepApproach = exitStep && number == 0 && angle == 0 &&
+                roundaboutClockwise == clockwise && exitNumber != null && turnAngle != null
+            if (!keepApproach) {
+                exitNumber = exit
+                turnAngle = exitAngle
+            }
+            roundaboutClockwise = clockwise
         }
 
         @Synchronized

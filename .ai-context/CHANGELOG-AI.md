@@ -1,5 +1,74 @@
 # AI change log
 
+## 2026-10-23 — OEM C boundary, repeat getter and warm adoption source
+
+- Added noexcept adapter C entries, exact original error/array fallback and owned
+  replacement release accounting. Repeated/concurrent queries reuse generation,
+  not a decoder. Legacy/runtime registration share a one-shot atomic reservation.
+- Added explicit principal adoption without OEM Initialize for a future verified
+  warm install; no automatic live capture/hook or source of principal proof added.
+- Adapter six process modes passed ASan/UBSan and TSan, including concurrent getter,
+  close during preparation and registration contention. Ingress/session/runtime
+  regressions recompiled/passed. Tests use fake OEM arrays/callbacks/decoder only.
+- No Android build, version, commit/push, signing, OTA or car commands. Caller must
+  still validate real ownership/epoch/module targets and quiesce installation.
+
+## 2026-10-23 — integrated native runtime, source/host tests only
+
+- Added runtime linking pre-create ingress, generation/advertisement and secondary
+  decoder, with exclusive runtime binding, geometry guard and principal isolation.
+- Surface adapter now validates native window size before factory/runtime setup;
+  Android additions remain uncompiled and no hook/enabled C bootstrap is installed.
+- Six synthetic runtime scenarios passed ASan/UBSan (20 repeats) and TSan, including
+  primary progress while secondary submit/close blocks. Current session regression
+  recompiled/passed. No claim of OEM/Surface/codec/video execution.
+- No Android build/version, commit/push, signing, OTA or vehicle commands. Combined
+  Mini validation and seven Debug JUnit methods remain pending.
+
+## 2026-10-23 — guarded experimental cluster host source
+
+- Added dedicated-slot host connecting the consumer, with read-only AA/native
+  CarPlay guards, fresh explicit authorization and teardown of its child only.
+- Snapshot clock uses elapsedRealtime to expire permissions across deep sleep;
+  checked on start/pre-draw/grant ACK/events plus active-only 250ms polling.
+- Added three policy JUnit methods, not compiled/executed. Prior native regressions
+  passed; no claim of host lifecycle/device validation or atomic global arbitration.
+- No app call site, production layout/manifest change, build/version, commit/push,
+  signing, OTA, install, AA mutation or vehicle command. Combined validation pending.
+
+## 2026-10-23 — fresh cluster consumer source, not built
+
+- Added explicitly enabled Debug-only display-3 TextureView consumer with fresh
+  texture, off-UI-thread Binder grant/revoke, no principal Surface reuse or call site.
+- Retains queue until confirmed producer retirement and framework detachment;
+  unconfirmed revoke holds one bounded quarantine slot, preventing new consumers.
+- Added four retirement JUnit tests (not executed). Native session ASan/UBSan/TSan,
+  advertisement and lease regressions rerun successfully; not Android validation.
+- No Java/Android build, version, commit/push, signing, OTA, install or car commands.
+
+## 2026-10-23 — generation-scoped CarPlay session, source only
+
+- Added SecondarySession coordinator, exclusive lease binding and guarded atomic
+  ownership handoff against session/direct lease revoke; stale generations reject.
+- Surface transport now retains session/generation and closes it on JNI revocation.
+- Host session tests passed ASan/UBSan and TSan; fake backends/arrays only, no OEM
+  execution. Includes close during preparation, parallel publication, rearm, direct
+  retire and independent session progress. Prior lease/advertisement tests passed.
+- No Android build, version bump, commit/push, signing, OTA or car commands. Current
+  source requires combined Mini validation later; loader/consumer remain missing.
+
+## 2026-10-23 — Netseek port and secondary advertisement source, no release
+
+- Ported 7c4f9fc6 functional HUD/AA fix with narrower same-direction zeroed-EXIT
+  retention, four boundary test methods, preserving radar/tracker protections.
+- Added default-off copied-array alternate advertisement builder with explicit
+  captured ABI, geometry, UUID and readiness checks, ownership/rollback tests.
+- Added lease active-state and native Surface route readiness inspection. New
+  host advertisement ASan/UBSan and lease ASan/UBSan/TSan passed; prior native
+  bridge/ingress and observer mock tests passed. No Kotlin/Android tests run.
+- User requested no new version yet: no build, version bump, signing, OTA, install,
+  commit/push or vehicle command. Future combined Mini validation required.
+
 ## 2026-10-23 — independent Surface transport prototype
 
 - Added explicit Debug-only Binder Surface endpoint and native bounded registry,

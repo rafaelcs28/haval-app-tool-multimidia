@@ -1,5 +1,177 @@
 # Handoff
 
+## Combined Mac Mini validation now authorized, pending submission
+
+User approved proceeding with compilation/JNI and unit validation, without version
+change or OTA. Preparing an audited immutable private commit containing the Netseek
+guarded port and experimental CarPlay source. assembleDebug now depends on
+testDebugUnitTest so the existing authorized Debug queue runs the JVM suite,
+including seven previously unexecuted src/testDebug methods. No release signing
+or install is requested. Native library stays excluded and no app entry enables it.
+
+## OEM C adapter/getter and explicit warm adoption implemented, no build
+
+Added oem_runtime_adapter.{h,cpp,test.cpp}, noexcept C callbacks/session/getter/close
+and diagnostic entry points. C++ faults retire secondary only; not a native signal
+or bad-pointer recovery mechanism. Enabled getter requires owned original-return
+contract and nonthrowing release. Successful replacement releases original once;
+failure preserves original pointer/status. Null/error original results pass through.
+
+Getter-specific private path permits repeated/concurrent immutable advertisements
+on one generation without new decoder. Ordinary advertisement API stays single-use.
+Commit is the ownership linearization point: a pre-close committed response can
+return after close; secondary remains revoked. No promise of withdrawing that array.
+One atomic registration reservation covers legacy ingress and runtime adapter,
+preventing stacking/replacement. Adapters/modules stay pinned for process lifetime.
+
+Found warm-start requirement: host requires CarPlay already on D0, so enabling a
+bridge without the existing principal record would reject that stream's frames.
+Added explicit adoptPrincipal through core/ingress/runtime/C API. It validates known
+principal type+UUID, binds an existing stream and NEVER invokes OEM Initialize.
+Actual loader must prove live principal/epoch, retain UUID and quiesce callbacks
+before hook switch; no first-stream guesses, stale pointers or automatic adoption.
+
+Six adapter process modes passed ASan/UBSan and TSan: off/enabled, legacy-first,
+registration race, warm adoption and close-getter. Includes concurrent repeated
+queries, exception containment, release accounting, original error/status preservation
+and primary continuity. Prior ingress/session/runtime regressions recompiled/passed.
+No actual OEM getter, Surface/codec/phone or Android execution; all fixtures synthetic.
+
+Source C adapter is not a loader: no hook installation/injection, live attestation,
+app entry or enabled Android bootstrap. No build/version/commit/push/signing/OTA/car.
+Seven Debug JUnit tests remain unexecuted; pending combined Mini validation and
+parked capture/ownership/lifecycle/negotiation tests. Native library stays excluded.
+
+## Native runtime integration implemented and host-tested, no build/version
+
+Added secondary_runtime.{h,cpp,test.cpp}: ties ingress, advertisement and decoder
+factory to one exclusive session generation, default-off exact OEM passthrough.
+Enabled runtime validates matching bridge/display identities, readiness, APIs and
+owned module/UUID lifetime token (not binary attestation). Secondary session/factory
+creation requires committed advertisement. Geometry wrapper rejects a different
+video size. Close revokes captured generation only; old runtime cannot stop a new
+generation or principal. SecondarySession.advertised/bindRuntime support the gate.
+
+Android runtimeForSurface now checks actual native window dimensions, consumes
+the explicit clock-backed factory, retains session/generation and constructs the
+runtime; failure revokes captured generation. Adapter/NDK not compiled this batch.
+No C/JNI enabled bootstrap or OEM hook installs it; existing C bootstrap is still
+passthrough-only. Future loader must bind exception-contained C trampolines,
+verified originals and retained CFL/module lifetimes, with quiescent teardown.
+
+Six portable integration scenarios passed ASan/UBSan (20 repeated runs) and TSan:
+default passthrough; ad before secondary create/configure/NAL conversion/frame;
+principal unaffected by close; duplicate/mismatched runtime; stale-generation
+close; geometry mismatch; primary delivery during blocked secondary submit/close.
+Callbacks/arrays/decoder are synthetic, NOT actual OEM, Surface or decoded video.
+Session regression recompiled and passed with current generation binding code.
+
+Still no new Java/Kotlin/Android build, commit/push/version/signing/OTA/car action.
+Seven Debug JUnit methods remain unexecuted. Worktree includes Netseek fix and all
+experimental source. Next gates: authenticated actual loader/getter ownership,
+authoritative display/AA/safety provider and app entry, clock/physical measurements,
+combined Mini validation, then parked hardware negotiation/lifecycle tests.
+
+## Experimental cluster host connected to consumer in source, no build
+
+Added Debug-only CarPlaySecondaryClusterHost and CarPlayClusterHostPolicy, plus
+three src/testDebug policy tests (not compiled/executed). Host owns only its child
+in an explicit empty FrameLayout on D3. It creates no Presentation or app entry
+point and changes no production layout, manifest, resolution or native handoff.
+
+Requires fresh <=1000ms elapsedRealtime snapshot affirming opt-in, exclusive slot,
+known AA inactivity, native CarPlay on D0, safety overlays/other apps clear. Direct
+read-only checks also deny AA session/request/Surface or non-D0 CarPlay state.
+Clock includes deep sleep so cached authorizations expire over vehicle sleep.
+Provider must be fast/nonblocking and authoritative, not initial STOPPED defaults.
+Checks on start, pre-draw, grant ACK, onInputsChanged and active-only 250ms poll.
+
+Close detaches only its own consumer and unsubscribes callbacks; onHidden precedes
+onRetired, which waits for GPU queue retirement. Consumer.isRetired handles start
+failure before listener registration. Quarantine may retain view/context until
+recovery; single-consumer gate bounds it. No automatic resume or AA mutations.
+This is not a global atomic display arbiter: real owner/safety/AA event integration
+still required, as are authenticated OEM bootstrap, clock and real negotiation.
+
+Native session ASan/UBSan/TSan and advertisement/lease regressions passed again;
+these do not validate new Java. No Java/Kotlin/Android build, version, commit/push,
+signing, OTA or car command. All source remains in /tmp/haval-74126-work, including
+the Netseek patch. Combined Mini compilation/unit tests and parked testing pending.
+
+## Fresh display-3 consumer implemented in source, no build
+
+Added internalDebug Java CarPlaySecondarySurfaceConsumer + CarPlayConsumerRetirement
+and four src/testDebug JUnit methods. View starts hidden; explicit start requires
+main thread, attached hardware-accelerated display 3, authenticated endpoint/token
+and generation, and no existing texture. External SurfaceTextures are rejected.
+It creates Surface from its own new TextureView callback, never the main output.
+No call site, manifest entry, Presentation or display-policy change added.
+
+Serial worker handles grant/revoke. onReady is grant acknowledgement only, not
+video/maps. Size change closes the one-shot consumer. Framework texture destruction
+returns application release ownership, retained until revoke ACK/peer death and
+detachment. Unconfirmed revoke quarantines one queue and blocks new consumers;
+resource releases execute outside the state monitor with a single drain owner.
+explicit retry/peer death can finish. Host must close AND detach/remove the view.
+Hung Binder can hold that worker/gate; GPU/codec teardown requires parked testing.
+
+New Java/JUnit NOT compiled or executed per source-only/no-version instruction.
+Native session ASan/UBSan + TSan, advertisement and lease host regressions rerun
+successfully; these do not test new Android code. No Gradle/NDK build, commit/push,
+version, signing, OTA, installation or vehicle command. Netseek port preserved.
+Remaining: real host/AA visibility ownership, authenticated OEM loader/bootstrap,
+clock validation, linking onReady to coordinated negotiation, actual iPhone/video
+acceptance, and combined Mini validation. Library stays excluded; no working map claim.
+
+## Generation coordinator implemented, no build/version
+
+Added secondary_session.{h,cpp,test.cpp}: explicit default-off session, exclusive
+lease binding, monotonic generation, one successful publication, and serialized
+publish/revoke. Final owned-array handoff holds session and lease guards, including
+against direct decoder retirement. Preparation remains outside the session lock;
+stale/closed preparations cannot publish. Duplicate close waits for resource stop.
+Publisher must be noexcept, prompt, non-reentrant and only transfer array ownership.
+Factories/backends cannot reenter the coordinator under lease locks. Callers must
+pin coordinator/config/borrowed array/UUID/module lifetimes until they finish.
+
+Surface registry now retains session/generation after explicit factory creation;
+JNI revoke removes the registry entry then closes the session. surfaceRouteReady
+means active before/after publication, while session.ready means not yet advertised.
+New CMake source and Android changes remain uncompiled per user's no-build request.
+Host ASan/UBSan and TSan session tests passed, including blocked prepare/publication,
+direct revoke, stale generation/rearm, duplicate close, backend failure, concurrent
+single publication and another session progressing. No actual OEM publish tested.
+
+At that earlier stage no loader/consumer/bootstrap/phone negotiation or map rendering
+was added; the newer consumer source is described above. Close does
+not withdraw an advertisement already handed off; callback quiescence still needed
+before stream-address reuse/unload. Netseek port remains in working tree for later
+combined version. No commit/push, APK/version, signing, OTA or car operation.
+
+## Netseek imported and CarPlay continued — no version/build requested
+
+User authorized importing 7c4f9fc6 and continuing CarPlay, explicitly postponing
+a new version until a single combined release. Functional upstream port applied
+manually to HudOverlayController and AndroidAutoNavigationTelemetry, preserving
+our RoundaboutTracker/radar guards. Retention requires zero/zero EXIT, same
+direction, complete prior pair. Four new Kotlin test methods cover road rename,
+code 8, ENTER/direction change, partial/malformed data and reset/route boundaries.
+Kotlin/JVM tests NOT executed; no Android/Gradle/NDK build submitted or version bump.
+
+CarPlay: new secondary_advertisement.{h,cpp} prepares an owned copy of the display
+array and appends the captured AltScreen API only with explicit geometry/identity
+and route readiness. Default-off returns untouched borrowed original. RAII/move
+ownership and rollback covered with fake arrays under ASan/UBSan. No runtime hook.
+Added DecoderLease.active and surfaceRouteReady(handle); lease host ASan/UBSan
+and TSan passed; existing bridge/ingress host and observer Node mocks passed.
+New Android sources/native additions require future authorized Mini validation.
+
+Two readiness checks alone are not atomic with revoke; the source coordinator
+above now guards commit/generation/retirement. Independent consumer, authenticated
+OEM loader/bootstrap, clock validation and actual iPhone negotiation remain gates.
+Changes currently in the working tree /tmp/haval-74126-work; no commit/push or
+build performed for this batch. No OTA, signing, installation or car command.
+
 ## Independent Surface transport compiled on Mac Mini
 
 Added Debug/leanDebug-only CarPlaySurfaceEndpoint Binder class (no manifest,
