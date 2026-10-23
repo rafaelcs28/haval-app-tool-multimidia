@@ -2,6 +2,14 @@
 
 ## Independent CarPlay map experiment
 
+Concrete coordinated dispatch/publication is now implemented and eleven portable
+modes passed ASan/UBSan + TSan. See native/COORDINATED_DISPATCH.md. Next implement
+the platform cold-entry bootstrap with verified unhooked trampolines and prove all
+relevant entries/lifecycle mutations participate before any warm swap. Calls that
+predate interception are not tracked by this gate. Real authenticated Binder peer,
+module/target ownership attestation and current principal capture remain missing.
+No Android build/version/OTA, and native packaging remains excluded.
+
 The hook coordinator is now implemented with fake-backend portable validation;
 see scripts/carplay-native-analysis/native/HOOK_INSTALLATION.md. Implement the
 trusted preparation/quiescence/publication platform backend next. Do not mistake

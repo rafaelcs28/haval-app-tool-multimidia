@@ -1,5 +1,12 @@
 # Known issues
 
+- Concrete dispatch quiescence only covers entries routed through its shared
+  admission gate. It cannot drain calls predating interception or arbitrary OEM
+  teardown/epoch events outside it. Initial OEM bootstrap/attestation/auth remains
+  absent. Frozen admission delays callbacks; measure mutex/refcount and barrier
+  latency on hardware before activation. No original target may point back into
+  the dispatcher, or recursion would result.
+
 - HookInstaller is an inert coordinator, not a deployed hook engine. Real peer
   authentication, loaded-module/trampoline attestation and OEM-wide quiescence
   are backend obligations not implemented by the fake tests. Failed publication

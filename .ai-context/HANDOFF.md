@@ -1,5 +1,27 @@
 # Handoff
 
+## Concrete dispatch admission/publication backend — source only
+
+Added coordinated_dispatch.{h,cpp} and COORDINATED_DISPATCH.md. Shared entry count
+covers the seven video entries plus session/getter routed through this object;
+tryFreeze rejects active calls instead of waiting/draining unknown OEM threads.
+New arrivals wait while frozen. Complete table changes once under the gate;
+scoped thaw restores admission on cancellation/exceptions and commit. Ordinary
+nested callbacks supported; freeze-owner reentry rejected instead of self-deadlock.
+DispatchPreparedHooks plugs this real dispatch logic into HookInstaller and pins
+native ownership. No original Initialize during synthetic warm installation.
+
+Added dispatch and dispatch-install modes. All eleven modes passed final g++
+C++17/Wall/Wextra/Werror with ASan/UBSan and TSan (22 final executions). No reports.
+See README command; binaries /tmp/carplay-dispatch-final-{asan,tsan}. Portable
+host tests only. No Android build/version/signing/OTA/car commands.
+
+Important: no actual OEM initial-entry interceptor, authenticated Binder bootstrap,
+loaded-module attestation or real live capture provider exists. Gate cannot drain
+calls predating interception or cover teardown events outside it. Full platform
+backend remains incomplete. Source native CMake updated; Mini not rerun for this
+source. Keep packaging exclusion/default off and validate overhead on hardware.
+
 ## Hook installation coordinator implemented — source only
 
 Added native/hook_installation.{h,cpp} and HOOK_INSTALLATION.md. Default off,

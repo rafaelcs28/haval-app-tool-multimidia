@@ -1,5 +1,18 @@
 # AI change log
 
+## 2026-10-23 — concrete callback dispatch admission and route publication
+
+- Added CoordinatedDispatch with RAII active calls, nonblocking freeze on idle,
+  pending-entry admission, nested-call support, scoped thaw and single complete
+  route-table publication. Added DispatchPreparedHooks integration with the
+  coordinator, explicit native owners and capture/epoch providers.
+- Eleven modes passed ASan/UBSan and TSan on final portable source; new cases
+  exercise a blocked frame, nested callbacks, callback/capture/epoch exceptions,
+  competing/cancelled freeze, all nine targets and principal forwarding after
+  warm install/secondary close without original Initialize.
+- Not a live inline hook engine: initial OEM interception, real authentication,
+  module attestation and capture remain missing. No Android build/release or car use.
+
 ## 2026-10-23 — inert coordinated hook installation source
 
 - Added explicit trusted preparation and quiescent publication capabilities;
