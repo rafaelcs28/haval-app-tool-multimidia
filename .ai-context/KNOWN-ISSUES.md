@@ -1,5 +1,11 @@
 # Known issues
 
+- HookInstaller is an inert coordinator, not a deployed hook engine. Real peer
+  authentication, loaded-module/trampoline attestation and OEM-wide quiescence
+  are backend obligations not implemented by the fake tests. Failed publication
+  after registration deliberately retains a closed adapter/modules/UUID until
+  process exit and forbids retries; no automatic uninstall is implemented.
+
 - Static captured getter ownership is traced, but the outer OEM delegate retains
   the result again. Overall reference balance is not established; preserve this
   behavior and do not compensate in our getter adapter. Live module/target and

@@ -2,6 +2,13 @@
 
 ## Independent CarPlay map experiment
 
+The hook coordinator is now implemented with fake-backend portable validation;
+see scripts/carplay-native-analysis/native/HOOK_INSTALLATION.md. Implement the
+trusted preparation/quiescence/publication platform backend next. Do not mistake
+request UID/token fields for authentication or a test mutex for OEM quiescence.
+No concrete backend, native bootstrap or real hook install exists yet. New native
+source has not been compiled for Android; prior Mini receipt covers 1f1a1f7d only.
+
 Static getter caller ownership is now traced for the exact captured ARM64 hashes;
 see docs/architecture/carplay-getter-ownership.md. Preserve the outer delegate's
 retain/error handling. Next gate is actual loaded-module/target attestation and

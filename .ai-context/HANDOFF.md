@@ -1,5 +1,26 @@
 # Handoff
 
+## Hook installation coordinator implemented — source only
+
+Added native/hook_installation.{h,cpp} and HOOK_INSTALLATION.md. Default off,
+no preparation backend/call site/export/JNI activation. Explicit trusted prepare
+capability must authenticate and attest live targets; its transaction must drain
+all OEM ingress and freeze principal epoch, then publish all hooks atomically.
+Coordinator captures/validates/adopts principal without Initialize, checks epoch
+again, pins module/UUID ownership in adapter before process registration, then
+publishes under the quiescent transaction. A competing process owner rejects.
+Publication failure consumes the process slot, closes secondary and pins resources;
+no unload/reset/retry. Backend must restore all originals before returning false.
+
+Portable fake-backend tests added to oem_runtime_adapter_test: install,
+install-fail, install-contested, plus existing six modes. These are not a real
+platform hook engine/authentication/vehicle proof. Native CMake includes source;
+no Android build or new version/OTA. Real loaded-module authentication, hook
+backend and app/AA/safety feeds remain implementation gates before deployment.
+Validation: g++ C++17 -Wall -Wextra -Werror, all nine process modes passed both
+ASan/UBSan and TSan on final source. Commands are in native-analysis README;
+outputs /tmp/carplay-hook-final-{asan,tsan}. No sanitizer reports.
+
 ## Static OEM getter caller contract traced — 2026-10-23
 
 See docs/architecture/carplay-getter-ownership.md for exact hashes, ELF/Ghidra

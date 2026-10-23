@@ -1,5 +1,19 @@
 # AI change log
 
+## 2026-10-23 — inert coordinated hook installation source
+
+- Added explicit trusted preparation and quiescent publication capabilities;
+  default disabled, nonblocking coordinator contention, fresh principal adoption
+  and epoch recheck before process registration. Pins installation ownership in
+  adapter. Failed atomic publication closes secondary and permanently consumes
+  the process slot, retaining resources rather than risking an unload/retry.
+- Added fake-backend success/failure/competing-registration modes, preserving
+  original frame forwarding and zero original Initialize calls. No actual hook
+  engine, authentication backend or vehicle operation. Android build deferred.
+- Final source compiled on the Linux host with g++ C++17/Wall/Wextra/Werror.
+  All nine modes passed ASan/UBSan and TSan (18 final mode executions), no sanitizer
+  diagnostics. These are portable C++ tests, not coordinator-host Android builds.
+
 ## 2026-10-23 — exact OEM getter ownership and downstream caller analysis
 
 - REA/Ghidra read-only queries traced the captured getter through displays delegate,
