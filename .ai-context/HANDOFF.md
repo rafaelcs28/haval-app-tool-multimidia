@@ -713,3 +713,9 @@ Gradle Debug now also builds a staged OEM service patch into
 3.0.2 was copied on the authorized Mini into `$HOME/BuildQueue/tools` from an
 existing trusted copy after SHA-256 eee4669... verification. Next: commit, audit
 build-control digest, queue Debug, inspect staged output. No APK/OTA/car change.
+
+First Mini job for f5c86cc6 failed safely before APK output: Apktool tried to
+relink the decoded manifest of this resource-less OEM APK and aapt2 could not
+resolve android:name. Source follow-up uses Apktool `--copy-original`, preserving
+the original binary manifest while rebuilding only DEX; it requires a new commit
+and queue run. Nothing was installed or copied into the bundled asset.

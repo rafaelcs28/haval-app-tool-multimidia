@@ -298,3 +298,7 @@ vehicle runtime test claimed. Private coordinator receipt retained.
 - Local validation: six Python tests, 26 existing cold-interceptor Node models,
   shell syntax and diff checks passed. Android/Mini build still pending at this
   changelog entry; no APK, OTA or vehicle change was made.
+
+- First immutable Mini run failed at aapt2 manifest relinking because the OEM
+  APK has no resources table. Follow-up preserves the original binary manifest
+  with Apktool `--copy-original`; no staged APK was produced by the failed run.
