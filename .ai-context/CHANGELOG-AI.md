@@ -102,3 +102,7 @@ Added bounded pre-creation identity adapter and exception-safe C ABI, default
 passthrough, plus exact-library profile generator and manual bounded observer.
 Python 14 tests, Node observer mocks and native ingress ASan/UBSan + TSan passed.
 No runtime integration, OTA publication or vehicle operation. See README and handoff.
+Private source 8e2f204 compiled/linked ARM64 and assembled Debug on Mac Mini in
+2m; all 11 C exports verified. New native code remains excluded, so APK is byte
+identical to the previous validation build. Checksums verified; no JVM suite or
+vehicle runtime test claimed. Private coordinator receipt retained.

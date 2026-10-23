@@ -1,6 +1,6 @@
 # Handoff
 
-## OEM ingress adapter and bounded observer, pending Android build
+## OEM ingress adapter and bounded observer validated on Mac Mini
 
 Added native/oem_ingress.{h,cpp}, C ABI exception containment, pre-Initialize
 thread-local identity, captured 32-bit CFL string API and one-shot process pin.
@@ -12,8 +12,18 @@ or raw UUIDs captured. Finalize event denotes entry, not resource-release proof.
 
 Validation: Python 14/14 with private binaries and converter; Node syntax/mock
 tests passed; ingress passthrough/enabled tests passed ASan/UBSan and TSan.
-New CMake source still needs authorized Mac Mini compilation. No local Android
-build, OTA, install or vehicle command performed. Production 127 stays unchanged.
+Source 8e2f20468bbee92bfacb7cc208c82bcae92c297c pushed privately. Mac Mini job
+haval-74126-work-8e2f20468bbee92b-20261023T013650Z-32539 succeeded in 2m;
+40 tasks executed, including configure/build/link ARM64 and assembleDebug.
+Actual ELF64 AArch64 exports all 11 impulse_carplay C symbols, SHA256
+807edb5c8e7ffedb3ecca6bf4976ac189a7c72312477ba0f7b65ffd89cd7c1de.
+Fetched SHA256SUMS verified. APK excludes bridge/shared C++ runtime and keeps four
+existing ABIs. APK byte-identical to previous internal validation artifact:
+befc0fc48f44901f2dedf39fb85d267de6cbcccc22ea15a9b36082da96342fab,
+148548705 bytes. Expected: all new native work remains excluded from packaging.
+Not production signed; do not install. No JVM unit suite in this Debug job.
+Private receipt: artifacts/carplay-oem-ingress-8e2f204/VALIDACAO.md on coordinator.
+No local Android build, OTA, install or vehicle command. Production 127 unchanged.
 Static REA decompilation confirms captured UpTicks uses monotonic nanoseconds;
 frame path also supports synchronized NTP conversion. Runtime calibration pending.
 
