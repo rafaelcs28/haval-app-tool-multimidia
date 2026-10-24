@@ -120,11 +120,36 @@ function impulsePublishEndpoint(payload) {{
     instrumented = source.replace("send({", "impulsePublishEndpoint({")
     return publisher + instrumented.rstrip() + f"""
 
-rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_BRIDGE)} }}).then(
+Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_BRIDGE)} }})).then(
     state => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state }}),
     error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
 );
 """
+
+
+def endpoint_agent_entry(source: str) -> str:
+    return 'import Java from "frida-java-bridge";\n' + endpoint_launcher(source)
+
+
+def read_endpoint_bundle(path: Path) -> str:
+    root = Path(__file__).resolve().parent
+    manifest = json.loads(path.with_suffix(path.suffix + ".manifest.json").read_text(encoding="utf-8"))
+    payload = path.read_bytes()
+    source = (root / "carplay_clean_map_endpoint.js").read_text(encoding="utf-8")
+    package = json.loads((root / "agent/package.json").read_text(encoding="utf-8"))
+    expected = {
+        "kind": "impulse-clean-map-frida-agent-v1",
+        "bundleSha256": sha256_bytes(payload),
+        "entrySha256": sha256_bytes(endpoint_agent_entry(source).encode()),
+        "packageLockSha256": sha256_bytes((root / "agent/package-lock.json").read_bytes()),
+        "javaBridgeVersion": package["dependencies"]["frida-java-bridge"],
+        "compilerVersion": package["devDependencies"]["frida-compile"],
+        "bridgePath": REMOTE_BRIDGE,
+    }
+    for name, value in expected.items():
+        if manifest.get(name) != value:
+            raise ValueError("Endpoint bundle is stale or altered: " + name)
+    return payload.decode("utf-8")
 
 
 def shell_quote(value: str) -> str:
@@ -269,12 +294,15 @@ class Inputs:
     interceptor: Path
     profile: Path
     endpoint: Path
+    endpoint_is_bundle: bool = False
 
     def read(self) -> tuple[bytes, str, object, str]:
         bridge = self.bridge.read_bytes()
         interceptor = self.interceptor.read_text(encoding="utf-8")
         profile = json.loads(self.profile.read_text(encoding="utf-8"))
-        return bridge, interceptor, profile, self.endpoint.read_text(encoding="utf-8")
+        endpoint = (read_endpoint_bundle(self.endpoint) if self.endpoint_is_bundle
+                    else self.endpoint.read_text(encoding="utf-8"))
+        return bridge, interceptor, profile, endpoint
 
 
 class ColdPassthroughController:
@@ -315,7 +343,7 @@ class ColdPassthroughController:
         bridge, interceptor, profile, endpoint = self.inputs.read()
         bridge_sha = sha256_bytes(bridge)
         template = launcher_template(interceptor, profile, len(bridge), bridge_sha).encode()
-        endpoint_script = endpoint_launcher(endpoint).encode()
+        endpoint_script = (endpoint if self.inputs.endpoint_is_bundle else endpoint_launcher(endpoint)).encode()
         self.remote.run(
             f"mkdir -p {shell_quote(STAGE_ROOT)} {shell_quote(CONTROL_ROOT)}; "
             f"chmod 700 {shell_quote(STAGE_ROOT)} {shell_quote(CONTROL_ROOT)}; "
@@ -487,10 +515,11 @@ class ColdPassthroughController:
 def default_inputs() -> Inputs:
     root = Path(__file__).resolve().parent
     return Inputs(
-        bridge=Path("/root/projects/haval-impulse/artifacts/carplay-clean-map-81923701-debug/native/libcarplay_video_bridge.so"),
+        bridge=Path("/root/projects/haval-impulse/artifacts/carplay-namespace-2f6e6961-debug/native/libcarplay_video_bridge.so"),
         interceptor=root / "cold_oem_interceptor.js",
         profile=root / "testdata/oem-cold-profile-v3.json",
-        endpoint=root / "carplay_clean_map_endpoint.js",
+        endpoint=root / "agent/dist/clean-map-agent.js",
+        endpoint_is_bundle=True,
     )
 
 
@@ -502,7 +531,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bridge", type=Path, default=defaults.bridge)
     parser.add_argument("--interceptor", type=Path, default=defaults.interceptor)
     parser.add_argument("--profile", type=Path, default=defaults.profile)
-    parser.add_argument("--endpoint", type=Path, default=defaults.endpoint)
+    endpoints = parser.add_mutually_exclusive_group()
+    endpoints.add_argument("--endpoint", type=Path, help="raw agent for runtimes already providing Java")
+    endpoints.add_argument("--endpoint-bundle", type=Path, help="complete bundled Frida agent with sidecar manifest")
     parser.add_argument("--stage-only", action="store_true", help="upload and verify, but do not restart the OEM host")
     parser.add_argument(
         "--execute-cold-restart",
@@ -517,11 +548,13 @@ def main() -> int:
     if not args.stage_only and not args.execute_cold_restart:
         print("Refusing live run without --execute-cold-restart", file=sys.stderr)
         return 64
+    defaults = default_inputs()
     inputs = Inputs(
         bridge=args.bridge.resolve(),
         interceptor=args.interceptor.resolve(),
         profile=args.profile.resolve(),
-        endpoint=args.endpoint.resolve(),
+        endpoint=(args.endpoint_bundle or args.endpoint or defaults.endpoint).resolve(),
+        endpoint_is_bundle=args.endpoint is None,
     )
     for path in (inputs.bridge, inputs.interceptor, inputs.profile, inputs.endpoint):
         if not path.is_file():

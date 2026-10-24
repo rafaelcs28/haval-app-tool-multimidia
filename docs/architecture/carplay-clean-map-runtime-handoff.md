@@ -45,6 +45,28 @@ native installation. The UI and Surface retirement remain bounded and reversible
 
 ## Evidence status
 
+### Offline endpoint preparation, 2026-10-24
+
+The OEM control agent now includes its Java dependency explicitly through the
+[pinned agent build](../../scripts/carplay-native-analysis/agent/README.md).
+Its full Frida archive is staged byte-for-byte only after the source/lock/artifact
+manifest checks. It does not depend on the REPL providing a global Java bridge.
+
+Portable tests reproduced a dropped offer when a legitimate Java callback arrived
+through a different JavaScript wrapper. Callbacks now use an opaque binding-attempt
+identity. Teardown closes pending endpoints as well as offered ones, stale
+disconnects cannot retire a newer request, and principal generation is checked
+again before offering. This protects the existing isolation/lifecycle contract;
+it adds no Activity launch, display change, native-panel action or AA operation.
+
+The new tests establish model behavior and offline bundling only. The corrected
+namespace bridge and complete agent still require coordinated parked Android
+passthrough, Binder authentication, Surface retirement and first-frame evidence.
+The central was offline during the final retrieval window; no new installation
+or runtime activation was attempted in this offline preparation session.
+
+### Prior checkpoint
+
 Portable entry/dispatch tests pass under ASan/UBSan, and the OEM control script
 passes JavaScript syntax validation. Commit `81923701` passed the authorized Mac
 Mini ARM64/JNI/AIDL/Kotlin/Java build and full Debug JVM suite in 2m01s. The linked
