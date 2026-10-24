@@ -1,5 +1,33 @@
 # Handoff
 
+## Latest — offline overlay review; owner confirmed vehicle still off
+
+Owner asked reviewing pendingitems and installing132, including a request to
+"liga o carro". We explained no validated remotepower workflow and asked only
+current parked/P/operator/central condition. Owner answered the car is stilloff
+and "faremos depois". Live session deferred; no car connection/power/staging/
+restart/injection/installation attempted. Installation authorization exists for
+the requested132 workflow once the parked session is coordinated; do not infer
+current safe conditions merely from future online presence.
+
+Offline review completed, no functional/source behavior changed. Three stale
+projector sentinels reflect one real missingphysicalinput/sessiongate; missing
+policy deletedind3b5367a, oldimplementation/tests available691c5f4d. Current
+projector uses card-backedmenu directly, physicalkeyevent only logs. Actualtheme
+source moved but stillrequires cardId!=0 atbothrightmenurender sites, so neutral
+card hidesalreadyauthorizedmenu. Existingboolean+menuscreengate andselected
+display preservation remain. SignedAPKcontains exactrawHTML atres/xD.html SHA
+3cabb47814a12aec575e25e62457506f48ea8a51238b0eb755e671824a41157b,1840492bytes.
+These are staticfindings, notobservedphysicalfailures.
+
+Contract Disciplina deMudanca item1 requires baseline/logs/screenshots before
+functionaladjustment whenaccessible. Thus no blindrestoreofoldprojector or
+token/pathchange tofakegreen. Fivecasebaselineplan savedin
+docs/UPSTREAM_V9_SYNC_2026-10-24.md: bootstrapnokey, realkeymenu/AC, neutralcard
+afterauthorization, teardown/newsession, camera/HVACKD0. Need currentthemeactual
+andinstalledversion/stacks evidence. Then narrowport/test/rebuildMini ifneeded,
+beforeinstallingchangedAPK. Existing132artifact/hash/signature unchanged.
+
 ## 2026-10-24 — 74132 integration candidate; installation deferred
 
 BUILD COMPLETED: sourceb266cfe6a3af04be50ca1afd2e5eaaee6cf84875, Mini job

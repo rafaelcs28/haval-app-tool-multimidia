@@ -84,3 +84,49 @@ Installation remains deferred until the owner coordinates a parked session.
 Review the overlay contract discrepancy before that deployment. A physical
 CarPlay passthrough, endpoint acknowledgement, accepted secondary stream and
 first rendered D3 frame remain unproven.
+
+## Overlay review after the installation request
+
+The owner requested reviewing the pending items and installing 74132, then
+confirmed the vehicle is still switched off and deferred the live session.
+Only offline reads were performed. No remote vehicle power operation exists in
+the validated workflow, and no device connection, staging or installation was
+attempted during this review.
+
+The five static findings map to the following evidence:
+
+| Guard finding | Current source evidence | Review conclusion |
+| --- | --- | --- |
+| Three missing physical-input policy/logging tokens in the projector | `pushProjectionStateToWebView` computes permission directly from `ClusterCardFlowPolicy.isCardBackedMenu(currentCard)`; `CLUSTER_INPUT_KEY` only logs the input | One actual policy discrepancy, not three independent failures: bootstrap card events can authorize an overlay without a recent physical input |
+| Missing `ProjectionCardOverlayPolicy.kt` | Removed by `d3b5367a`; historical implementation and six JVM tests exist at `691c5f4d` | Do not reintroduce the whole old projector: port only the reviewed authorization/session policy into the current snapshot and canonical card-delivery flow |
+| Missing old default-theme path | Active source is `cluster-widgets/source/v1.0/default/src/core/main.js` | Moving the checker path alone is insufficient: both current right-menu rendering sites require `cardId != 0`, which hides even an already authorized menu on a neutral card |
+
+The theme still requires the published boolean permission and a main-menu/AC
+screen before activating its projection overlay. It also preserves the selected
+display. These protections remain present; this review does not establish a
+physical opaque-frame incident. The current bundled raw HTML is 1,840,492 bytes,
+SHA-256 `3cabb47814a12aec575e25e62457506f48ea8a51238b0eb755e671824a41157b`,
+and its exact bytes are present in the signed 74132 APK at `res/xD.html`.
+Source-only frontend changes would therefore need a rebuilt bundled HTML and APK;
+changing a guard path cannot repair the delivered behavior.
+
+The repository contract, `docs/carplay-cluster-regression-contract.md` under
+“Disciplina de Mudanca”, requires capturing current baseline/logs/screenshots
+before a functional adjustment when the central is accessible. No functional
+overlay changes were made before obtaining that baseline.
+
+At the next parked session, capture the installed version/theme and actual D0/D3
+stacks first. Then distinguish these cases without restarting or resizing CarPlay:
+
+1. Projection startup and synthetic `0 -> 1 -> 1` cards with no physical key:
+   overlay remains disabled.
+2. Real steering-wheel menu/AC input: the authorized transparent menu appears.
+3. Subsequent neutral/original card: the already authorized menu remains visible.
+4. Projection teardown/reconnection: authorization from the old session is cleared.
+5. Camera/HVAC on D0: projection and the selected D3 display remain intact.
+
+Logs/screenshots decide which discrepancy is reproduced and identify the active
+theme. A narrow correction must retain current card ordering, AA recovery and
+bridge compatibility; meaningful policy, sequence and frontend tests plus an
+authorized Mini rebuild precede installing a changed APK. Do not suppress the
+five findings merely to declare the existing candidate ready for installation.

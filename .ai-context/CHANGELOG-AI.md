@@ -1,5 +1,17 @@
 # AI change log
 
+## 2026-10-24 — offline overlay review, live installation deferred
+
+- Owner requestedreview+install, thenconfirmedcarstilloff anddeferredlive session.
+  No target connection/power/install occurred.
+- Mapped5guardfindingsto2functionalpolicy discrepancies +movedsource: card-only
+  permission vsphysicalinputsession, andneutralcardhidesarmedmenu. Currenttheme
+  stillretainspermission/screengate andselecteddisplay; physicalfailureunobserved.
+- Verified exactcurrentbundledHTMLbytesinthe signedAPK. Reviewedhistoricalpolicy
+  andcurrenttests/canonicalcardordering. No functional edits ortest/buildrerun.
+- Savedfivecasebaselineplan. Contractrequires baseline/logs/screenshots before
+  behavioradjustment. CandidateAPK remainsunchanged; checkercannotbe fakedgreen.
+
 ## 2026-10-24 — integrate complete v9 and prepare 74132
 
 - Mini signedrelease validated fromb266cfe6:4m52s/81tasks;93suites/852JVMtests,

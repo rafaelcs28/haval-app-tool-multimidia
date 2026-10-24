@@ -2,6 +2,13 @@
 
 ## Current priority — 74132 candidate, no installation yet
 
+Owner requestedreview/install thenconfirmedcaroff anddeferredlive work. Offline
+reviewdone; nextsessioncapturecurrentversion/theme, D0/D3stacks/logs/screenshots
+beforefunctionaloverlayadjustment asrequiredbycontract. Fivecases inreviewdoc:
+bootstrapnokey,realkeymenu/AC,armedneutralcard,sessionreset,camera/HVACKD0.
+Then narrowcorrection+tests+Mini rebuild ifneeded beforeinstallation. No remote
+power operation, no auto-install basedonlyononlinepresence. ExistingAPKunchanged.
+
 Authorized Mini JVM/release validation completed; hash-verifiedAPK and same74131
 productioncertificate retained in impulse-74132-release with source/job/receipt.
 Reconcile five legacy overlay-contract failures before deployment; current
