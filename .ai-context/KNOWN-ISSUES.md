@@ -1,5 +1,15 @@
 # Known issues
 
+- 74132: five preexisting overlay regressionguard failures remain. Sources moved
+  and current projector uses card-based authorization; historical physical-input
+  session gating and menu persistence through neutralcards are not equivalent.
+  Do not replace tokens to call it passing. Dedicated review before deployment.
+- New namespacebridge and bundledJava endpoint have offline tests, not an
+  installed-pinned OEM cold success, acceptedsecondary stream or renderedD3map.
+  Native excludedfromAPK; hosttools required for the later coordinated test.
+- 74132 adopts full upstream radar passed-point semantics: alert clears at
+  shifted20m-before-database point, changing131 personal physical-point timing.
+
 - Source9ceda01b now Android-compiled and smoke-tested in a disposable real ARM64
   process, with genuine synthetic replaceFast/trampoline/revert. This still does
   not validate nine OEM prologues, cold new-module timing, successful OEM namespace

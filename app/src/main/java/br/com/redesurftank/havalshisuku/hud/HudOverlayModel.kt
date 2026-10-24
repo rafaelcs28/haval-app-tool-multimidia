@@ -85,12 +85,9 @@ object HudOverlayModel {
     // street the maneuver leads onto, then a larger trip line, all pulled up close to the arrow.
     const val FAR_THRESHOLD_M = 1_000
     const val FAR_TOP = 70f
-    const val FAR_STREET_SIZE = 13f
-    const val FAR_STREET_BASELINE = FAR_TOP + COMPACT_GLYPH + 18f
     const val FAR_TRIP_SIZE = 16f
-    const val FAR_TRIP_BASELINE = FAR_STREET_BASELINE + 21f
-    /** No street from AA: the trip line moves up into the street's place. */
-    const val FAR_TRIP_BASELINE_NO_STREET = FAR_TOP + COMPACT_GLYPH + 21f
+    /** The far row has no street line (owner, 2026-10-24): the trip line sits right under it. */
+    const val FAR_TRIP_BASELINE = FAR_TOP + COMPACT_GLYPH + 21f
 
     // Trip line ("4.8 km · 12 min" left to the destination) under the big arrow or the lanes,
     // centred in the box: larger than it was (13), smaller than the far row's.
@@ -103,23 +100,22 @@ object HudOverlayModel {
     const val TRIP_FLAG_GAP = 4f
 
     /**
-     * Left edges of the flag and of the text for a trip line [textWidth] wide at [size], so the
-     * whole line (flag included) is centred on [BOX_CENTER_X].
+     * Left edge of a left-column line (street, maneuver row, trip line or block) [width] wide
+     * that must end by [right] (the arcs, or the box): centred on [BOX_CENTER_X] while that
+     * fits, else moved left into the HUD's free left edge (owner, 2026-10-24: long trip lines
+     * ran into the signs, the maneuver row into the arcs below 200 m), never past [TRIP_MIN_LEFT].
      */
-    fun tripLineLefts(textWidth: Float, size: Float): Pair<Float, Float> {
-        val flag = size * TRIP_FLAG_SCALE
-        val left = BOX_CENTER_X - (flag + TRIP_FLAG_GAP + textWidth) / 2
-        return left to left + flag + TRIP_FLAG_GAP
+    fun columnLeft(width: Float, right: Float): Float {
+        val centred = BOX_CENTER_X - width / 2
+        if (centred >= BOX_LEFT && centred + width <= right) return centred
+        return (right - width).coerceIn(TRIP_MIN_LEFT, maxOf(TRIP_MIN_LEFT, centred))
     }
 
-    /** Trip line baseline and text size for [style]; the far row's depends on a street showing. */
-    fun tripPlacement(style: TbtStyle, hasStreet: Boolean): Pair<Float, Float> = when (style) {
-        TbtStyle.FAR -> (if (hasStreet) FAR_TRIP_BASELINE else FAR_TRIP_BASELINE_NO_STREET) to FAR_TRIP_SIZE
+    /** Trip line baseline and text size for [style]. */
+    fun tripPlacement(style: TbtStyle): Pair<Float, Float> = when (style) {
+        TbtStyle.FAR -> FAR_TRIP_BASELINE to FAR_TRIP_SIZE
         else -> TRIP_BASELINE to TRIP_SIZE
     }
-
-    /** The far row shows the street under the arrow; the big arrow and the lane rows don't. */
-    fun showsStreet(tbt: Tbt): Boolean = tbt.style == TbtStyle.FAR && tbt.street.isNotEmpty()
 
     // Bars on the bottom row of the visible band, no labels: power at the HUD's left edge, RPM at
     // its right edge (the native HUD leaves the bottom of both sides empty). Approved in the
@@ -204,22 +200,43 @@ object HudOverlayModel {
      * (tbtTurnIcons.js), so the HUD and the card's DISTÂNCIA / TEMPO read the same.
      */
     fun tripLabel(remainingM: Int?, remainingS: Int?): String {
-        val distance = remainingM?.takeIf { it >= 0 }?.let { m ->
-            if (m < 1000) return@let "$m m"
-            val km = m / 1000.0
-            if (km >= 100) "${groupThousands(km.roundToInt())} km"
-            else "${(km * 10).roundToInt() / 10}.${(km * 10).roundToInt() % 10} km"
-        }
-        val left = remainingS?.takeIf { it >= 0 }?.let { s ->
-            if (s < 45) return@let "<1 min"
-            val minutes = (s / 60.0).roundToInt()
-            if (minutes < 60) return@let "$minutes min"
-            val hours = minutes / 60
-            val rest = minutes % 60
-            if (rest == 0) "$hours h" else "$hours h $rest min"
-        }
+        val (distance, left) = tripParts(remainingM, remainingS)
         return listOfNotNull(distance, left).joinToString(" · ")
     }
+
+    /**
+     * The trip's distance and time left, compact (owner, 2026-10-24: it overflowed with hours):
+     * "4.8km", "1h 25m", "12m". "m" is minutes here, so short distances stay in km ("0.9km").
+     */
+    fun tripParts(remainingM: Int?, remainingS: Int?): Pair<String?, String?> {
+        val distance = remainingM?.takeIf { it >= 0 }?.let { m ->
+            val km = m / 1000.0
+            if (km >= 100) "${groupThousands(km.roundToInt())}km"
+            else "${(km * 10).roundToInt() / 10}.${(km * 10).roundToInt() % 10}km"
+        }
+        val left = remainingS?.takeIf { it >= 0 }?.let { s ->
+            if (s < 45) return@let "<1m"
+            val minutes = (s / 60.0).roundToInt()
+            if (minutes < 60) return@let "${minutes}m"
+            val hours = minutes / 60
+            val rest = minutes % 60
+            if (rest == 0) "${hours}h" else "${hours}h ${rest}m"
+        }
+        return distance to left
+    }
+
+    /** Unit letters (km, h, m) in the trip text are drawn at this share of the numbers' size. */
+    const val TRIP_UNIT_SCALE = 0.68f
+    /** A trip line too long to sit centred in the box may start this far left. */
+    const val TRIP_MIN_LEFT = 2f
+
+    // Turn hidden (further than "Mostrar próxima manobra"): the trip on two lines, distance over
+    // time, with the flag on the left centred on both (owner, 2026-10-24).
+    const val TRIP_BLOCK_LINE1 = 106f
+    const val TRIP_BLOCK_LINE2 = 138f
+    const val TRIP_BLOCK_SIZE = 26f
+    const val TRIP_BLOCK_FLAG = 30f
+    const val TRIP_BLOCK_GAP = 8f
 
     /** pt-BR grouping, as groupThousands in tbtTurnIcons.js: 1234 -> "1.234". */
     private fun groupThousands(n: Int): String =
@@ -368,10 +385,9 @@ object HudOverlayModel {
     /** "carregando mapa…": on the right, grey; shown 5 s, hidden 10 s, round and round (owner). */
     const val MAP_PENDING_X = 420f
     const val MAP_PENDING_Y = 188f
-    const val MAP_PENDING_ON_MS = 5_000L
-    const val MAP_PENDING_CYCLE_MS = 15_000L
-
-    fun mapPendingVisible(nowMs: Long): Boolean = nowMs % MAP_PENDING_CYCLE_MS < MAP_PENDING_ON_MS
+    /** Loading bar under the note: width, and its row. */
+    const val MAP_PENDING_BAR_W = 84f
+    const val MAP_PENDING_BAR_Y = 194f
 
     /** Next-turn icon before the AR street line: size relative to the text, gap after it. */
     const val AR_STREET_ICON_SCALE = 1.25f
@@ -466,26 +482,168 @@ object HudOverlayModel {
     const val CHEVRON_END_Y = 48f
     const val CHEVRON_CX = 240f
     const val CHEVRON_END_DX = 150f
-    /** Where they start: just outside the outer arc, on its upper diagonal (canvas degrees). */
+    /** Gap between the outer arc and the chevrons' start. */
     const val CHEVRON_ARC_GAP = 12f
-    const val CHEVRON_START_DEG_RIGHT = 315f
-    const val CHEVRON_START_DEG_LEFT = 225f
+    /** Where the strip starts on the right (canvas degrees round the arcs); the left mirrors it. */
+    const val CHEVRON_SHARP_START_DEG = 330f
+    /** Soft turns start lower, so the strip has room to slide up the diagonal. */
+    const val CHEVRON_SOFT_START_DEG = 345f
+    /** Turns at least this sharp bend the strip to the top edge; softer ones keep the diagonal. */
+    const val CHEVRON_SHARP_DEG = 60f
+    /** From here to the turn the trail grows behind the lead; before it the lead travels alone. */
+    const val CHEVRON_TRAIL_M = 20f
+    /** From here all four lie in the row (the lead is far enough along the top edge). */
+    const val CHEVRON_ALIGNED_M = 10f
+    /** Sharp turn: how far past the curve's corner the lead comes out level, then its run along the top edge. */
+    const val CHEVRON_CURVE_EXIT = 10f
+    const val CHEVRON_TOP_RUN = 75f
+    /** Soft turn: the length of its diagonal. */
+    const val CHEVRON_SOFT_LEN = 61f
+    /** "Sempre": the still chevron points straight up from this far, leaning to the diagonal by [CHEVRON_SHOW_M]. */
+    const val CHEVRON_ALWAYS_UP_M = 300f
+    /** On a roundabout's ring: only this far round it (never while entering, owner 2026-10-23). */
+    const val RB_CHEVRON_MIN_PROGRESS = 0.3f
+
+    /** One chevron: centre, pointing (screen degrees, 0 = right, -90 = up), how faded in it is. */
+    data class ChevronMark(val x: Float, val y: Float, val dir: Float, val appear: Float = 1f)
 
     /**
-     * The lead chevron at [intensity] 0 (the diagonal, from 100 m) .. 1 (the turn): position,
-     * pointing (screen degrees, 0 = right, -90 = up) and how many there are (1..4). Eased, so it
-     * lingers at both ends. The count and the travel run only once the animation has started.
+     * The "Sempre" chevron, a direction arrow round the power arc (owner): at [lean] 0 on top
+     * of the arc pointing straight up (the turn is still ahead); as the turn nears it travels
+     * round the arc to the turn's side, leaning over, and at 1 it is exactly where the
+     * near-turn chevrons start, so they take over without a jump.
      */
-    fun chevronPose(side: Int, intensity: Float): Triple<Pair<Float, Float>, Float, Int> {
-        val t = intensity.coerceIn(0f, 1f)
-        val e = t * t * (3 - 2 * t)
-        val (x0, y0) = arcPoint(if (side > 0) CHEVRON_START_DEG_RIGHT else CHEVRON_START_DEG_LEFT, ARC_POWER_R_OUT + CHEVRON_ARC_GAP)
-        val x1 = CHEVRON_CX + side * CHEVRON_END_DX
-        val x = x0 + (x1 - x0) * e
-        val y = y0 + (CHEVRON_END_Y - y0) * e
-        val dir = if (side > 0) -45f + 45f * e else -135f - 45f * e
-        val n = (1 + (t * CHEVRON_COUNT).toInt()).coerceIn(1, CHEVRON_COUNT)
-        return Triple(x to y, dir, n)
+    fun chevronCompass(side: Int, sharp: Boolean, lean: Float, roadDeg: Float = 0f): ChevronMark {
+        val l = lean.coerceIn(0f, 1f)
+        val start = if (sharp) CHEVRON_SHARP_START_DEG else CHEVRON_SOFT_START_DEG
+        val end = if (side > 0) start else 540f - start
+        // Far away it follows the road's own bends ([roadDeg], + right) instead of straight up.
+        val base = 270f + roadDeg
+        val (x, y) = arcPoint(base + (end - base) * l, ARC_POWER_R_OUT + CHEVRON_ARC_GAP)
+        val dir0 = if (side > 0) -45f else -135f
+        val dirBase = -90f + roadDeg
+        return ChevronMark(x, y, dirBase + (dir0 - dirBase) * l)
+    }
+
+    /** "Sempre": how far ahead the road's bend is read, and the most the arrow turns for it. */
+    const val CHEVRON_ROAD_AHEAD_M = 60f
+    const val CHEVRON_ROAD_MAX_DEG = 60f
+
+    /**
+     * The bend (degrees, + right) of the matched [route] (car frame metres, x right, y ahead)
+     * about [CHEVRON_ROAD_AHEAD_M] on, against its first metres, so the "Sempre" arrow
+     * anticipates the road's curves (owner, 2026-10-24). Against the route itself, not the
+     * screen: a GPS heading off the street does not tilt it. Null when the route is too short.
+     */
+    fun roadBendAhead(route: FloatArray): Float? {
+        fun at(s: Float): Pair<Float, Float>? {
+            var left = s
+            for (i in 0 until route.size / 2 - 1) {
+                val dx = route[2 * i + 2] - route[2 * i]
+                val dy = route[2 * i + 3] - route[2 * i + 1]
+                val len = kotlin.math.hypot(dx, dy)
+                if (left <= len && len > 0f) return route[2 * i] + dx * left / len to route[2 * i + 1] + dy * left / len
+                left -= len
+            }
+            return null
+        }
+        fun heading(a: Pair<Float, Float>, b: Pair<Float, Float>) =
+            Math.toDegrees(kotlin.math.atan2((b.first - a.first).toDouble(), (b.second - a.second).toDouble())).toFloat()
+        val start = heading(at(0f) ?: return null, at(15f) ?: return null)
+        val ahead = heading(at(CHEVRON_ROAD_AHEAD_M - 15f) ?: return null, at(CHEVRON_ROAD_AHEAD_M + 15f) ?: return null)
+        val bend = ((ahead - start) % 360f + 540f) % 360f - 180f
+        return bend.coerceIn(-CHEVRON_ROAD_MAX_DEG, CHEVRON_ROAD_MAX_DEG)
+    }
+
+    /**
+     * The lead chevron's way, as x,y points: a sharp turn curves from the diagonal start up to
+     * the top row (tangent -45 deg there, level at the end), then runs along the top edge; a
+     * soft turn is the straight diagonal.
+     */
+    private fun chevronWay(side: Int, sharp: Boolean): FloatArray {
+        val deg = if (sharp) CHEVRON_SHARP_START_DEG else CHEVRON_SOFT_START_DEG
+        val (x0, y0) = arcPoint(if (side > 0) deg else 540f - deg, ARC_POWER_R_OUT + CHEVRON_ARC_GAP)
+        if (!sharp) {
+            val d = CHEVRON_SOFT_LEN * 0.70710677f
+            return floatArrayOf(x0, y0, x0 + side * d, y0 - d)
+        }
+        // Quadratic curve P0 -> P1 with its corner where the start's diagonal meets the top row.
+        val rise = y0 - CHEVRON_END_Y
+        val cx = x0 + side * rise
+        val x1 = cx + side * CHEVRON_CURVE_EXIT
+        val n = 24
+        val pts = FloatArray((n + 2) * 2)
+        for (i in 0..n) {
+            val u = i / n.toFloat()
+            val a = (1 - u) * (1 - u)
+            val b = 2 * u * (1 - u)
+            val c = u * u
+            pts[2 * i] = a * x0 + b * cx + c * x1
+            pts[2 * i + 1] = a * y0 + b * CHEVRON_END_Y + c * CHEVRON_END_Y
+        }
+        pts[2 * n + 2] = x1 + side * CHEVRON_TOP_RUN
+        pts[2 * n + 3] = CHEVRON_END_Y
+        return pts
+    }
+
+    /** Point and heading (screen degrees) [at] along [way] (clamped to its ends). */
+    private fun alongWay(way: FloatArray, at: Float): Triple<Float, Float, Float> {
+        var left = at.coerceAtLeast(0f)
+        val last = way.size / 2 - 1
+        for (i in 0 until last) {
+            val dx = way[2 * i + 2] - way[2 * i]
+            val dy = way[2 * i + 3] - way[2 * i + 1]
+            val len = kotlin.math.hypot(dx, dy)
+            if (left <= len || i == last - 1) {
+                val f = if (len > 0f) (left / len).coerceIn(0f, 1f) else 0f
+                val dir = Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()).toFloat()
+                return Triple(way[2 * i] + dx * f, way[2 * i + 1] + dy * f, dir)
+            }
+            left -= len
+        }
+        return Triple(way[0], way[1], 0f)
+    }
+
+    private fun wayLength(way: FloatArray, upTo: Int = way.size / 2 - 1): Float {
+        var len = 0f
+        for (i in 0 until upTo) len += kotlin.math.hypot(way[2 * i + 2] - way[2 * i], way[2 * i + 3] - way[2 * i + 1])
+        return len
+    }
+
+    /**
+     * The chevrons at [intensity] 0 (50 m, one still on the diagonal) .. 1 (the turn), rear
+     * first, lead last (owner, 2026-10-23). Over the first 30 m the lead travels alone: a sharp
+     * turn's curves up to the top row, turning until it points fully left/right; a soft one's
+     * runs up its diagonal. Over the last [CHEVRON_TRAIL_M] the lead keeps going (along the top
+     * edge for a sharp turn) and a trail grows behind it, on its own way and fading to the last
+     * one, so it is not lined up while still on the curve; by [CHEVRON_ALIGNED_M] all four lie
+     * in the row.
+     */
+    fun chevronStrip(side: Int, sharp: Boolean, intensity: Float): List<ChevronMark> {
+        val meters = CHEVRON_ANIM_M * (1f - intensity.coerceIn(0f, 1f))
+        val way = chevronWay(side, sharp)
+        val total = wayLength(way)
+        // Where the lone travel ends: the curve's end (sharp), or most of the diagonal (soft).
+        val alone = if (sharp) wayLength(way, way.size / 2 - 2) else total - 3 * CHEVRON_SPACING
+        val lead = if (meters >= CHEVRON_TRAIL_M) {
+            val u = (CHEVRON_ANIM_M - meters) / (CHEVRON_ANIM_M - CHEVRON_TRAIL_M)
+            alone * u * u * (3 - 2 * u)
+        } else {
+            // Ease-out, so the row is out on the top edge (aligned) by CHEVRON_ALIGNED_M.
+            val u = 1f - meters / CHEVRON_TRAIL_M
+            alone + (total - alone) * (1f - (1f - u) * (1f - u))
+        }
+        // Trail: grows 1 -> 4 from CHEVRON_TRAIL_M to CHEVRON_ALIGNED_M, never behind the start.
+        val grown = ((CHEVRON_TRAIL_M - meters) / (CHEVRON_TRAIL_M - CHEVRON_ALIGNED_M)).coerceIn(0f, 1f) * (CHEVRON_COUNT - 1)
+        val behind = minOf(grown.toInt(), (lead / CHEVRON_SPACING).toInt(), CHEVRON_COUNT - 1)
+        val newest = if (behind == grown.toInt() && grown < CHEVRON_COUNT - 1) ((grown - behind) * 3f).coerceIn(0f, 1f) else 1f
+        return List(behind + 1) { i ->
+            val k = behind - i // 0 = lead
+            val (x, y, dir) = alongWay(way, lead - k * CHEVRON_SPACING)
+            // The trail fades to its last chevron; the newest one fades in.
+            val fade = 1f - 0.22f * k
+            ChevronMark(x, y, dir, if (k == behind && k > 0) fade * newest else fade)
+        }
     }
 
     /**
@@ -517,18 +675,22 @@ object HudOverlayModel {
      * Chevrons for a maneuver within [CHEVRON_SHOW_M], on either HUD layout. Still until
      * [CHEVRON_ANIM_M], then the row animates. With the map matched, only when ours is the next
      * street on the turn's side (a scripted demo ignores that, the maneuver is the script). Hidden while the car is stopped ([speedKmh] <= 0).
+     * [always] (owner option): further away, or where another street comes first, the one still
+     * chevron stays by the arcs pointing to the next road.
      */
-    fun chevronsFor(tbt: Tbt?, speedKmh: Double = 1.0, scripted: Boolean = false): Chevrons? {
+    fun chevronsFor(tbt: Tbt?, speedKmh: Double = 1.0, scripted: Boolean = false, always: Boolean = false): Chevrons? {
         if (speedKmh <= 0.0) return null
-        if (tbt == null) return null
-        val meters = tbt.guideMeters ?: return null
-        if (meters > CHEVRON_SHOW_M) return null
-        // Approaching a roundabout: no chevrons. They appear only once we are on the ring,
-        // pointing to the exit (right in right-hand traffic). The map's "next street on this
-        // side" check does not apply there: a roundabout is not that turn.
-        val roundaboutExit = tbt.dynamicRoundabout && tbt.rbProgress > 0.02f
+        if (tbt == null || tbt.turnHidden) return null
+        val meters = tbt.guideMeters ?: if (always) Float.MAX_VALUE else return null
+        if (meters > CHEVRON_SHOW_M && !always) return null
+        // Roundabout (owner): never while entering it, only to show the exit, so on the ring
+        // past its first part and within [CHEVRON_ANIM_M] of the exit (no still or "Sempre"
+        // arrow there). They point to the exit (right in right-hand traffic). The map's "next
+        // street on this side" check does not apply: a roundabout is not that turn.
+        val roundaboutExit = tbt.dynamicRoundabout && tbt.rbProgress >= RB_CHEVRON_MIN_PROGRESS && meters <= CHEVRON_ANIM_M
         if (tbt.dynamicRoundabout && !roundaboutExit) return null
-        if (tbt.routeMatched && !tbt.routeClear && !scripted && !roundaboutExit) return null
+        val notOurs = tbt.routeMatched && !tbt.routeClear && !scripted && !roundaboutExit
+        if (notOurs && !always) return null
         val heading = if (tbt.dynamicRoundabout) {
             if (tbt.roundaboutClockwise) -90f else 90f
         } else {
@@ -536,9 +698,13 @@ object HudOverlayModel {
         }
         if (kotlin.math.abs(heading) < CHEVRON_MIN_DEG) return null
         val side = if (heading > 0f) 1 else -1
-        val animate = meters <= CHEVRON_ANIM_M
+        val sharp = kotlin.math.abs(heading) >= CHEVRON_SHARP_DEG
+        val animate = meters <= CHEVRON_ANIM_M && !notOurs
         val intensity = if (animate) (1f - meters / CHEVRON_ANIM_M).coerceIn(0f, 1f) else 0f
-        return Chevrons(side, intensity, animate)
+        // "Sempre" far away: straight up (the turn is still ahead), leaning to the diagonal as it nears.
+        val l = ((CHEVRON_ALWAYS_UP_M - meters) / (CHEVRON_ALWAYS_UP_M - CHEVRON_SHOW_M)).coerceIn(0f, 1f)
+        val road = if (always) tbt.route?.takeIf { tbt.routeMatched }?.let { roadBendAhead(it) } ?: 0f else 0f
+        return Chevrons(side, intensity, animate, sharp, lean = l * l * (3 - 2 * l), roadDeg = road)
     }
 
     /**
@@ -594,6 +760,8 @@ object HudOverlayModel {
         val mapHorizon: Float = HudArArrow.MAP_HORIZON_Y,
         /** AR map on but its area not loaded yet: a note in place of the arrow (owner: no arrows). */
         val mapPending: Boolean = false,
+        /** ...and how much of it is loaded (0..1), for the bar under the note. */
+        val mapProgress: Float = 0f,
         /** The car is on the roundabout: the street line shows the street instead of the exit. */
         val onRoundabout: Boolean = false,
         /** Distance to this maneuver, either layout. Chevrons use it; null when unknown. */
@@ -601,7 +769,14 @@ object HudOverlayModel {
         /** Bend of this maneuver (+ right). Null on a roundabout (the exit angle is used) or an unknown shape. */
         val guideAngle: Float? = null,
         /** 0 approaching a roundabout, then how far round the ring toward the exit (0..1). */
-        val rbProgress: Float = 0f
+        val rbProgress: Float = 0f,
+        /** Further than [Config.showTurnFromM]: icon, distance, street and lanes are not drawn. */
+        val turnHidden: Boolean = false,
+        /** The trip line's two parts, for the two-line block while the turn is hidden ("" = none). */
+        val tripDistance: String = "",
+        val tripTime: String = "",
+        /** AR map: grey streets as edge lines ([Config.mapEdges]). */
+        val mapEdges: Boolean = false
     ) {
         /** Draw the roundabout with its real exit instead of the static icon. */
         val dynamicRoundabout: Boolean get() = icon == "ROUNDABOUT" && exitAngle != null
@@ -703,14 +878,41 @@ object HudOverlayModel {
         /** Three-digit speed: the wide arcs (see [wideArcs]). */
         val wideArcs: Boolean = false,
         /** Approach chevrons above the speed (null = none). */
-        val chevrons: Chevrons? = null
+        val chevrons: Chevrons? = null,
+        /** Text face for everything written on the HUD. */
+        val font: Font = Font.LIGHT
     )
+
+    /**
+     * HUD text faces. The head unit's fonts.xml maps sans-serif, -thin and -light all to one
+     * regular Roboto (measured 2026-10-24), so each is loaded from its own file in
+     * /system/fonts ([file]); the family is the fallback. Thin was too thin on the windshield
+     * (owner); the condensed face takes the same weight in less width.
+     */
+    enum class Font(val key: String, val family: String, val file: String?) {
+        LIGHT("light", "sans-serif-light", "Roboto-Light.ttf"),
+        REGULAR("regular", "sans-serif", null),
+        CONDENSED("condensed", "sans-serif-condensed", "RobotoCondensed-Regular.ttf");
+
+        companion object {
+            fun fromKey(key: String?): Font? = entries.firstOrNull { it.key == key }
+        }
+    }
 
     /**
      * Chevrons pointing to [side] (+1 right, -1 left). [intensity] 0 is the still diagonal,
      * 1 is at the turn. [animate] is false from 100 m to 50 m (one chevron, no pulse).
      */
-    data class Chevrons(val side: Int, val intensity: Float, val animate: Boolean = true)
+    data class Chevrons(
+        val side: Int,
+        val intensity: Float,
+        val animate: Boolean = true,
+        val sharp: Boolean = true,
+        /** The still chevron's pointing: 0 straight up .. 1 the diagonal ("Sempre" far away). */
+        val lean: Float = 1f,
+        /** "Sempre" far away: the road's bend ahead (+ right), so the arrow follows the curves. */
+        val roadDeg: Float = 0f
+    )
 
     /** Radar alert for the HUD (see RadarManager): metres to the camera, its limit, over it. */
     data class Radar(val distanceM: Int, val limitKmh: Int?, val over: Boolean)
@@ -771,10 +973,21 @@ object HudOverlayModel {
         val arGauges: Gauges = Gauges.ARCS,
         /** AR: animated chevrons above the speed when close to a turn. */
         val chevrons: Boolean = true,
+        /** ...and one still chevron by the arcs at any distance, pointing to the next road. */
+        val chevronsAlways: Boolean = false,
         /** AR: arrow in the centre (under the speed) or between the native lane-assist lines. */
         val arPlacement: HudArArrow.Placement = HudArArrow.Placement.CENTER,
         /** AR: real streets round the car from OpenStreetMap, in light grey (beta, off by default). */
-        val mapStreets: Boolean = false
+        val mapStreets: Boolean = false,
+        /** AR map: the grey streets as their edge lines only, instead of filled (owner option). */
+        val mapEdges: Boolean = false,
+        /** The HUD's text face (owner, 2026-10-24: Leve by default; thin was too thin). */
+        val font: Font = Font.LIGHT,
+        /**
+         * Next maneuver (icon, distance, street, lanes) only from this many metres; further away
+         * just the trip line. 0 = always (see [SHOW_TURN_FROM_OPTIONS]).
+         */
+        val showTurnFromM: Int = 0
     ) {
         val active: Boolean get() = layout != Layout.ORIGINAL
 
@@ -792,6 +1005,13 @@ object HudOverlayModel {
         fun withGauges(layout: Layout, g: Gauges): Config =
             if (layout == Layout.AR) copy(arGauges = g) else copy(navGauges = g)
     }
+
+    /** Choices for [Config.showTurnFromM]: always, then 200 m .. 1 km. */
+    val SHOW_TURN_FROM_OPTIONS = listOf(0, 200, 300, 500, 1000)
+
+    /** True when [config] hides a maneuver [meters] away (unknown distance: shown). */
+    fun turnHidden(config: Config, meters: Int?): Boolean =
+        config.showTurnFromM > 0 && meters != null && meters > config.showTurnFromM
 
     /**
      * Android Auto sends a new maneuver (code 10) before its distance (code 11), so for a moment
@@ -828,6 +1048,7 @@ object HudOverlayModel {
         val lanes = d.lanes.map { laneArrows(it) }
         val meters = distanceMeters(d.distance, d.distanceM)
         val icon = resolveTurnIcon(d.turn)
+        val hidden = turnHidden(config, meters)
         val exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null
         // AR: turns by their bend angle; a roundabout with a known exit gets the 3D ring (angle 0
         // here, the renderer draws it from exitAngle).
@@ -848,7 +1069,11 @@ object HudOverlayModel {
             style = style,
             // Last section (owner): the next maneuver is the destination, so the trip totals
             // would only repeat the section's distance; the flag by the distance says it instead.
-            trip = if (config.trip && icon != "DESTINATION") tripLabel(d.remainingM, d.remainingS) else "",
+            // With the maneuver hidden the trip line is all there is, so it stays.
+            trip = if (config.trip && (icon != "DESTINATION" || hidden)) tripLabel(d.remainingM, d.remainingS) else "",
+            turnHidden = hidden,
+            tripDistance = if (config.trip) tripParts(d.remainingM, d.remainingS).first.orEmpty() else "",
+            tripTime = if (config.trip) tripParts(d.remainingM, d.remainingS).second.orEmpty() else "",
             arAngle = arAngle.takeIf { style == TbtStyle.AR },
             arMeters = meters?.toFloat().takeIf { style == TbtStyle.AR },
             street = d.street.trim(),
@@ -875,6 +1100,7 @@ object HudOverlayModel {
         streets: List<br.com.redesurftank.havalshisuku.map.LocalRoad> = emptyList(),
         wideArcs: Boolean = false,
         mapPending: Boolean = false,
+        mapProgress: Float = 0f,
         onRoundabout: Boolean = false,
         speedKmh: Double = 1.0,
         scriptedDemo: Boolean = false
@@ -905,7 +1131,9 @@ object HudOverlayModel {
                         // The map's horizon at the top of the HUD (owner: the default, no switch).
                         mapHorizon = HudArArrow.MAP_HORIZON_TOP_Y,
                         mapPending = config.mapStreets && mapPending && streets.isEmpty() && !tbt.dynamicRoundabout,
-                        onRoundabout = onRoundabout && tbt.exitNumber != null
+                        mapProgress = mapProgress,
+                        onRoundabout = onRoundabout && tbt.exitNumber != null,
+                        mapEdges = config.mapEdges
                     ),
                     if (config.mapStreets) streets else emptyList()
                 )
@@ -918,7 +1146,8 @@ object HudOverlayModel {
             arcs = config.arcs,
             radar = radar,
             wideArcs = wideArcs,
-            chevrons = if (config.chevrons) chevronsFor(tbt, speedKmh, scriptedDemo) else null
+            chevrons = if (config.chevrons) chevronsFor(tbt, speedKmh, scriptedDemo, config.chevronsAlways) else null,
+            font = config.font
         )
     }
 

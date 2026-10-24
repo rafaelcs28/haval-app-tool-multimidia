@@ -1,5 +1,8 @@
 # Netseek v9 sync — 2026-10-19
 
+The 74132 integration and its changed radar passed-point semantics supersede the
+older radar behavior below; see [2026-10-24 integration](UPSTREAM_V9_SYNC_2026-10-24.md).
+
 ## Range
 
 - Previous upstream base: `824122357a0c25228a24e47c724f486361a7db9a`

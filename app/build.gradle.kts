@@ -9,9 +9,9 @@ plugins {
 
 val appVersionCode = providers.gradleProperty("appVersionCode")
     .map(String::toInt)
-    .orElse(1)
+    .orElse(74132)
 val appVersionName = providers.gradleProperty("appVersionName")
-    .orElse("0.0.1")
+    .orElse("1.0.0.74.132-preview")
 val impulseReportSupabaseUrl =
     providers.gradleProperty("impulseReportSupabaseUrl")
         .orElse("https://eymyarugcfcwkezqjiba.supabase.co")
@@ -205,7 +205,6 @@ dependencies {
 
 tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
     dependsOn("testDebugUnitTest")
-    dependsOn("buildCarPlayColdGatePatch")
 }
 
 val buildCarPlayColdGatePatch by tasks.registering(Exec::class) {

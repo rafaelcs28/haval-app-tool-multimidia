@@ -80,6 +80,10 @@ class RadarAlertEngineTest {
         assertTrue("approach within 520 m, got ${1_000 - approachAt}", 1_000 - approachAt in 490.0..520.0)
         assertTrue("near within 170 m, got ${1_000 - nearAt}", 1_000 - nearAt in 155.0..170.0)
         assertNull(run.alerts.last().second)
+        // The camera counts as 20 m before its database point: gone once that point is reached.
+        val inside = run.alerts.filter { 1_000 - it.first < 20.0 }
+        assertTrue(inside.isNotEmpty() && inside.all { it.second == null })
+        assertNotNull(run.alerts.last { 1_000 - it.first >= 20.0 }.second)
         val near = run.alerts.first { it.first == nearAt }.second
         assertNotNull(near)
         assertEquals(Phase.NEAR, near!!.phase)
@@ -258,19 +262,20 @@ class RadarAlertEngineTest {
     }
 
     @Test
-    fun `lead cannot clear a radar before passing its original position`() {
+    fun `lead clears at the shifted point with and without road geometry`() {
         for (withRoad in listOf(true, false)) {
             val camera = camera(1_000.0)
             val index = if (withRoad) index(listOf(camera), listOf(northRoad())) else RadarIndex(listOf(camera))
             val engine = RadarAlertEngine()
             drive(engine, index, 450.0, 960.0)
             var time = 60_000L
+            val (beforeLat, beforeLon) = at(975.0)
+            assertNotNull(engine.onFix(Fix(beforeLat, beforeLon, 0f, 5f, time), 18.0, config, index).alert)
             for (north in listOf(985.0, 995.0, 1_000.0, 1_010.0)) {
+                time += 1_000L
                 val (lat, lon) = at(north)
                 val alert = engine.onFix(Fix(lat, lon, 0f, 5f, time), 18.0, config, index).alert
-                assertNotNull("withRoad=$withRoad north=$north", alert)
-                assertEquals(0, alert!!.distanceM)
-                time += 1_000L
+                assertNull("withRoad=$withRoad north=$north", alert)
             }
             val (lat, lon) = at(1_020.0)
             assertNull(engine.onFix(Fix(lat, lon, 0f, 5f, time), 18.0, config, index).alert)
@@ -279,7 +284,7 @@ class RadarAlertEngineTest {
     }
 
     @Test
-    fun `lead allows acquiring a camera less than twenty metres ahead`() {
+    fun `a camera first seen past its shifted point is not acquired`() {
         for (withRoad in listOf(true, false)) {
             val camera = camera(100.0)
             val index = if (withRoad) index(listOf(camera), listOf(northRoad())) else RadarIndex(listOf(camera))
@@ -288,8 +293,8 @@ class RadarAlertEngineTest {
             engine.onFix(Fix(firstLat, firstLon, 0f, 5f, 0L), 18.0, config, index)
             val (lat, lon) = at(90.0)
             val update = engine.onFix(Fix(lat, lon, 0f, 5f, 1_000L), 18.0, config, index)
-            assertEquals(Event.NEAR, update.event)
-            assertEquals(0, update.alert!!.distanceM)
+            assertNull(update.event)
+            assertNull(update.alert)
         }
     }
 }

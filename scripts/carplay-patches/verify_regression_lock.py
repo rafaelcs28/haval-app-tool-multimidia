@@ -172,7 +172,9 @@ RISKY_DIFF_PATH_PREFIXES = (
 RISKY_ADDED_LINE_PATTERNS = [
     (
         "windowAlpha=0 / transparent Presentation bypass",
-        re.compile(r"\b(?:windowAlpha|attrs\.alpha|alpha)\s*=\s*0(?:\.0)?f?\b"),
+        # A word boundary alone also accepts the zero prefix of `0.25f`.
+        # Require a complete zero literal, including its optional float suffix.
+        re.compile(r"\b(?:windowAlpha|attrs\.alpha|alpha)\s*=\s*0(?:\.0+)?f?(?![\w.])"),
     ),
     (
         "CarPlay VIDEO_FOCUS_CHANGE in new functional code",

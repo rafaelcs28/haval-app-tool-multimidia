@@ -160,13 +160,13 @@ object HudArArrow {
     const val MAP_HALF_M = 5f
     const val MAP_HEAD_L_M = 14f
     const val MAP_HEAD_HALF_M = 10f
-    const val MAP_FLAG_GAP_M = 3f
+    const val MAP_FLAG_GAP_M = 1f
     const val MAP_FLAG_H_M = 6f
     /**
      * The pole stays at least this far (px) outside the drawn road or arrow head. A metre offset
      * alone collapses into the centre of a road that has been widened to [MAP_MIN_PX].
      */
-    const val MAP_FLAG_GAP_PX = 12f
+    const val MAP_FLAG_GAP_PX = 4f
     /**
      * Minimum drawn thickness (px) of a street: one running sideways in the distance spans only a
      * few metres of depth and would shrink to a hairline (the turn street included).
@@ -354,11 +354,14 @@ object HudArArrow {
      */
     data class Flag(val x: Float, val y: Float, val height: Float, val pennant: Int = 1)
 
-    /** Side of the destination for a maneuver token: -1 left, +1 right, 0 unknown, null not one. */
+    /**
+     * Side of the destination for a maneuver token: -1 left, +1 right, null not one. AA's plain
+     * DESTINATION (drive log: maneuver 39, no side) goes on the right curb, where a car stops
+     * in right-hand traffic, instead of in the middle of the road (owner).
+     */
     fun destinationSide(turn: String?): Int? = when (turn.orEmpty().uppercase()) {
         "DESTINATION_LEFT" -> -1
-        "DESTINATION_RIGHT" -> 1
-        "DESTINATION" -> 0
+        "DESTINATION_RIGHT", "DESTINATION" -> 1
         else -> null
     }
 
@@ -693,14 +696,4 @@ object HudArArrow {
     /** Way round to an exit [travelDeg] along a ring of [RB_RADIUS_M]. */
     fun ringLengthM(travelDeg: Float): Float = (travelDeg * PI / 180).toFloat() * RB_RADIUS_M
 
-    /**
-     * Progress when AA's distance is already the metres left to the exit and never jumps at the
-     * entry. 0 while that distance is still longer than the ring (still approaching); then
-     * 1 - left / ring, so the icon closes as the exit gets nearer.
-     */
-    fun progressFromExitDistance(metersLeft: Float, travelDeg: Float): Float {
-        val way = ringLengthM(travelDeg)
-        if (way <= 0f || metersLeft >= way) return 0f
-        return (1f - metersLeft / way).coerceIn(0f, 1f)
-    }
 }

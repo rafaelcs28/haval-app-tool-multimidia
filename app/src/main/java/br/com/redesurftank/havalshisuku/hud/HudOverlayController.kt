@@ -117,7 +117,13 @@ object HudOverlayController {
     fun setConfig(config: HudOverlayModel.Config) {
         main.post {
             configCache = config
-            // The owner's pick wins: a debug demo must not keep the HUD up past "original".
+            // The demo started from the settings keeps playing, so each change shows on it at
+            // once (owner, 2026-10-24: compare options live); its layout stays the one it was
+            // started for. Any other (debug) demo stops: the owner's pick wins.
+            if (demoDriveStartMs != 0L && demoLayout != null) {
+                publish()
+                return@post
+            }
             endDemo()
             if (wanted()) publish() else closeHosts()
         }
@@ -264,6 +270,7 @@ object HudOverlayController {
             streets = HudMapFeed.lines,
             wideArcs = wideArcs,
             mapPending = HudMapFeed.pending,
+            mapProgress = HudMapFeed.progress,
             onRoundabout = rbTracker.entered || roundaboutProgress() > 0f,
             // A demo is a moving drive even with the car parked. Otherwise the real speed:
             // 0 hides the blue approach chevrons.
@@ -304,10 +311,10 @@ object HudOverlayController {
 
     /**
      * How far round the ring the left-hand icon is. From AA's countdown once a jump at the entry
-     * says the car is on the ring ([rbTracker]). A real drive often never jumps — the distance
-     * just keeps falling to the exit — so then the icon follows that distance once it is inside
-     * the ring (the demo keeps the jump, it is scripted). Last resort: speed since the distance
-     * reached ~0. 0 before the roundabout or on other maneuvers.
+     * says the car is on the ring ([rbTracker]). Until then AA's distance is to the entry
+     * (drive log 2026-10-22: 100 -> 2 m, then the 157 m lap), so it never counts as the lap.
+     * Without a jump: speed since the distance reached ~0. 0 before the roundabout or on
+     * other maneuvers.
      */
     private fun roundaboutProgress(): Float {
         val dirs = (demoDirections ?: navDirections)?.takeIf { it.active }
@@ -317,11 +324,9 @@ object HudOverlayController {
         val meters = if (isRoundabout && !distanceStale()) {
             arMetersEstimate() ?: HudOverlayModel.distanceMeters(dirs!!.distance, dirs.distanceM)?.toFloat()
         } else null
+        // Prefer AA's exit countdown once the entry jump is known — even if this tick's
+        // turn_angle was briefly zeroed (telemetry normally holds the approach pair).
         if (rbTracker.entered && meters != null) return rbTracker.progress(meters)
-        if (isRoundabout && travel != null && meters != null && demoDirections == null) {
-            val along = HudArArrow.progressFromExitDistance(meters, travel.toFloat())
-            if (along > 0f) return along
-        }
         val speedFallback = config().layout == HudOverlayModel.Layout.AR && isRoundabout && travel != null
         if (!speedFallback || meters == null || meters > 3f) {
             roundaboutZeroAtMs = 0L
@@ -465,6 +470,11 @@ object HudOverlayController {
     /** Debug `--es hudMap on|off`: switch the map (saved, as the Telas option does). */
     internal fun setMapDebug(on: Boolean) {
         main.post { HudOverlaySettings.save(config().copy(mapStreets = on, layout = configCache?.layout ?: config().layout)) }
+    }
+
+    /** Debug `--es hudMapEdges on|off`: the map's streets as edge lines, saved like the Telas option. */
+    internal fun setMapEdgesDebug(on: Boolean) {
+        main.post { HudOverlaySettings.save(HudOverlaySettings.load().copy(mapEdges = on)) }
     }
 
     internal fun demo(mode: String) {

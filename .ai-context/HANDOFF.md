@@ -1,5 +1,35 @@
 # Handoff
 
+## 2026-10-24 — 74132 integration candidate; installation deferred
+
+Owner requested all new Netseek v9 commits and version132. Release worktree
+`/root/projects/haval-impulse-132`, branch `release/impulse-74132-v9`, starts at
+complete personal131 a427ddde. Cherry-picked namespace2f6e6961 and Java568522b8;
+capture ordering6a6277bb was already identical (empty cherry-pick skipped).
+Merged v9 through165359a3, retaining personal features, AA recovery and strict
+roundabout angle retention. New upstream radar passed-point decision adopted;
+two personal tests updated, rather than retaining contradictory assertions.
+Roundabout null reset retained with new upstream progress. Source-native remains
+identical2f6e6961; Frida tools identical568522b8. App defaults74132/1.0.0.74.132-preview.
+Assembly depends on JVM tests; OEM patch rebuild stays manual, bridge excluded.
+
+Offline:32/33 Python native-analysis tests pass,1 optional converter skipped;
+8 patch/guard tests pass;9 endpoint and30 cold JS scenarios plus observer models
+pass. An initial broad system-Python invocation lackedcapstone/elftools; rerun
+passed with existing /tmp/carplay-audit-controller venv and private captured
+OEM binaries. Initial direct Node commands omitted fixture arguments; corrected
+runs above passed. Java bundle reproducible and matches prior1a429e6d hash.
+
+Legacy overlay checker still has5 preexisting failures, including real missing
+physical-input authorization semantics and movedtheme. Not waived/removed.
+Corrected only falsepositive zero-prefix match in0.25f with4 regressiontests.
+Review docs/UPSTREAM_V9_SYNC_2026-10-24.md. Audited immutable source build through
+Mini only; receipt/job/APK validation to follow. No car access or deployment.
+Do NOT reconnect/stage/restart/inject/install merely because the car is online.
+Owner deferred installation until a fresh coordinated parked session.
+Before that deployment reconcile overlay contract discrepancy. Independent map
+and firstD3frame remain unproven. Historical notes below are superseded.
+
 ## Cold passthrough controller prepared — no vehicle run yet
 
 Added `scripts/carplay-native-analysis/cold_passthrough_controller.py` and four

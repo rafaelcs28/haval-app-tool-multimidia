@@ -1,5 +1,16 @@
 # Next steps
 
+## Current priority — 74132 candidate, no installation yet
+
+Finish authorized Mini JVM/release validation; retrieve hash-verifiedAPK and
+same74131 productioncertificate. Keep source commit/job/receipt together.
+Reconcile five legacy overlay-contract failures before deployment; current
+card-based authorization is not the historical physical-input session gate.
+Owner deferred car installation; wait for a newly coordinated parked session.
+Then review explicit native namespace artifact + bundledJavaagent and conduct
+cold passthrough, endpoint acknowledgement, intactD0 and actualfirstD3frame.
+No live action merely on returnonline. See UPSTREAM_V9_SYNC_2026-10-24.md.
+
 ## Cold passthrough ready for the first controlled vehicle run
 
 The operator controller now exists and the exact 6d725462 ARM64 bridge was fetched

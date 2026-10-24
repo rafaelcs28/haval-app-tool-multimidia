@@ -1,5 +1,17 @@
 # AI change log
 
+## 2026-10-24 — integrate complete v9 and prepare 74132
+
+- Personal131 plus namespace/Java endpoint fixes; all16 new v9 commits merged.
+- Keep personal AA recovery/UI/connectivity/themes; adopt upstream radar timing,
+  warning reset, HUD and map changes; retain roundabout reset guard.
+- Version74132/1.0.0.74.132-preview; JVM tests required during assembly; OEM
+  patcher manual, experimental native packaging unchanged.
+- Offline32 Python tests pass/1optional skip,8 patch/guard tests,9 endpoint+30
+  cold JS scenarios and observer models pass. Existingvenv resolves audit deps.
+- Legacy guard5findings remain; fixed only nonzeroalpha falsepositive withtests.
+- Android build assigned only to audited immutable Mini job; no car operations.
+
 ## 2026-10-23 — controlador do primeiro passthrough frio CarPlay
 
 - Adicionou controlador operacional que pré-carrega bridge/launcher com hash,

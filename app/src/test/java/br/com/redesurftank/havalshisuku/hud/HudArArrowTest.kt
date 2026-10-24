@@ -149,12 +149,6 @@ class HudArArrowTest {
         val way = (Math.PI * HudArArrow.RB_RADIUS_M).toFloat() // 180° on a 15 m ring
         assertEquals(0.5f, HudArArrow.roundaboutProgress(way / 2, 180f), 0.01f)
         assertEquals(1f, HudArArrow.roundaboutProgress(way * 3, 180f), 0f)
-        // No jump at the entry: still approaching while the distance is longer than the ring,
-        // then the left icon closes as the metres left to the exit fall.
-        assertEquals(0f, HudArArrow.progressFromExitDistance(way + 40f, 180f), 0f)
-        assertEquals(0f, HudArArrow.progressFromExitDistance(way, 180f), 0f)
-        assertEquals(0.5f, HudArArrow.progressFromExitDistance(way / 2f, 180f), 0.02f)
-        assertEquals(1f, HudArArrow.progressFromExitDistance(0f, 180f), 0f)
     }
 
     @Test
@@ -339,26 +333,126 @@ class HudArArrowTest {
     }
 
     @Test
-    fun `chevrons travel from the arc's diagonal to the top edge, turning, growing to 4`() {
-        // Start (50 m): one, just outside the arc's upper-right diagonal, pointing up-right.
-        val (p0, d0, n0) = HudOverlayModel.chevronPose(1, 0f)
-        assertEquals(1, n0)
-        assertEquals(-45f, d0, 0.01f)
-        val diag = HudOverlayModel.arcPoint(HudOverlayModel.CHEVRON_START_DEG_RIGHT, HudOverlayModel.ARC_POWER_R_OUT + HudOverlayModel.CHEVRON_ARC_GAP)
-        assertEquals(diag.first, p0.first, 0.01f)
-        assertEquals(diag.second, p0.second, 0.01f)
-        // At the turn: four, at the top edge out to the side, pointing fully right.
-        val (p1, d1, n1) = HudOverlayModel.chevronPose(1, 1f)
-        assertEquals(4, n1)
-        assertEquals(0f, d1, 0.01f)
-        assertEquals(HudOverlayModel.CHEVRON_END_Y, p1.second, 0.01f)
-        assertEquals(HudOverlayModel.CHEVRON_CX + HudOverlayModel.CHEVRON_END_DX, p1.first, 0.01f)
-        // Left: mirrored, pointing fully left at the end.
-        assertEquals(-135f, HudOverlayModel.chevronPose(-1, 0f).second, 0.01f)
-        assertEquals(-180f, HudOverlayModel.chevronPose(-1, 1f).second, 0.01f)
-        assertTrue(HudOverlayModel.chevronPose(-1, 1f).first.first < HudOverlayModel.CHEVRON_CX)
-        // Growing on the way: 1, 2, 3, 4.
-        assertEquals(listOf(1, 2, 3, 4), listOf(0.1f, 0.3f, 0.6f, 0.9f).map { HudOverlayModel.chevronPose(1, it).third })
+    fun `chevrons - the lead travels alone, then a trail grows behind it, four in a row by 10 m`() {
+        fun at(m: Float, sharp: Boolean = true, side: Int = 1) =
+            HudOverlayModel.chevronStrip(side, sharp, 1f - m / HudOverlayModel.CHEVRON_ANIM_M)
+        // 50 m: one, outside the arc's upper-right diagonal, pointing up-right.
+        val s0 = at(50f)
+        assertEquals(1, s0.size)
+        val start = HudOverlayModel.arcPoint(HudOverlayModel.CHEVRON_SHARP_START_DEG, HudOverlayModel.ARC_POWER_R_OUT + HudOverlayModel.CHEVRON_ARC_GAP)
+        assertEquals(start.first, s0[0].x, 0.01f)
+        assertEquals(start.second, s0[0].y, 0.01f)
+        assertEquals(-45f, s0[0].dir, 2f)
+        // First 30 m alone: it climbs and turns towards level.
+        val s35 = at(35f)
+        assertEquals(1, s35.size)
+        assertTrue(s35[0].y < start.second && s35[0].dir > -45f && s35[0].dir < 0f)
+        val s20 = at(20f)
+        assertEquals(1, s20.size)
+        assertEquals(HudOverlayModel.CHEVRON_END_Y, s20[0].y, 0.5f)
+        assertEquals(0f, s20[0].dir, 0.5f)
+        // Then the trail grows behind it, fading to the last one.
+        assertEquals(listOf(1, 2, 3, 4), listOf(19.5f, 16f, 12.5f, 10f).map { at(it).size })
+        val s15 = at(15f)
+        assertTrue(s15.first().appear < s15.last().appear)
+        // By 10 m: four, level, in a row on the top edge; at the turn the lead is out to the side.
+        val s10 = at(10f)
+        assertEquals(4, s10.size)
+        assertTrue(s10.all { kotlin.math.abs(it.y - HudOverlayModel.CHEVRON_END_Y) < 0.01f && kotlin.math.abs(it.dir) < 0.01f })
+        for (k in 1 until 4) assertEquals(HudOverlayModel.CHEVRON_SPACING, s10[k].x - s10[k - 1].x, 0.5f)
+        val end = at(0f)
+        assertEquals(4, end.size)
+        assertTrue(end.last().x > s10.last().x && end.last().x > 380f)
+        // Inside the optics all the way.
+        for (m in listOf(50f, 40f, 30f, 20f, 10f, 0f)) for (sharp in listOf(true, false)) for (side in listOf(1, -1)) {
+            assertTrue(at(m, sharp, side).all {
+                // A chevron's half-height once turned to its direction.
+                val rad = Math.toRadians(it.dir.toDouble())
+                val half = HudOverlayModel.CHEVRON_HALF_H * (kotlin.math.abs(kotlin.math.sin(rad)) + kotlin.math.abs(kotlin.math.cos(rad))).toFloat()
+                it.y - half >= 40f && it.x in 20f..460f
+            })
+        }
+        // Soft: the diagonal all the way, the trail on it too.
+        val soft = at(0f, sharp = false)
+        assertEquals(4, soft.size)
+        assertTrue(soft.all { kotlin.math.abs(it.dir + 45f) < 0.01f })
+        assertTrue(soft.last().x > at(50f, sharp = false)[0].x)
+        // Left mirrors it.
+        assertEquals(180f, kotlin.math.abs(at(0f, side = -1).last().dir), 0.5f)
+        assertTrue(at(0f, side = -1).all { it.x < HudOverlayModel.ARC_CX })
+    }
+
+    @Test
+    fun `chevrons - sharp from 60 degrees, and the always option keeps one still arrow far away`() {
+        val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR)
+        val d = Directions(active = true, distance = "40 m", distanceM = 40, turn = "TURN_RIGHT")
+        assertTrue(HudOverlayModel.frameFor(ar, d, 0, null, arMetersOverride = 40f).chevrons!!.sharp)
+        assertTrue(!HudOverlayModel.frameFor(ar, d.copy(turn = "SLIGHT_RIGHT"), 0, null, arMetersOverride = 40f).chevrons!!.sharp)
+        val far = d.copy(distance = "800 m", distanceM = 800)
+        assertNull(HudOverlayModel.frameFor(ar, far, 0, null).chevrons)
+        val always = HudOverlayModel.frameFor(ar.copy(chevronsAlways = true), far, 0, null).chevrons!!
+        assertEquals(1, always.side)
+        assertTrue(!always.animate)
+        // Still hidden when stopped, on straight-on steps, and while the turn itself is hidden.
+        assertNull(HudOverlayModel.frameFor(ar.copy(chevronsAlways = true), far, 0, null, speedKmh = 0.0).chevrons)
+        assertNull(HudOverlayModel.frameFor(ar.copy(chevronsAlways = true), far.copy(turn = "STRAIGHT"), 0, null).chevrons)
+        assertNull(HudOverlayModel.frameFor(ar.copy(chevronsAlways = true, showTurnFromM = 500), far, 0, null).chevrons)
+        // Far away it points straight up, leaning to the diagonal from 300 m to 100 m.
+        assertEquals(0f, always.lean, 0.001f)
+        assertEquals(0.5f, HudOverlayModel.frameFor(ar.copy(chevronsAlways = true), d, 0, null, arMetersOverride = 200f).chevrons!!.lean, 0.01f)
+        assertEquals(1f, HudOverlayModel.frameFor(ar.copy(chevronsAlways = true), d, 0, null, arMetersOverride = 90f).chevrons!!.lean, 0.001f)
+        // It travels round the arc: on top pointing up, then to the turn's side, ending where the strip starts.
+        val top = HudOverlayModel.chevronCompass(1, true, 0f)
+        assertEquals(HudOverlayModel.ARC_CX, top.x, 0.01f) // on top of the arc, round the native speed
+        assertEquals(-90f, top.dir, 0.01f)
+        val mid = HudOverlayModel.chevronCompass(1, true, 0.5f)
+        assertTrue(mid.x > top.x && mid.y > top.y)
+        val near = HudOverlayModel.chevronCompass(1, true, 1f)
+        val strip = HudOverlayModel.chevronStrip(1, true, 0f)[0]
+        assertEquals(strip.x, near.x, 0.01f)
+        assertEquals(strip.y, near.y, 0.01f)
+        assertEquals(strip.dir, near.dir, 2f)
+        assertTrue(HudOverlayModel.chevronCompass(-1, false, 0.5f).x < HudOverlayModel.ARC_CX)
+        assertTrue(top.y - HudOverlayModel.CHEVRON_STROKE >= 40f)
+    }
+
+    @Test
+    fun `Sempre arrow follows the road's bend ahead, then the turn`() {
+        // Straight, then bending right: the arrow leans right on top of the arc.
+        val straight = floatArrayOf(0f, 0f, 0f, 200f)
+        assertEquals(0f, HudOverlayModel.roadBendAhead(straight)!!, 0.5f)
+        val bend = floatArrayOf(0f, 0f, 0f, 30f, 30f, 60f, 60f, 90f, 90f, 120f)
+        val deg = HudOverlayModel.roadBendAhead(bend)!!
+        assertEquals(45f, deg, 1f)
+        assertEquals(-45f, HudOverlayModel.roadBendAhead(floatArrayOf(0f, 0f, 0f, 30f, -30f, 60f, -60f, 90f, -90f, 120f))!!, 1f)
+        assertNull(HudOverlayModel.roadBendAhead(floatArrayOf(0f, 0f, 0f, 40f)))
+        // Never more than the cap.
+        assertEquals(HudOverlayModel.CHEVRON_ROAD_MAX_DEG, HudOverlayModel.roadBendAhead(floatArrayOf(0f, 0f, 0f, 30f, 100f, 31f, 200f, 32f))!!, 0.01f)
+        val far = HudOverlayModel.chevronCompass(1, true, 0f, roadDeg = 30f)
+        assertEquals(-60f, far.dir, 0.01f)
+        assertTrue(far.x > HudOverlayModel.ARC_CX)
+        // Close to the turn the bend no longer matters: the turn's diagonal.
+        val near = HudOverlayModel.chevronCompass(1, true, 1f, roadDeg = -40f)
+        assertEquals(HudOverlayModel.chevronCompass(1, true, 1f).x, near.x, 0.01f)
+        assertEquals(-45f, near.dir, 0.01f)
+    }
+
+    @Test
+    fun `chevrons on a roundabout - never entering it, only near the exit`() {
+        val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR, chevronsAlways = true)
+        val rb = Directions(active = true, distance = "120 m", distanceM = 120, turn = "ROUNDABOUT", exitNumber = 3, turnAngle = 270, roundaboutClockwise = false)
+        // Approaching, and just on the ring (even with Sempre): none.
+        assertNull(HudOverlayModel.frameFor(ar, rb, 0, null, arMetersOverride = 40f).chevrons)
+        // On the ring the chevrons follow AA's own distance to the exit.
+        fun left(m: Int) = rb.copy(distance = "$m m", distanceM = m)
+        assertNull(HudOverlayModel.frameFor(ar, left(120), 0, null, arProgress = 0.1f).chevrons)
+        // A small ring: within 50 m of the exit at once, but not before the first part of the lap.
+        assertNull(HudOverlayModel.frameFor(ar, left(45), 0, null, arProgress = 0.1f).chevrons)
+        // Further round, near the exit: they show the way out.
+        val exit = HudOverlayModel.frameFor(ar, left(30), 0, null, arProgress = 0.5f).chevrons!!
+        assertEquals(1, exit.side)
+        assertTrue(exit.animate)
+        assertNull(HudOverlayModel.frameFor(ar, left(80), 0, null, arProgress = 0.5f).chevrons)
     }
 
     @Test
@@ -399,7 +493,8 @@ class HudArArrowTest {
     fun `destination - flag beside the arrow's end, on AA's side`() {
         assertEquals(-1, HudArArrow.destinationSide("DESTINATION_LEFT"))
         assertEquals(1, HudArArrow.destinationSide("DESTINATION_RIGHT"))
-        assertEquals(0, HudArArrow.destinationSide("DESTINATION"))
+        // No side from AA: the right curb, not the middle of the road.
+        assertEquals(1, HudArArrow.destinationSide("DESTINATION"))
         assertNull(HudArArrow.destinationSide("TURN_RIGHT"))
         val leftShape = HudArArrow.destination(60f, -1)
         val rightShape = HudArArrow.destination(60f, 1)
@@ -442,6 +537,24 @@ class HudArArrowTest {
         assertEquals(1, first.chevrons!!.side)
         // The map view is used: a route on the roads.
         assertTrue(first.tbt!!.route != null)
+    }
+
+    @Test
+    fun `roundabout - the 2026-10-22 drive replayed (approach to the entry, jump, lap, next leg)`() {
+        val t = RoundaboutTracker()
+        val step = HudOverlayModel.roundaboutIdentity(6, 315, false, 35)
+        // AA's distance is to the entry while approaching: no lap yet, however close.
+        for (m in listOf(100f, 82f, 59f, 38f, 16f, 7f, 2f)) {
+            assertTrue(!t.onUpdate(step, m))
+            assertEquals(0f, t.progress(m), 0f)
+        }
+        // On the ring: the 157 m lap (identity kept, the exit pair is held across ROUNDABOUT_EXIT).
+        assertTrue(t.onUpdate(step, 157f))
+        assertEquals(0.5f, t.progress(78.5f), 0.01f)
+        assertEquals(1f, t.progress(5f), 0.05f)
+        // AA's last sample of this step carries the next leg (437 m): the exit is done, not 0.
+        t.onUpdate(step, 437f)
+        assertEquals(1f, t.progress(437f), 0f)
     }
 
     @Test
@@ -555,14 +668,14 @@ class HudArArrowTest {
     }
 
     @Test
-    fun `carregando mapa - 5 s shown, 10 s hidden, round and round`() {
-        assertTrue(HudOverlayModel.mapPendingVisible(0L))
-        assertTrue(HudOverlayModel.mapPendingVisible(4_999L))
-        assertTrue(!HudOverlayModel.mapPendingVisible(5_000L))
-        assertTrue(!HudOverlayModel.mapPendingVisible(14_999L))
-        assertTrue(HudOverlayModel.mapPendingVisible(15_000L))
-        // On the right, inside the panel.
+    fun `carregando mapa - steady on the right, with its loading share`() {
+        // On the right, inside the panel, the bar under the note and above the band's bottom.
         assertTrue(HudOverlayModel.MAP_PENDING_X > 300f && HudOverlayModel.MAP_PENDING_X < 470f)
+        assertTrue(HudOverlayModel.MAP_PENDING_X + HudOverlayModel.MAP_PENDING_BAR_W / 2 < 480f)
+        assertTrue(HudOverlayModel.MAP_PENDING_BAR_Y > HudOverlayModel.MAP_PENDING_Y && HudOverlayModel.MAP_PENDING_BAR_Y + 2f <= 200f)
+        val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR, mapStreets = true)
+        val turn = Directions(active = true, distance = "300 m", distanceM = 300, turn = "TURN_RIGHT")
+        assertEquals(0.4f, HudOverlayModel.frameFor(ar, turn, 0, null, mapPending = true, mapProgress = 0.4f).tbt!!.mapProgress, 0f)
     }
 
     @Test

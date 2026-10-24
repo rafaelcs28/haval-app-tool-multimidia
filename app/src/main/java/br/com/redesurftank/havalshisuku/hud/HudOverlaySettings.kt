@@ -27,9 +27,14 @@ object HudOverlaySettings {
             navGauges = gauges(prefs, SharedPreferencesKeys.HUD_NAV_GAUGES, SharedPreferencesKeys.HUD_NAV_ARCS, defaults.navGauges),
             arGauges = gauges(prefs, SharedPreferencesKeys.HUD_AR_GAUGES, SharedPreferencesKeys.HUD_AR_ARCS, defaults.arGauges),
             chevrons = prefs.getBoolean(SharedPreferencesKeys.HUD_AR_CHEVRONS.key, defaults.chevrons),
+            chevronsAlways = prefs.getBoolean(SharedPreferencesKeys.HUD_AR_CHEVRONS_ALWAYS.key, defaults.chevronsAlways),
             arPlacement = HudArArrow.Placement.fromKey(prefs.getString(SharedPreferencesKeys.HUD_AR_PLACEMENT.key, null))
                 ?: defaults.arPlacement,
-            mapStreets = prefs.getBoolean(SharedPreferencesKeys.HUD_AR_MAP.key, defaults.mapStreets)
+            mapStreets = prefs.getBoolean(SharedPreferencesKeys.HUD_AR_MAP.key, defaults.mapStreets),
+            mapEdges = prefs.getBoolean(SharedPreferencesKeys.HUD_AR_MAP_EDGES.key, defaults.mapEdges),
+            font = HudOverlayModel.Font.fromKey(prefs.getString(SharedPreferencesKeys.HUD_FONT.key, null)) ?: defaults.font,
+            showTurnFromM = prefs.getInt(SharedPreferencesKeys.HUD_NAV_SHOW_TURN_FROM_M.key, defaults.showTurnFromM)
+                .takeIf { it in HudOverlayModel.SHOW_TURN_FROM_OPTIONS } ?: defaults.showTurnFromM
         )
     }
 
@@ -57,8 +62,12 @@ object HudOverlaySettings {
             .putString(SharedPreferencesKeys.HUD_NAV_GAUGES.key, config.navGauges.key)
             .putString(SharedPreferencesKeys.HUD_AR_GAUGES.key, config.arGauges.key)
             .putBoolean(SharedPreferencesKeys.HUD_AR_CHEVRONS.key, config.chevrons)
+            .putBoolean(SharedPreferencesKeys.HUD_AR_CHEVRONS_ALWAYS.key, config.chevronsAlways)
             .putString(SharedPreferencesKeys.HUD_AR_PLACEMENT.key, config.arPlacement.key)
             .putBoolean(SharedPreferencesKeys.HUD_AR_MAP.key, config.mapStreets)
+            .putBoolean(SharedPreferencesKeys.HUD_AR_MAP_EDGES.key, config.mapEdges)
+            .putString(SharedPreferencesKeys.HUD_FONT.key, config.font.key)
+            .putInt(SharedPreferencesKeys.HUD_NAV_SHOW_TURN_FROM_M.key, config.showTurnFromM)
             .remove(LEGACY_ENABLED_KEY)
             .apply()
         HudOverlayController.setConfig(config)
