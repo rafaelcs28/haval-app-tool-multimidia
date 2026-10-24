@@ -67,6 +67,18 @@ identity must equal the installed 74131 certificate:
 Signing material stays on that host. Record the job, source commit, resulting
 artifact hash and test results with the private artifact receipt.
 
+Completed validation: source `b266cfe6a3af04be50ca1afd2e5eaaee6cf84875`, Mini job
+`haval-impulse-132-b266cfe6a3af04be-20261024T232851Z-21744`, successful in
+4 minutes 52 seconds with 81 executed tasks. The JVM report contains 93 suites,
+852 tests, 851 passed, one skipped, zero failures and zero errors. Release lint,
+Kotlin/Java compilation, ARM64 CMake and signed assembly completed. Queue output
+checksums and APK ZIP integrity were verified; actual manifest and signature were
+checked on the Mini. Version/package and the certificate above match expectations.
+The returned APK is 76,105,763 bytes with SHA-256
+`c529fdc15ec66b1e82f9de29f15f059d6133455136f9b14067c34e55c682040c`.
+Both bundled OEM APK hashes are unchanged and the native bridge is absent from
+the APK as required. The full private receipt is retained with the artifact.
+
 Generating this candidate does not publish an OTA or authorize installation.
 Installation remains deferred until the owner coordinates a parked session.
 Review the overlay contract discrepancy before that deployment. A physical

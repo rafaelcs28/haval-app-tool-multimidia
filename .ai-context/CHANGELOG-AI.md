@@ -2,6 +2,12 @@
 
 ## 2026-10-24 — integrate complete v9 and prepare 74132
 
+- Mini signedrelease validated fromb266cfe6:4m52s/81tasks;93suites/852JVMtests,
+  851passed/1skip/0failures. Manifestversion and same131certificate independently
+  checked. Queuechecksums/ZIP/OEMhashes verified, nativebridge absentfromAPK.
+- APK impulse-74132-release/impulse-74132.apk,76105763bytes,SHA
+  c529fdc15ec66b1e82f9de29f15f059d6133455136f9b14067c34e55c682040c.
+  Artifact validation.json records source/job/test bounds. No OTA/installation.
 - Personal131 plus namespace/Java endpoint fixes; all16 new v9 commits merged.
 - Keep personal AA recovery/UI/connectivity/themes; adopt upstream radar timing,
   warning reset, HUD and map changes; retain roundabout reset guard.

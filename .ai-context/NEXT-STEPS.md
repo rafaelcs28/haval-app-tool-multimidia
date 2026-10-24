@@ -2,8 +2,8 @@
 
 ## Current priority — 74132 candidate, no installation yet
 
-Finish authorized Mini JVM/release validation; retrieve hash-verifiedAPK and
-same74131 productioncertificate. Keep source commit/job/receipt together.
+Authorized Mini JVM/release validation completed; hash-verifiedAPK and same74131
+productioncertificate retained in impulse-74132-release with source/job/receipt.
 Reconcile five legacy overlay-contract failures before deployment; current
 card-based authorization is not the historical physical-input session gate.
 Owner deferred car installation; wait for a newly coordinated parked session.

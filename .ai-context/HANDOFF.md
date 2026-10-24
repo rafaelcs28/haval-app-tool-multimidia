@@ -2,6 +2,19 @@
 
 ## 2026-10-24 — 74132 integration candidate; installation deferred
 
+BUILD COMPLETED: sourceb266cfe6a3af04be50ca1afd2e5eaaee6cf84875, Mini job
+haval-impulse-132-b266cfe6a3af04be-20261024T232851Z-21744 success4m52s/81tasks.
+93JVMsuites/852tests:851passed,1skip,0failure/error. ARM64/Kotlin/Java/lint and
+signedrelease completed. Actualmanifest74132/1.0.0.74.132-preview and production
+certificate5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0
+verified onMini. Queuechecksums and localAPKZIP pass. APK76105763bytes SHA
+c529fdc15ec66b1e82f9de29f15f059d6133455136f9b14067c34e55c682040c.
+Artifact /root/projects/haval-impulse/artifacts/impulse-74132-release/impulse-74132.apk,
+validation.json/build.log/checksums alongside. OEMassets unchanged, bridge absent.
+Final documentation commit afterb266 changes no build/app/native sources. Branch
+pushed toorigin rafaelcs28/haval-impulse. No PR15 edits, tag/release/OTA publication
+or car access. Five legacyguard failures remain; installation still deferred.
+
 Owner requested all new Netseek v9 commits and version132. Release worktree
 `/root/projects/haval-impulse-132`, branch `release/impulse-74132-v9`, starts at
 complete personal131 a427ddde. Cherry-picked namespace2f6e6961 and Java568522b8;
