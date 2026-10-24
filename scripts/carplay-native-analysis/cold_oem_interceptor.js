@@ -129,7 +129,10 @@ function createColdOemInterceptor(api) {
         if (!options || options.enabled !== true) return { phase: 'disabled' };
         if (phase !== 'idle') throw new Error('Cold installer already consumed');
         options = Object.freeze({ enabled: true, principalUuid: options.principalUuid, bridgePath: options.bridgePath,
-            bridgeSize: options.bridgeSize, bridgeSha256: options.bridgeSha256, expectedPid: options.expectedPid });
+            bridgeSize: options.bridgeSize, bridgeSha256: options.bridgeSha256, expectedPid: options.expectedPid,
+            coldLoadTimeoutMs: options.coldLoadTimeoutMs === undefined ? 60000 : options.coldLoadTimeoutMs });
+        if (!Number.isSafeInteger(options.coldLoadTimeoutMs) || options.coldLoadTimeoutMs < 5000 ||
+            options.coldLoadTimeoutMs > 300000) throw new Error('Cold load timeout out of bounds');
         const profile = reviewed(input);
         if (!Number.isSafeInteger(options.expectedPid) || options.expectedPid <= 0 || Process.id !== options.expectedPid) {
             throw new Error('Wrong target process ID');
@@ -165,9 +168,20 @@ function createColdOemInterceptor(api) {
             return address;
         };
         const nativeOptions = { scheduling: 'exclusive', exceptions: 'propagate' };
+        const loaderError = () => {
+            try {
+                const read = new NativeFunction(Module.getGlobalExportByName('dlerror'), 'pointer', [], nativeOptions);
+                const text = read();
+                return text.isNull() ? 'no linker detail' : text.readUtf8String();
+            } catch (error) { return 'linker detail unavailable: ' + String(error); }
+        };
         const abi = new NativeFunction(exported('impulse_carplay_initial_bootstrap_abi'), 'uint32', [], nativeOptions);
         const ready = new NativeFunction(exported('impulse_carplay_initial_bootstrap_state'), 'uint32', [], nativeOptions);
         const prepare = new NativeFunction(exported('impulse_carplay_prepare_initial_entries'), 'int', [], nativeOptions);
+        const namespacePreparation = typeof bridge.findExportByName === 'function'
+            ? bridge.findExportByName('impulse_carplay_prepare_initial_entries_for_oem_namespace') : null;
+        const prepareInOemNamespace = namespacePreparation === null ? null : new NativeFunction(
+            exported('impulse_carplay_prepare_initial_entries_for_oem_namespace'), 'int', ['pointer'], nativeOptions);
         const release = new NativeFunction(exported('impulse_carplay_release_initial_preparation'), 'int', [], nativeOptions);
         const bootstrap = new NativeFunction(exported('impulse_carplay_bootstrap_initial_entries'), 'int',
             ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'uint64'], nativeOptions);
@@ -200,9 +214,13 @@ function createColdOemInterceptor(api) {
             phase = 'installing';
             let attempted = false;
             try {
-                attest(profile);
+                const namespaceAnchors = attest(profile);
                 if (ready() !== 0) throw new Error('Native bridge already pinned');
-                if (prepare() !== 0) throw new Error('Native module pinning failed');
+                const preparationStatus = prepareInOemNamespace
+                    ? prepareInOemNamespace(namespaceAnchors.initialize) : prepare();
+                if (preparationStatus !== 0) {
+                    throw new Error('Native module pinning failed (' + preparationStatus + '): ' + loaderError());
+                }
                 prepared = true;
                 const addresses = attest(profile);
                 const originals = {};
@@ -246,7 +264,7 @@ function createColdOemInterceptor(api) {
             });
             registering = false;
             if (phase !== 'armed') { releaseObserver(); return status(); }
-            timer = api.setTimeout(() => { if (phase === 'armed') fail(new Error('Cold load timeout')); }, 60000);
+            timer = api.setTimeout(() => { if (phase === 'armed') fail(new Error('Cold load timeout')); }, options.coldLoadTimeoutMs);
             return status();
         } catch (error) { registering = false; fail(error); return status(); }
     }

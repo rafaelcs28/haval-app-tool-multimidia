@@ -38,8 +38,10 @@ CONTROL_ROOT = "/data/local/tmp/impulse-carplay/control"
 REMOTE_BRIDGE = f"{STAGE_ROOT}/libcarplay_video_bridge.so"
 REMOTE_LAUNCHER = f"{STAGE_ROOT}/cold-launcher.js"
 REMOTE_LOG = f"{STAGE_ROOT}/injector.log"
+REMOTE_STATUS = f"{STAGE_ROOT}/cold-state.json"
 REMOTE_ENDPOINT_LAUNCHER = f"{STAGE_ROOT}/clean-map-endpoint.js"
 REMOTE_ENDPOINT_LOG = f"{STAGE_ROOT}/clean-map-endpoint.log"
+REMOTE_ENDPOINT_STATUS = f"{STAGE_ROOT}/clean-map-endpoint-state.log"
 REMOTE_INJECTOR = "/data/local/tmp/fridainjector"
 REMOTE_SERVICE_PATCH = "/data/local/tmp/carplay_patches/TsCarPlayService.apk"
 MOUNTED_SERVICE = "/vendor/app/TsCarPlayService/TsCarPlayService.apk"
@@ -70,6 +72,8 @@ def launcher_for_pid(interceptor: str, profile: object, pid: int,
         bridge_size,
         bridge_sha256,
         PRINCIPAL_UUID,
+        status_path=REMOTE_STATUS,
+        cold_load_timeout_ms=300_000,
     )
 
 
@@ -104,11 +108,21 @@ def classify_injector_log(log: str) -> str:
 def endpoint_launcher(source: str) -> str:
     if "Persistent OEM-process control plane" not in source or "rpc.exports" not in source:
         raise ValueError("unexpected clean-map endpoint source")
-    return source.rstrip() + f"""
+    # fridainjector stdout is redirected and can remain buffered for the whole
+    # short cold gate. Persist acknowledgements in the target process instead.
+    publisher = f"""
+function impulsePublishEndpoint(payload) {{
+    const file = new File({json.dumps(REMOTE_ENDPOINT_STATUS)}, 'a');
+    try {{ file.write(JSON.stringify(payload) + '\\n'); file.flush(); }} finally {{ file.close(); }}
+    send(payload);
+}}
+"""
+    instrumented = source.replace("send({", "impulsePublishEndpoint({")
+    return publisher + instrumented.rstrip() + f"""
 
 rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_BRIDGE)} }}).then(
-    state => send({{ kind: 'impulse-carplay-clean-map-control', state }}),
-    error => send({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
+    state => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state }}),
+    error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
 );
 """
 
@@ -306,6 +320,7 @@ class ColdPassthroughController:
             f"mkdir -p {shell_quote(STAGE_ROOT)} {shell_quote(CONTROL_ROOT)}; "
             f"chmod 700 {shell_quote(STAGE_ROOT)} {shell_quote(CONTROL_ROOT)}; "
             f"rm -f {shell_quote(REMOTE_LOG)} {shell_quote(REMOTE_ENDPOINT_LOG)} "
+            f"{shell_quote(REMOTE_STATUS)} {shell_quote(REMOTE_ENDPOINT_STATUS)} "
             f"{shell_quote(CONTROL_ROOT)}/release.*"
         )
         print("[cold] uploading bridge", file=sys.stderr, flush=True)
@@ -356,7 +371,7 @@ class ColdPassthroughController:
     def _wait_phase(self, expected: set[str], deadline: float) -> tuple[str, str]:
         last_log = ""
         while time.monotonic() < deadline:
-            last_log = self.remote.run(f"tail -n 120 {shell_quote(REMOTE_LOG)} 2>/dev/null || true", check=False)
+            last_log = self.remote.run(f"cat {shell_quote(REMOTE_STATUS)} 2>/dev/null || true", check=False)
             phase = classify_injector_log(last_log)
             if phase in expected:
                 return phase, last_log
@@ -427,8 +442,8 @@ class ColdPassthroughController:
                 f"chown {self.oem_uid}:{self.oem_uid} {shell_quote(release_file)}; "
                 f"chmod 400 {shell_quote(release_file)}"
             )
-            print("[cold] startup released", file=sys.stderr, flush=True)
-            phase, log = self._wait_phase({"installed-pinned", "failed", "failed-pinned"}, time.monotonic() + 8.0)
+            print("[cold] startup released; armed for first iPhone connection (up to 5 minutes)", file=sys.stderr, flush=True)
+            phase, log = self._wait_phase({"installed-pinned", "failed", "failed-pinned"}, time.monotonic() + 300.0)
             if phase != "installed-pinned":
                 raise ControllerError(f"Cold interceptor did not install passthrough (phase={phase}): {log[-1200:]}")
             persistent_endpoint = (
@@ -443,7 +458,7 @@ class ColdPassthroughController:
             endpoint_log = ""
             while time.monotonic() < endpoint_deadline:
                 endpoint_log = self.remote.run(
-                    f"tail -n 80 {REMOTE_ENDPOINT_LOG} 2>/dev/null || true", check=False
+                    f"tail -n 80 {REMOTE_ENDPOINT_STATUS} 2>/dev/null || true", check=False
                 )
                 if '"state":"armed"' in endpoint_log:
                     break

@@ -29,6 +29,7 @@ function runtime(fault = {}) {
     const operations = [];
     let callback = null;
     let timer = null;
+    let timerDelay = null;
     let pins = 0;
     let opened = 0;
     let closed = 0;
@@ -86,7 +87,10 @@ function runtime(fault = {}) {
                 return { detach() { callback = null; } };
             }
         },
-        Module: { load(filePath) {
+        Module: { getGlobalExportByName(name) {
+            assert.equal(name, 'dlerror');
+            return { label: 'dlerror' };
+        }, load(filePath) {
             const object = loaded({ name: 'libcarplay_video_bridge.so', path: filePath });
             if (fault.bridgeMemory) object.memory[0x500] ^= 1;
             const exports = new Map();
@@ -94,6 +98,8 @@ function runtime(fault = {}) {
                 if (!exports.has(name)) exports.set(name, new Pointer(object.base.value + 0x100n + BigInt(exports.size * 16), object, name));
                 return exports.get(name);
             };
+            object.findExportByName = name => name === 'impulse_carplay_prepare_initial_entries_for_oem_namespace'
+                && !fault.legacyNamespaceApi ? object.getExportByName(name) : null;
             return object;
         } },
         File,
@@ -103,9 +109,18 @@ function runtime(fault = {}) {
         },
         Checksum: { compute(algorithm, value) { assert.equal(algorithm, 'sha256'); return checksum(value); } },
         NativeFunction: function(address) {
+            if (address.label === 'dlerror') return () => ({
+                isNull: () => false,
+                readUtf8String: () => 'test module is unavailable in caller namespace'
+            });
             if (address.label.endsWith('_abi')) return () => fault.abi ? 2 : 1;
             if (address.label.endsWith('_state')) return () => { if (readyThrows) throw new Error('state unavailable'); return nativeReady; };
             if (address.label === 'impulse_carplay_prepare_initial_entries') return () => {
+                operations.push('pin-modules'); return fault.prepare ? -1 : 0;
+            };
+            if (address.label === 'impulse_carplay_prepare_initial_entries_for_oem_namespace') return caller => {
+                const stack = modules.find(module => module.name === 'libcarplaystack.so');
+                assert.ok(caller.equals(stack.base.add(stack.profile.functions.initialize.offset)));
                 operations.push('pin-modules'); return fault.prepare ? -1 : 0;
             };
             if (address.label === 'impulse_carplay_release_initial_preparation') return () => {
@@ -146,11 +161,11 @@ function runtime(fault = {}) {
             flush() { operations.push('flush'); }
         },
         Script: { pin() { pins++; }, unpin() { pins--; assert.ok(pins >= 0); } },
-        setTimeout(fn) { timer = fn; return 1; }, clearTimeout() { timer = null; }
+        setTimeout(fn, delay) { timer = fn; timerDelay = delay; return 1; }, clearTimeout() { timer = null; }
     };
     return { api, loadOem, modules, patched, operations,
         options: { enabled: true, bridgePath, bridgeSize: bridgeBytes.length, bridgeSha256: checksum(bridgeBytes), principalUuid: 'main', expectedPid: 1234 },
-        metrics: () => ({ pins, opened, closed }),
+        metrics: () => ({ pins, opened, closed, timerDelay }),
         timeout() { if (timer) timer(); },
         unload(object) { if (callback) callback.onRemoved(object); }
     };
@@ -219,6 +234,36 @@ for (const fault of [{ replaceAt: 4 }, { trampoline: true }, { bootstrap: true }
     installer.arm(profile, env.options); complete(env);
     assert.equal(installer.status().phase, 'failed'); assert.equal(env.patched.size, 0); assert.equal(env.metrics().pins, 0);
     assert.equal(installer.inspect(profile).verified, 13);
+});
+test('native pinning failure records linker detail before replacements', () => {
+    const env = runtime({ prepare: true }); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    const status = installer.status();
+    assert.equal(status.phase, 'failed');
+    assert.match(status.failure, /Native module pinning failed \(-1\): test module is unavailable in caller namespace/);
+    assert.equal(env.patched.size, 0);
+    assert.equal(env.metrics().pins, 0);
+});
+test('legacy bridge keeps original pinning path', () => {
+    const env = runtime({ legacyNamespaceApi: true }); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+});
+test('unbounded cold observer waits are rejected before loading', () => {
+    for (const timeout of [0, 4999, 300001, NaN, '300000']) {
+        const env = runtime(); env.options.coldLoadTimeoutMs = timeout;
+        assert.throws(() => createColdOemInterceptor(env.api).arm(profile, env.options), /timeout out of bounds/);
+        assert.equal(env.patched.size, 0);
+        assert.equal(env.metrics().pins, 0);
+    }
+});
+test('first connection wait remains explicitly bounded', () => {
+    const env = runtime(); env.options.coldLoadTimeoutMs = 300000;
+    const installer = createColdOemInterceptor(env.api);
+    assert.equal(installer.arm(profile, env.options).phase, 'armed');
+    assert.equal(env.metrics().timerDelay, 300000);
+    installer.cancel();
+    assert.equal(env.metrics().pins, 0);
 });
 for (const fault of [{ replaceAt: 4, revert: true }, { bootstrapPinned: true }, { bootstrapUnknown: true }, { replaceAt: 4, release: true }]) test('unsafe rollback keeps ownership ' + JSON.stringify(fault), () => {
     const env = runtime(fault); const installer = createColdOemInterceptor(env.api);

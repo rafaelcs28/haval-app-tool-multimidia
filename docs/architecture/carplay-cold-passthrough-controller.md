@@ -39,7 +39,51 @@ o serviço seguir stock. `failed-pinned` nunca causa retry, kill ou unload autom
 esse estado exige inspeção. Após sucesso, o injector deve permanecer vivo por toda
 a vida daquele processo, conforme o contrato do trampoline Frida.
 
+## Confirmação de estado independente do stdout
+
+O launcher grava cada mudança de fase em `cold-state.json`, no diretório privado
+de staging, com `flush()` e fechamento explícitos antes de emitir a mensagem
+Frida. O controlador consulta esse arquivo. O stdout redirecionado do injector
+continua disponível como diagnóstico, mas não é uma confirmação confiável dentro
+da janela curta de startup: ele pode permanecer em buffer.
+
+Uma exceção durante `arm()` também fica registrada. O launcher preserva o estado
+retornado pelo instalador, incluindo `failed-pinned`, sem tentar desfazer hooks.
+O controle do endpoint usa `clean-map-endpoint-state.log` separado pelo mesmo
+motivo. Esses registros contêm somente fase/erro/geração, nunca token ou rota.
+
+Em 24/10, a primeira tentativa real carregou a bridge, mas o controlador recebeu
+timeout sem confirmação. A inspeção passiva posterior encontrou os nove corpos
+OEM originais intactos e o ponteiro nativo de bootstrap nulo. Isso não foi uma
+instalação concluída nem prova de mapa secundário. Os testes de persistência
+validam a gravação/flush antes da mensagem e a preservação de falhas pinned.
+
 ## Uso controlado
+
+O gate Java de startup continua limitado a dez segundos. Depois de `armed` e da
+liberação desse gate, o observador pode aguardar a primeira carga OEM por até
+cinco minutos, permitindo a conexão manual do iPhone. Esse prazo não permite
+instalação quente: os módulos precisam estar ausentes quando o observador é
+armado, e os nove pontos só podem ser instalados no evento frio já revisado.
+
+### Namespace Android 9
+
+A tentativa real de 24/10 confirmou `RTLD_NOLOAD` recusando uma biblioteca OEM
+já presente em `/proc/PID/maps`. Uma sonda sem hooks abriu e fechou as três
+bibliotecas existentes usando o caller OEM no `__loader_dlopen`; nenhuma imagem
+nova foi carregada. No mesmo dispositivo, `dladdr` não descreveu o linker.
+
+A bridge agora oferece uma preparação adicional que aceita um endereço OEM já
+atestado. Ela valida o módulo do caller, resolve o loader e exige que seu endereço
+esteja no mapeamento RX exato de `/system/bin/linker64`. Mantém `RTLD_NOLOAD` para
+os três módulos e usa o namespace próprio apenas para fixar a bridge. A assinatura
+antiga e ABI 1 continuam disponíveis. O caminho de ativação de vídeo reaproveita
+esses mesmos handles retidos, evitando uma segunda abertura no namespace errado.
+
+Essa seleção de namespace pelo endereço do caller está documentada no código do
+[libdl do Android 9](https://android.googlesource.com/platform/bionic/+/android-9.0.0_r1/libdl/libdl.cpp).
+A sonda valida a abertura no dispositivo; a nova bridge compilada e o passthrough
+com os nove hooks ainda exigem seus próprios resultados antes de afirmar sucesso.
 
 Preparar sem reiniciar:
 

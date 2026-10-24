@@ -40,6 +40,8 @@ def build_launcher(
     bridge_size: int,
     bridge_sha256: str,
     principal_uuid: str,
+    status_path: str | None = None,
+    cold_load_timeout_ms: int = 60_000,
 ) -> str:
     if expected_pid <= 0:
         raise ValueError("expected PID must be positive")
@@ -53,6 +55,13 @@ def build_launcher(
         raise ValueError("invalid principal UUID")
     if "function createColdOemInterceptor(api)" not in interceptor_source:
         raise ValueError("unexpected interceptor source")
+    if status_path is not None and (
+        not re.fullmatch(r"/data/local/tmp/impulse-carplay/[A-Za-z0-9._/-]+/cold-state\.json", status_path)
+        or ".." in status_path.split("/")
+    ):
+        raise ValueError("status path is outside the private staging root")
+    if isinstance(cold_load_timeout_ms, bool) or not isinstance(cold_load_timeout_ms, int) or not 5_000 <= cold_load_timeout_ms <= 300_000:
+        raise ValueError("cold load timeout is outside reviewed bounds")
 
     options = {
         "enabled": True,
@@ -61,6 +70,7 @@ def build_launcher(
         "bridgeSize": bridge_size,
         "bridgeSha256": bridge_sha256,
         "expectedPid": expected_pid,
+        "coldLoadTimeoutMs": cold_load_timeout_ms,
     }
     auto_arm = f"""
 
@@ -68,16 +78,29 @@ def build_launcher(
     const impulseProfile = {validate_profile(profile)};
     const impulseOptions = {canonical_json(options)};
     const impulseInstaller = rpc.exports;
+    const impulseStatusPath = {json.dumps(status_path)};
     let previous = null;
     const publish = status => {{
         const encoded = JSON.stringify(status);
         if (encoded !== previous) {{
+            if (impulseStatusPath !== null) {{
+                const file = new File(impulseStatusPath, 'w');
+                try {{ file.write(encoded + '\\n'); file.flush(); }} finally {{ file.close(); }}
+            }}
             previous = encoded;
             send({{ kind: 'impulse-carplay-cold-state', status }});
         }}
         return status;
     }};
-    const initial = publish(impulseInstaller.arm(impulseProfile, impulseOptions));
+    let initial;
+    try {{
+        initial = publish(impulseInstaller.arm(impulseProfile, impulseOptions));
+    }} catch (error) {{
+        const status = impulseInstaller.status();
+        publish({{ ...status, phase: status.phase === 'idle' ? 'failed' : status.phase,
+            failure: String(error) }});
+        return;
+    }}
     if (initial.phase !== 'armed') return;
     const poll = setInterval(() => {{
         const status = publish(impulseInstaller.status());
