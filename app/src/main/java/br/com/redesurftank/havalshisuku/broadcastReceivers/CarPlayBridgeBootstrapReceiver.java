@@ -13,6 +13,7 @@ public final class CarPlayBridgeBootstrapReceiver extends BroadcastReceiver {
     public static final String ACTION_CONFIGURE =
             "br.com.redesurftank.havalshisuku.CONFIGURE_CARPLAY_BRIDGE";
     public static final String EXTRA_ENABLED = "extra_enabled";
+    public static final String EXTRA_RETRY = "extra_retry";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -31,6 +32,11 @@ public final class CarPlayBridgeBootstrapReceiver extends BroadcastReceiver {
                 }
                 CarPlayBridgeBootstrapManager.setAutomaticEnabled(
                         context, (Boolean) value);
+                if ((Boolean) value && Boolean.TRUE.equals(intent.getExtras().get(EXTRA_RETRY))) {
+                    // Same guarded explicit retry as the parked-user UI. Existing owners/mappings
+                    // still prevent reset, and the worker rechecks all live preparation gates.
+                    CarPlayBridgeBootstrapManager.resetFailureCircuit(context);
+                }
             } else if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
                     && !Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action)
                     && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {

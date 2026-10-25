@@ -318,7 +318,10 @@ object CarPlayBridgeBootstrapManager {
         val copies = entries.joinToString("; ") {
             "cp ${q(File(bundle.source, it.getString("name")).absolutePath)} ${q(temporary + "/" + it.getString("name"))} || exit 1"
         }
-        root.run("mkdir -p ${q("$ROOT/versions")} ${q("$ROOT/runtime")}; " +
+        val traversalParents = listOf(ROOT, "$ROOT/versions", "$ROOT/runtime").joinToString(" ") { q(it) }
+        root.run("mkdir -p $traversalParents || exit 1; " +
+            "chown 0:0 $traversalParents || exit 1; " +
+            "chmod 711 $traversalParents || exit 1; " +
             "if [ -d ${q(bundle.directory)} ]; then ${verify(bundle.directory)}; else " +
             "mkdir ${q(temporary)} || exit 1; $copies; ${verify(temporary)}; " +
             "chown -R 1000:1000 ${q(temporary)}; chmod 500 ${q(temporary)}; chmod 400 ${q(temporary)}/*; " +
@@ -367,10 +370,11 @@ object CarPlayBridgeBootstrapManager {
             echo 'endpoint_end'
             for c in §(pidof cpbridge-inject); do
               a=§(tr '\000' ' ' < /proc/§c/cmdline)
+              a=§{a% }
               role=
               case "§a" in
-                ${q("${bundle.injector} -p ${id.pid} -s $run/cold-launcher.js -R qjs ")}*) role=native_owner;;
-                ${q("${bundle.injector} -p ${id.pid} -s ${bundle.directory}/endpoint.js -R qjs ")}*) role=java_owner;;
+                ${q("${bundle.injector} -p ${id.pid} -s $run/cold-launcher.js -R qjs")}) role=native_owner;;
+                ${q("${bundle.injector} -p ${id.pid} -s ${bundle.directory}/endpoint.js -R qjs")}) role=java_owner;;
               esac
               if [ -n "§role" ]; then printf '%s=%s\n' "§role" "§c"; printf '%s_stat=' "§role"; cat /proc/§c/stat; fi
             done
@@ -543,7 +547,14 @@ object CarPlayBridgeBootstrapManager {
         Log.e(TAG, "Automatic preparation stopped; published owners are preserved", error)
         prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
             .putString("cpBridgeAttemptPhase", "failed").commit()
-        runCatching { writeSafetyPacket(JSONObject().put("eligible", false)) }
+        runCatching {
+            val trace = org.json.JSONArray()
+            error.stackTrace.take(12).forEach { trace.put(it.toString()) }
+            writeSafetyPacket(JSONObject().put("eligible", false)
+                .put("failureType", error.javaClass.simpleName)
+                .put("failureMessage", error.message ?: "")
+                .put("failureStack", trace))
+        }
         runCatching { root.run("setprop $GATE ''") }
         report("failed", "O preparo foi interrompido; sessão atual preservada")
     }
