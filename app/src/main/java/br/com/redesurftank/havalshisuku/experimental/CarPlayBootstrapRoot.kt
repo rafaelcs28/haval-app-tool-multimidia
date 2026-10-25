@@ -2,13 +2,14 @@ package br.com.redesurftank.havalshisuku.experimental
 
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import android.os.ParcelFileDescriptor
+import moe.shizuku.server.IShizukuService
 import org.apache.commons.net.telnet.TelnetClient
 import rikka.shizuku.Shizuku
 import java.io.ByteArrayOutputStream
 import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /** Local transports only. No remote host, credentials, downloads or vehicle commands. */
@@ -65,13 +66,19 @@ internal class CarPlayBootstrapRoot {
         check(Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
             "Local root unavailable"
         }
-        @Suppress("DEPRECATION")
-        val process = Shizuku.newProcess(arrayOf("sh", "-c", "{\n$framed\n} 2>&1"), null, null)
-        val bytes = ByteArrayOutputStream()
-        val readFailure = AtomicReference<Throwable?>()
-        val reader = Thread({
-            try {
-                process.inputStream.use { stream ->
+        val service = checkNotNull(IShizukuService.Stub.asInterface(Shizuku.getBinder()))
+        val process = checkNotNull(service.newProcess(arrayOf("sh", "-c", "{\n$framed\n} 2>&1"), null, null))
+        var input: ParcelFileDescriptor.AutoCloseInputStream? = null
+        try {
+            // Close every remote pipe. Leaving copies behind exhausts the root service.
+            process.outputStream?.close()
+            process.errorStream?.close()
+            val stream = ParcelFileDescriptor.AutoCloseInputStream(checkNotNull(process.inputStream))
+            input = stream
+            val bytes = ByteArrayOutputStream()
+            val readFailure = AtomicReference<Throwable?>()
+            val reader = Thread({
+                try {
                     val chunk = ByteArray(8192)
                     while (true) {
                         val count = stream.read(chunk)
@@ -79,17 +86,14 @@ internal class CarPlayBootstrapRoot {
                         check(bytes.size() + count <= 1_048_576) { "Root response too large" }
                         bytes.write(chunk, 0, count)
                     }
-                }
-            } catch (error: Throwable) { readFailure.set(error) }
-        }, "carplay-root-response").apply { isDaemon = true; start() }
-        try {
-            check(process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) { "Local root command timed out" }
-            reader.join(500)
-            check(!reader.isAlive && readFailure.get() == null) { "Root response unavailable" }
+                } catch (error: Throwable) { readFailure.set(error) }
+            }, "carplay-root-response").apply { isDaemon = true; start() }
+            reader.join(timeoutMs)
+            check(!reader.isAlive && readFailure.get() == null) { "Root response unavailable or timed out" }
             return parse(bytes.toString(StandardCharsets.UTF_8.name()), tag)
         } finally {
-            process.destroy() // only this short shell, never its detached injector children
-            runCatching { process.inputStream.close() }
+            runCatching { process.destroy() } // short shell only; detached owners remain alive
+            runCatching { input?.close() }
         }
     }
 
