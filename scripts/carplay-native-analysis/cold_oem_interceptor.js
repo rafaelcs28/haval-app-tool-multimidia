@@ -133,7 +133,12 @@ function createColdOemInterceptor(api) {
         if (phase !== 'idle') throw new Error('Cold installer already consumed');
         options = Object.freeze({ enabled: true, principalUuid: options.principalUuid, bridgePath: options.bridgePath,
             bridgeSize: options.bridgeSize, bridgeSha256: options.bridgeSha256, expectedPid: options.expectedPid,
+            eligibilityPath: options.eligibilityPath,
             coldLoadTimeoutMs: options.coldLoadTimeoutMs === undefined ? 60000 : options.coldLoadTimeoutMs });
+        if (options.eligibilityPath !== undefined &&
+            options.eligibilityPath !== '/data/local/tmp/impulse-carplay-input/safety.json') {
+            throw new Error('Unreviewed automatic eligibility source');
+        }
         if (!Number.isSafeInteger(options.coldLoadTimeoutMs) || options.coldLoadTimeoutMs < 5000 ||
             options.coldLoadTimeoutMs > 300000) throw new Error('Cold load timeout out of bounds');
         const profile = reviewed(input);
@@ -202,6 +207,28 @@ function createColdOemInterceptor(api) {
         if (!absent()) throw new Error('OEM load raced boundary preparation');
         const loads = new Map();
         let selectedLoad = null;
+        let automaticTicket = null;
+        function checkAutomaticEligibility() {
+            if (options.eligibilityPath === undefined) return;
+            const read = (path, maximum) => {
+                const file = new File(path, 'r');
+                try { const text = file.readText(maximum + 1); if (text.length > maximum) throw Error('Eligibility input too large'); return text; }
+                finally { file.close(); }
+            };
+            const input = JSON.parse(read(options.eligibilityPath, 4096));
+            const age = Date.now() - input.wallMs;
+            const boot = read('/proc/sys/kernel/random/boot_id', 128).trim();
+            const stat = read('/proc/self/stat', 4096);
+            const fields = stat.substring(stat.lastIndexOf(') ') + 2).trim().split(/\s+/);
+            if (input.eligible !== true || input.bootId !== boot || input.targetPid !== Process.id ||
+                String(input.targetStartTime) !== fields[19] || !Number.isSafeInteger(input.wallMs) ||
+                age < 0 || age > 3000 || typeof input.ticket !== 'string' ||
+                !/^[a-f0-9-]{16,64}$/.test(input.ticket) ||
+                (automaticTicket !== null && input.ticket !== automaticTicket)) {
+                throw new Error('Automatic eligibility lost before native preparation');
+            }
+            automaticTicket = input.ticket;
+        }
         function fail(error, uncertain = false) {
             failure = String(error.message || error);
             releaseObserver();
@@ -224,6 +251,7 @@ function createColdOemInterceptor(api) {
             phase = 'installing';
             let attempted = false;
             try {
+                checkAutomaticEligibility();
                 const namespaceAnchors = attest(profile);
                 if (ready() !== 0) throw new Error('Native bridge already pinned');
                 const preparationStatus = prepareInOemNamespace
@@ -233,6 +261,7 @@ function createColdOemInterceptor(api) {
                 }
                 prepared = true;
                 const addresses = attest(profile);
+                checkAutomaticEligibility();
                 const originals = {};
                 for (const label of labels) {
                     const target = addresses[label];
@@ -258,6 +287,7 @@ function createColdOemInterceptor(api) {
                     }
                 }
                 video.forEach((label, index) => table.add(index * 8).writePointer(originals[label]));
+                checkAutomaticEligibility();
                 attempted = true;
                 const result = bootstrap(table, originals.session, originals.displays, addresses.getLength,
                     addresses.copyString, addresses.retain, addresses.release, uuid, options.principalUuid.length);

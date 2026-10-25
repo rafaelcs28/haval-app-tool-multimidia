@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -36,6 +37,20 @@ class ColdLauncherTest(unittest.TestCase):
         self.assertIn('"expectedPid":1234', launcher)
         self.assertIn("impulseInstaller.arm", launcher)
         self.assertNotIn("release.", launcher)
+
+    def test_optional_eligibility_is_bound_only_to_dedicated_safety_input(self):
+        arguments = (self.interceptor(), self.reviewed_profile(), 1234,
+                     "/data/local/tmp/impulse-carplay/run/libcarplay_video_bridge.so",
+                     4096, "a" * 64, "main")
+        normal = MODULE.build_launcher(*arguments)
+        options = json.loads(re.search(r"const impulseOptions = (\{[^\n]+\});", normal).group(1))
+        self.assertNotIn("eligibilityPath", options)
+        safety = "/data/local/tmp/impulse-carplay-input/safety.json"
+        persistent = MODULE.build_launcher(*arguments, eligibility_path=safety)
+        options = json.loads(re.search(r"const impulseOptions = (\{[^\n]+\});", persistent).group(1))
+        self.assertEqual(safety, options["eligibilityPath"])
+        with self.assertRaisesRegex(ValueError, "eligibility path"):
+            MODULE.build_launcher(*arguments, eligibility_path="/tmp/safety.json")
 
     def test_rejects_unreviewed_profile_and_paths(self):
         profile = self.reviewed_profile()

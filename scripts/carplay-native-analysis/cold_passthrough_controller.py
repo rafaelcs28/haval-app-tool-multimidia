@@ -48,6 +48,9 @@ MOUNTED_SERVICE = "/vendor/app/TsCarPlayService/TsCarPlayService.apk"
 EXPECTED_GATE_MD5 = "b61f0e4d63535a2ef447be559211697b"
 PRINCIPAL_UUID = "e5f7a68d-7b0f-4305-984b-974f677a150b"
 PID_PLACEHOLDER = 1_234_567_890
+ENDPOINT_STATUS_MANUAL = "manual"
+ENDPOINT_STATUS_PROCESS = "process-runtime-v1"
+RUNTIME_ROOT = "/data/local/tmp/impulse-carplay/runtime"
 # This OEM console canonicalizes typed ASCII to lowercase, including marker
 # literals embedded in commands. Keep the wire marker lowercase so completion
 # detection observes the bytes that are actually printed.
@@ -105,14 +108,45 @@ def classify_injector_log(log: str) -> str:
     return phases[-1] if phases else "unknown"
 
 
-def endpoint_launcher(source: str) -> str:
+def endpoint_launcher(source: str, *, bridge_path: str = REMOTE_BRIDGE,
+                      status_mode: str = ENDPOINT_STATUS_MANUAL) -> str:
     if "Persistent OEM-process control plane" not in source or "rpc.exports" not in source:
         raise ValueError("unexpected clean-map endpoint source")
+    if (not re.fullmatch(r"/data/local/tmp/impulse-carplay/[A-Za-z0-9._/-]+/libcarplay_video_bridge\.so", bridge_path)
+            or any(part in {".", ".."} for part in bridge_path.split("/"))):
+        raise ValueError("Endpoint bridge path is outside the private staging root")
+    if status_mode not in {ENDPOINT_STATUS_MANUAL, ENDPOINT_STATUS_PROCESS}:
+        raise ValueError("Unsupported endpoint status mode")
+    status_setup = ""
+    status_expression = json.dumps(REMOTE_ENDPOINT_STATUS)
+    if status_mode == ENDPOINT_STATUS_PROCESS:
+        status_setup = r"""const impulseEndpointStatusPath = (() => {
+    const read = path => {
+        const file = new File(path, 'r');
+        try { return file.readText(); } finally { file.close(); }
+    };
+    const boot = read('/proc/sys/kernel/random/boot_id').trim().toLowerCase();
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)) {
+        throw new Error('Invalid kernel boot identity');
+    }
+    const stat = read('/proc/self/stat').trim();
+    const end = stat.lastIndexOf(') ');
+    const fields = end >= 0 ? stat.slice(end + 2).split(/\s+/) : [];
+    const start = fields[19];
+    if (!Number.isSafeInteger(Process.id) || Process.id <= 0 ||
+        stat.slice(0, stat.indexOf(' (')) !== String(Process.id) ||
+        !/^[1-9][0-9]*$/.test(start || '') || ['Z', 'X', 'x'].includes(fields[0])) {
+        throw new Error('Invalid OEM process start identity');
+    }
+    return '/data/local/tmp/impulse-carplay/runtime/' + boot + '-' + Process.id + '-' + start + '/endpoint-state.log';
+})();
+"""
+        status_expression = "impulseEndpointStatusPath"
     # fridainjector stdout is redirected and can remain buffered for the whole
     # short cold gate. Persist acknowledgements in the target process instead.
     publisher = f"""
-function impulsePublishEndpoint(payload) {{
-    const file = new File({json.dumps(REMOTE_ENDPOINT_STATUS)}, 'a');
+{status_setup}function impulsePublishEndpoint(payload) {{
+    const file = new File({status_expression}, 'a');
     try {{ file.write(JSON.stringify(payload) + '\\n'); file.flush(); }} finally {{ file.close(); }}
     send(payload);
 }}
@@ -121,15 +155,17 @@ function impulsePublishEndpoint(payload) {{
     return publisher + instrumented.rstrip() + f"""
 
 impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'loaded' }});
-Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_BRIDGE)} }})).then(
+Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(bridge_path)} }})).then(
     state => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state }}),
     error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
 );
 """
 
 
-def endpoint_agent_entry(source: str) -> str:
-    return 'import Java from "frida-java-bridge";\n' + endpoint_launcher(source)
+def endpoint_agent_entry(source: str, *, bridge_path: str = REMOTE_BRIDGE,
+                         status_mode: str = ENDPOINT_STATUS_MANUAL) -> str:
+    return 'import Java from "frida-java-bridge";\n' + endpoint_launcher(
+        source, bridge_path=bridge_path, status_mode=status_mode)
 
 
 def validate_endpoint_module(payload: bytes) -> None:
@@ -150,7 +186,8 @@ def validate_endpoint_module(payload: bytes) -> None:
         raise ValueError("Invalid endpoint ES module: " + str(error)) from error
 
 
-def read_endpoint_bundle(path: Path) -> str:
+def read_endpoint_bundle(path: Path, *, bridge_path: str = REMOTE_BRIDGE,
+                         status_mode: str = ENDPOINT_STATUS_MANUAL) -> str:
     root = Path(__file__).resolve().parent
     manifest = json.loads(path.with_suffix(path.suffix + ".manifest.json").read_text(encoding="utf-8"))
     payload = path.read_bytes()
@@ -159,14 +196,19 @@ def read_endpoint_bundle(path: Path) -> str:
     expected = {
         "kind": "impulse-clean-map-frida-agent-v1",
         "bundleSha256": sha256_bytes(payload),
-        "entrySha256": sha256_bytes(endpoint_agent_entry(source).encode()),
+        "entrySha256": sha256_bytes(endpoint_agent_entry(
+            source, bridge_path=bridge_path, status_mode=status_mode).encode()),
         "packageLockSha256": sha256_bytes((root / "agent/package-lock.json").read_bytes()),
         "packageJsonSha256": sha256_bytes((root / "agent/package.json").read_bytes()),
         "moduleMode": "esm-node16",
         "javaBridgeVersion": package["dependencies"]["frida-java-bridge"],
         "compilerVersion": package["devDependencies"]["frida-compile"],
-        "bridgePath": REMOTE_BRIDGE,
+        "bridgePath": bridge_path,
     }
+    # Old, validated manual archives predate this field. Process-scoped archives
+    # must declare the mode explicitly; entrySha256 also pins its implementation.
+    if status_mode != ENDPOINT_STATUS_MANUAL or "statusMode" in manifest:
+        expected["statusMode"] = status_mode
     for name, value in expected.items():
         if manifest.get(name) != value:
             raise ValueError("Endpoint bundle is stale or altered: " + name)

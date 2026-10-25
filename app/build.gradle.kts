@@ -9,9 +9,9 @@ plugins {
 
 val appVersionCode = providers.gradleProperty("appVersionCode")
     .map(String::toInt)
-    .orElse(74132)
+    .orElse(74133)
 val appVersionName = providers.gradleProperty("appVersionName")
-    .orElse("1.0.0.74.132-preview")
+    .orElse("1.0.0.74.133-preview")
 val impulseReportSupabaseUrl =
     providers.gradleProperty("impulseReportSupabaseUrl")
         .orElse("https://eymyarugcfcwkezqjiba.supabase.co")
@@ -142,6 +142,10 @@ android {
     sourceSets {
         getByName("debug") {
             java.srcDir("src/internalDebug/java")
+            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/debug"))
+        }
+        getByName("release") {
+            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/release"))
         }
         getByName("leanDebug") {
             java.srcDir("src/internalDebug/java")
@@ -248,4 +252,48 @@ val testCarPlayColdTools by tasks.registering(Exec::class) {
         "scripts/carplay-patches/test_patch_cold_start_gate.py",
         "scripts/carplay-native-analysis/test_make_cold_launcher.py"
     )
+}
+
+// All ELF compilation happens on the authorized Mini. The generated library is
+// an asset for the OEM-side loader, never a JNI library loaded by Impulse.
+val carPlayAgentDirectory = rootProject.layout.projectDirectory.dir("scripts/carplay-native-analysis/agent")
+val installCarPlayAgentDependencies by tasks.registering(Exec::class) {
+    inputs.files(carPlayAgentDirectory.file("package.json"), carPlayAgentDirectory.file("package-lock.json"))
+    outputs.dir(carPlayAgentDirectory.dir("node_modules"))
+    commandLine("npm", "ci", "--prefix", carPlayAgentDirectory.asFile.absolutePath,
+        "--ignore-scripts", "--no-audit", "--no-fund")
+}
+
+// AGP names Release's native configuration RelWithDebInfo (and Debug's Debug).
+// Match the actual native task/output configuration before packaging the ELF.
+mapOf("Debug" to "Debug", "Release" to "RelWithDebInfo").forEach { (buildType, nativeConfig) ->
+    val lower = buildType.lowercase()
+    val generated = layout.buildDirectory.dir("generated/carplayBridgeAssets/$lower")
+    val generate = tasks.register<Exec>("generateCarPlayBridgeAssets$buildType") {
+        dependsOn(installCarPlayAgentDependencies)
+        dependsOn(tasks.matching { it.name.startsWith("buildCMake$nativeConfig[") })
+        inputs.files(rootProject.fileTree("scripts/carplay-native-analysis") {
+            include("*.py", "*.js", "testdata/*.json", "agent/package.json", "agent/package-lock.json")
+        })
+        inputs.file(layout.projectDirectory.file("src/main/res/raw/fridainject"))
+        inputs.files(fileTree(layout.buildDirectory.dir("intermediates/cxx/$nativeConfig")) {
+            include("**/obj/arm64-v8a/libcarplay_video_bridge.so")
+        })
+        inputs.property("versionCode", appVersionCode)
+        outputs.dir(generated)
+        workingDir(rootProject.layout.projectDirectory)
+        doFirst {
+            val candidates = fileTree(layout.buildDirectory.dir("intermediates/cxx/$nativeConfig")) {
+                include("**/obj/arm64-v8a/libcarplay_video_bridge.so")
+            }.files.sortedBy { it.absolutePath }
+            check(candidates.size == 1) { "Expected one Mini-built $buildType ARM64 bridge, found ${candidates.size}" }
+            // This directory contains only regenerated build output, never live car files.
+            generated.get().dir("carplay_bridge").asFile.deleteRecursively()
+            commandLine("python3", "scripts/carplay-native-analysis/build_persistent_carplay_assets.py",
+                "--native-lib", candidates.single().absolutePath,
+                "--output", generated.get().asFile.absolutePath,
+                "--version-code", appVersionCode.get().toString())
+        }
+    }
+    tasks.matching { it.name == "merge${buildType}Assets" }.configureEach { dependsOn(generate) }
 }

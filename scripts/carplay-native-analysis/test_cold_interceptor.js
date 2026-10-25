@@ -10,6 +10,9 @@ const directory = process.argv[2];
 const profile = JSON.parse(fs.readFileSync(path.join(directory, 'oem-cold-profile.json'), 'utf8'));
 const boundary = JSON.parse(fs.readFileSync(path.join(__dirname, 'testdata/android9-linker-profile.json'), 'utf8'));
 const linkerFile = process.argv[3];
+const eligibilityPath = '/data/local/tmp/impulse-carplay-input/safety.json';
+const bootIdPath = '/proc/sys/kernel/random/boot_id';
+const processStatPath = '/proc/self/stat';
 const checksum = value => crypto.createHash('sha256').update(typeof value === 'string' ? value : Buffer.from(value)).digest('hex');
 const arrayBuffer = bytes => Uint8Array.from(bytes).buffer;
 
@@ -52,6 +55,8 @@ function runtime(fault = {}) {
     let loaderLocked = false;
     let currentThread = 77;
     let firstTrampoline = null;
+    let eligibilityReads = 0;
+    let eligibilityReadHook = null;
 
     class Pointer {
         constructor(value, region, label = null) { this.value = BigInt(value); this.region = region; this.label = label; }
@@ -102,10 +107,21 @@ function runtime(fault = {}) {
         loaderComplete = previousComplete; loaderLocked = previousLock;
     }
     class File {
-        constructor(filePath) { assert.ok(images.has(filePath)); this.bytes = images.get(filePath); this.position = 0; opened++; }
+        constructor(filePath) {
+            if (filePath === eligibilityPath) {
+                eligibilityReads++;
+                if (eligibilityReadHook) eligibilityReadHook(eligibilityReads);
+            }
+            assert.ok(images.has(filePath)); this.bytes = images.get(filePath); this.position = 0; opened++;
+        }
         seek(offset, mode) { this.position = mode === File.SEEK_END ? this.bytes.length + offset : offset; }
         tell() { return this.position; }
         readBytes(size) { return arrayBuffer(this.bytes.subarray(this.position, this.position + size)); }
+        readText(size) {
+            const bytes = this.bytes.subarray(this.position, this.position + size);
+            this.position += bytes.length;
+            return bytes.toString('utf8');
+        }
         close() { closed++; }
     }
     File.SEEK_SET = 0; File.SEEK_END = 2;
@@ -227,6 +243,9 @@ function runtime(fault = {}) {
         setTimeout(fn, delay) { timer = fn; timerDelay = delay; return 1; }, clearTimeout() { timer = null; }
     };
     return { api, loadOem, withLoad, modules, patched, operations,
+        setFile(filePath, contents) { images.set(filePath, Buffer.from(contents)); },
+        removeFile(filePath) { images.delete(filePath); },
+        onEligibilityRead(hook) { eligibilityReadHook = hook; },
         changeThread(thread) { currentThread = thread; },
         loadDependency(index) {
             const object = loaded(boundary.dependencies[index]);
@@ -236,7 +255,7 @@ function runtime(fault = {}) {
         },
         unknownModule() { if (callback) callback.onAdded({ name: 'unreviewed.so', path: '/vendor/unreviewed.so' }); },
         options: { enabled: true, bridgePath, bridgeSize: bridgeBytes.length, bridgeSha256: checksum(bridgeBytes), principalUuid: 'main', expectedPid: 1234 },
-        metrics: () => ({ pins, opened, closed, timerDelay }),
+        metrics: () => ({ pins, opened, closed, timerDelay, eligibilityReads }),
         timeout() { if (timer) timer(); },
         unload(object) { if (callback) callback.onRemoved(object); }
     };
@@ -490,4 +509,163 @@ test('unload during preparation refuses installation', () => {
     installer.arm(profile, env.options); env.unload(env.loadOem(0)); assert.equal(installer.status().phase, 'failed');
     assert.equal(env.patched.size, 0); assert.equal(env.metrics().pins, 0);
 });
-process.stdout.write(passed + ' cold installer model scenarios passed; no OEM process execution\n');
+
+const manualPassed = passed;
+const automaticBootId = '00112233-4455-6677-8899-aabbccddeeff';
+function withWallClock(action) {
+    const original = Date.now;
+    let wallMs = 1800000000000;
+    Date.now = () => wallMs;
+    try { action({ now: () => wallMs, advance(milliseconds) { wallMs += milliseconds; } }); }
+    finally { Date.now = original; }
+}
+function processStat(start = 8765, comm = 'com.ts.carplay') {
+    return '1234 (' + comm + ') ' + ['S', ...Array(18).fill('0'), String(start), '0'].join(' ') + '\n';
+}
+function automatic(env, clock, overrides = {}) {
+    let packet = {
+        eligible: true, bootId: automaticBootId, targetPid: 1234, targetStartTime: 8765,
+        wallMs: clock.now(), ticket: '12345678-1234-1234-1234-123456789abc', ...overrides
+    };
+    env.options.eligibilityPath = eligibilityPath;
+    env.setFile(bootIdPath, automaticBootId + '\n');
+    env.setFile(processStatPath, processStat());
+    const update = patch => {
+        packet = { ...packet, ...patch };
+        env.setFile(eligibilityPath, JSON.stringify(packet));
+    };
+    update({});
+    return { update };
+}
+function assertRejectedBeforePreparation(env, installer) {
+    complete(env);
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(installer.status().pinned, false);
+    assert.equal(env.patched.size, 0);
+    assert.ok(!env.operations.includes('pin-modules'));
+    assert.ok(!env.operations.includes('replace'));
+    assert.ok(!env.operations.includes('bootstrap'));
+    assert.equal(env.metrics().opened, env.metrics().closed);
+}
+
+test('manual mode never consults automatic eligibility files', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+    assert.equal(env.metrics().eligibilityReads, 0);
+});
+test('automatic mode validates live boot PID starttime and ticket at all three boundaries', () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock);
+    const installer = createColdOemInterceptor(env.api);
+    assert.equal(installer.arm(profile, env.options).phase, 'armed');
+    assert.equal(env.metrics().eligibilityReads, 0, 'arming is an inert observer, not native preparation');
+    complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+    assert.equal(env.metrics().eligibilityReads, 3);
+    assert.equal(env.patched.size, 9);
+}));
+for (const age of [0, 3000]) test('automatic eligibility accepts freshness boundary ' + age, () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock, { wallMs: clock.now() - age });
+    const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+}));
+for (const input of [
+    { eligible: false }, { eligible: null }, { eligible: 'true' },
+    { bootId: null }, { bootId: 'ffeeddcc-bbaa-9988-7766-554433221100' },
+    { targetPid: 9999 }, { targetPid: '1234' }, { targetPid: null },
+    { targetStartTime: 8766 }, { targetStartTime: null },
+    { wallMs: null }, { wallMs: '1800000000000' }, { wallMs: 1800000000000.5 },
+    { ticket: null }, { ticket: '' }, { ticket: 'short' }, { ticket: 'g'.repeat(32) },
+    { ticket: 'a'.repeat(65) }, { ticket: 'A'.repeat(32) }, { ticket: 1000000000000000 }
+]) test('automatic mode rejects invalid or unknown input ' + JSON.stringify(input), () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock, input);
+    const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    assertRejectedBeforePreparation(env, installer);
+}));
+for (const age of [-1, 3001, 60000]) test('automatic mode refuses future or stale lease age ' + age, () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock, { wallMs: clock.now() - age });
+    const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); assertRejectedBeforePreparation(env, installer);
+}));
+test('automatic eligibility expiration between arm and native load cancels cleanly', () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock);
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    clock.advance(3001);
+    assertRejectedBeforePreparation(env, installer);
+}));
+test('a new fresh heartbeat between arm and native load is observed', () => withWallClock(clock => {
+    const env = runtime(); const safety = automatic(env, clock);
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    clock.advance(6000); safety.update({ wallMs: clock.now() });
+    complete(env); assert.equal(installer.status().phase, 'installed-pinned');
+}));
+test('safety loss between arm and native load blocks before acquiring module ownership', () => withWallClock(clock => {
+    const env = runtime(); const safety = automatic(env, clock);
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    safety.update({ eligible: false }); assertRejectedBeforePreparation(env, installer);
+}));
+test('boot and PID-reuse epochs cannot reuse an armed automatic observer', () => withWallClock(clock => {
+    for (const replacement of [
+        [bootIdPath, 'ffeeddcc-bbaa-9988-7766-554433221100\n'],
+        [processStatPath, processStat(8766)]
+    ]) {
+        const env = runtime(); automatic(env, clock);
+        const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+        env.setFile(...replacement); assertRejectedBeforePreparation(env, installer);
+    }
+}));
+test('process comm parentheses do not obscure the authoritative starttime field', () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock);
+    env.setFile(processStatPath, processStat(8765, 'worker (carplay) )'));
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    complete(env); assert.equal(installer.status().phase, 'installed-pinned');
+}));
+for (const missing of [eligibilityPath, bootIdPath, processStatPath]) test('missing automatic identity source fails closed: ' + missing, () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock); env.removeFile(missing);
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    assertRejectedBeforePreparation(env, installer);
+}));
+for (const malformed of ['', 'not JSON', 'null', '[]', '{}', ' '.repeat(4097)]) test('malformed automatic safety document fails closed: ' + JSON.stringify(malformed.slice(0, 30)), () => withWallClock(clock => {
+    const env = runtime(); automatic(env, clock); env.setFile(eligibilityPath, malformed);
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options);
+    assertRejectedBeforePreparation(env, installer);
+}));
+for (const pathValue of ['/tmp/safety.json', eligibilityPath + '.old', null]) test('automatic mode cannot select an unreviewed input path ' + pathValue, () => {
+    const env = runtime(); env.options.eligibilityPath = pathValue;
+    assert.throws(() => createColdOemInterceptor(env.api).arm(profile, env.options), /Unreviewed automatic eligibility source/);
+    assert.equal(env.metrics().opened, 0);
+    assert.equal(env.metrics().pins, 0);
+});
+for (const check of [2, 3]) test('eligibility revocation at check ' + check + ' restores every attempted OEM entry', () => withWallClock(clock => {
+    const env = runtime(); const safety = automatic(env, clock);
+    env.onEligibilityRead(count => { if (count === check) safety.update({ eligible: false }); });
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.metrics().pins, 0); assert.equal(env.patched.size, 0);
+    assert.equal(env.operations.filter(op => op === 'pin-modules').length, 1);
+    assert.equal(env.operations.filter(op => op === 'release-modules').length, 1);
+    assert.equal(env.operations.filter(op => op === 'replace').length, check === 3 ? 9 : 0);
+    assert.equal(env.operations.filter(op => op === 'revert').length, check === 3 ? 9 : 0);
+    assert.ok(!env.operations.includes('bootstrap'));
+    assert.equal(installer.inspect(profile).verified, 13);
+}));
+for (const check of [2, 3]) test('new valid attempt ticket at check ' + check + ' cannot claim another attempt', () => withWallClock(clock => {
+    const env = runtime(); const safety = automatic(env, clock);
+    env.onEligibilityRead(count => { if (count === check) safety.update({ ticket: 'abcdef12-3456-7890-abcd-ef1234567890' }); });
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.metrics().pins, 0); assert.equal(env.patched.size, 0);
+    assert.ok(!env.operations.includes('bootstrap'));
+}));
+test('uncertain rollback after late eligibility loss retains pinned ownership', () => withWallClock(clock => {
+    const env = runtime({ revert: true }); const safety = automatic(env, clock);
+    env.onEligibilityRead(count => { if (count === 3) safety.update({ eligible: false }); });
+    const installer = createColdOemInterceptor(env.api); installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'failed-pinned');
+    assert.equal(env.metrics().pins, 1); assert.equal(env.patched.size, 9);
+    assert.ok(!env.operations.includes('release-modules'));
+    assert.ok(!env.operations.includes('bootstrap'));
+}));
+process.stdout.write(passed + ' cold installer model scenarios passed (' + manualPassed + ' original manual scenarios); no OEM process execution\n');

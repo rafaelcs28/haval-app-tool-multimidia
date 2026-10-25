@@ -42,6 +42,7 @@ def build_launcher(
     principal_uuid: str,
     status_path: str | None = None,
     cold_load_timeout_ms: int = 60_000,
+    eligibility_path: str | None = None,
 ) -> str:
     if expected_pid <= 0:
         raise ValueError("expected PID must be positive")
@@ -60,6 +61,8 @@ def build_launcher(
         or ".." in status_path.split("/")
     ):
         raise ValueError("status path is outside the private staging root")
+    if eligibility_path is not None and eligibility_path != "/data/local/tmp/impulse-carplay-input/safety.json":
+        raise ValueError("eligibility path is outside the dedicated safety input")
     if isinstance(cold_load_timeout_ms, bool) or not isinstance(cold_load_timeout_ms, int) or not 5_000 <= cold_load_timeout_ms <= 300_000:
         raise ValueError("cold load timeout is outside reviewed bounds")
 
@@ -72,6 +75,8 @@ def build_launcher(
         "expectedPid": expected_pid,
         "coldLoadTimeoutMs": cold_load_timeout_ms,
     }
+    if eligibility_path is not None:
+        options["eligibilityPath"] = eligibility_path
     auto_arm = f"""
 
 (() => {{
@@ -122,6 +127,7 @@ def main() -> int:
     parser.add_argument("--bridge-sha256", required=True)
     parser.add_argument("--principal-uuid", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--eligibility-path")
     args = parser.parse_args()
 
     launcher = build_launcher(
@@ -132,6 +138,7 @@ def main() -> int:
         args.bridge_size,
         args.bridge_sha256,
         args.principal_uuid,
+        eligibility_path=args.eligibility_path,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

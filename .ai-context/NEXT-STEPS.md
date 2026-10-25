@@ -1,3 +1,40 @@
+## ACTIVE 2026-10-25 — version 133 persistent local bootstrap + latest v9
+
+User deferred driving tests and explicitly requested a new installed version that
+prepares the bridge locally after central restarts, including Netseek changes today.
+Active Git worktree `/root/projects/haval-impulse-133`, branch
+`release/impulse-74133-v9`; upstream merge d6e2d216 includes all six v9 commits
+through 5ccd91e29bd2eafe651d4c072e13e59567801f49. Personal changes preserved.
+
+Implementation in progress: APK-bundled versioned native/Java assets, local root
+bootstrap, boot/app/package receivers, strict DCM quiescence + fresh P/0 checks,
+PID/starttime/boot identity, detached dedicated injectors, circuit breaker and UI.
+Never persist map-test lease or Surface across boots. Native ELF built only on
+Mini. Global legacy `pkill -f fridainjector` removed to preserve pinned callbacks.
+Source review frozen for first Mini validation; no 133 install yet. Android/Gradle/Kotlin build ONLY authorized Mini queue,
+immutable audited commit and exact build-control allowlist. No VPS fallback.
+
+Read-only central recovery at 15:31 UTC: boot
+79f7b4b4-483e-4199-aba2-122e8346027f, uptime~4148sec, stock OEM6137/start2272,
+version74132, empty coldgate, no bridge or injector. Thus old PID5629 / injectors
+5909/9338 below belong to a PREVIOUS BOOT and are no longer live. Boot reason
+reported shutdown; cause of owner-reported restart remains unproven. Private
+receipt `test-artifacts/133-current-readonly-20261025T153154Z/state.txt`.
+
+Offline checks: 103 Node interceptor cases, 42 scoped Python packaging/controller
+tests, 14 lifecycle guards and full CarPlay regression lock passed. Full generic
+Python discovery: 59 cases, 50 pass/9 fixture-dependent skips. Root shell framing
+was verified read-only on the central with >2300-byte command, case preserved.
+Additional review: root single-flight boot marker, monotonic recovery deadline,
+immediate opt-out eligibility revocation, strict unreadable maps/tasks failure,
+30-second ready polling and one guarded OEM client refresh after own safe reload.
+
+Pending: Mini Debug/JVM + signed Release133;
+verify APK and stage/install once fresh safety allows; enable persisted auto option;
+verify local readiness and document real boot/map validation limits. User will
+perform the driving test later. Do not start map Surface lease, vehicle power,
+central reboot, or repeat old manual injection. Earlier GWM OFF request fulfilled.
+
 ## COMPLETE 2026-10-25 11:11 — bridge ready; owner confirms current principalD0
 
 Latestresultsupersedesallactivefailure/investigationnotesbelow. UserCorrija
