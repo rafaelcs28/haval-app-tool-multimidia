@@ -1,3 +1,33 @@
+## Publication authorized — owner will install138 himself
+
+Latest owner: "Pode publicar que instalo. Vou no carro agora". Publish138 once
+FINALef26864ff3f0f1d17c0dd2ae59cd79fe15603ddc MiniAPK passes all verification.
+Do NOT install/reboot remotely now: owner explicitly takes installation himself.
+Finaljob haval-impulse-133-ef26864ff3f0f1d1-20261025T215416Z-15985 RUNNING; JVM
+already passed, Release stillbuilding. Controldigest
+ a493fad51b5d92fda269ecb3f7095f8fbd32d334a4374142ef728ca7bfd5c760
+archiveSHA200f7fcae3b6a1e2f02678888b3b6f821289f4fab68ba2eb8b85f3cd27152452.
+Preliminary6687f240 job was superseded by ef26864f: accept proven alreadyinstalled9
+aswellasarmed0 beforegate acknowledgement, preservingvalidcoldattach timing.
+Do NOT publish preliminary668 APK even though tests pass. Fetchfinal into NEW
+artifacts/impulse-74138-resident-release-mini. Validator138 private prepared.
+
+Publication destination is PUBLICrafaelcs28/haval-app-tool-multimidia, existing
+pattern versionedprerelease1.0.0.74.138-preview assetimpulse-74138.apk thenLASTupdate
+fixedapp-latest/app-preview.json. Sourcecode repo rafaelcs28/haval-impulse isPRIVATE;
+DO NOT pushprivatecode intoPUBLICfork. Prior131publicrelease targetmaster; use
+publicexistingcommit048749aebcb792ec163c3f7c601b574d75f0e9ba forpublictag, attach
+onlyverifiedAPK/checksum/buildmetadata. Publicforkworkflow triggersONLYpushmaster/
+preview orworkflow_dispatch; versionedrelease doesnottriggeranotherAndroidbuild.
+Existingmanifest downloadedprivatepublish-74138-20261025/app-preview.json:131.
+Releasebodypreparedrelease-notes.txt. GHCLIusedbecauseGitHubconnectordoesnotoffer
+release/assetpublication. PublicAPKdownloadSHA mustmatch BEFORE updatingfixedOTA;
+thenindependentlydownloadfixedmanifestwithcachebusterandverifyexactbytes/version.
+No extra approval requested; owneralreadyauthorizedpublication. Stablechannelunchanged.
+Afterinstall ownermustrestartcentralwithphonesdisconnected (current137mapping
+cannotbehotreplaced), wait138ready thenconnectiPhone/principalD0. Physical138notyet
+validated. Do not promise firstframe/map/type111. No vehiclepowercommand.
+
 ## Current handoff — 138 resident agents implemented; Mini build pending, car offline
 
 Owner CONFIRMED manually restarted central after137. This is automatic bootstrap

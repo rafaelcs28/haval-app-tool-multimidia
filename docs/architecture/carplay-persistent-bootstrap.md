@@ -88,8 +88,9 @@ chama `dispose` antes desse unload. O pin nativo permanece; o wrapper Java adqui
 seu pin antes de publicar callbacks. Falha, dispose ou saída do cliente não soltam
 pins nem revertem callbacks já publicados.
 
-A inicialização OEM só é liberada após prova residente nativa em `armed`. O estado
-pronto exige prova nova de nove replacements nativos pinados, sem falha, e agente
+A inicialização OEM só é liberada após prova residente nativa em `armed` ou de
+uma instalação dos nove hooks já concluída na janela fria. Isso também cobre o
+carregamento natural anterior à confirmação do gate. O estado pronto exige prova nova de nove replacements nativos pinados, sem falha, e agente
 Java armado. Reiniciar apenas o app repete o desafio para os agentes da mesma
 identidade; ausência de cliente externo passa a ser esperada. Mapeamento legado,
 prova ausente ou estado desconhecido continuam preservados, sem reinjeção.
