@@ -1,3 +1,29 @@
+## Current handoff — 134 installed; waiting for phone disconnection (2026-10-25)
+
+Owner turned car on. Fresh P/0 confirmed; new boot
+55bda7d0-84fd-43fd-9d5c-2c4cf39debc8, OEM 3749/start 1380. Guarded delta installer
+completed and verified ACTUAL installed base.apk SHA-256
+3c762663b1da384c17c2e0d9f7bc1d959a12029ec0658d39d0c969e30bad5f5b, version74134.
+Temporary public blob was removed. No HU reboot or injector command sent by root.
+
+Initial 134 inspection: native {}, Java unarmed, no owners. Automatic option TRUE.
+Fresh safety packets show P/0, enabled true, inFlight false, quiescent FALSE;
+preparation waiting. The failure phase/identity in preferences is historical133
+(boot9055), not a new134 failure. New134 attempt has NOT started. Root sent the
+protected enabled=true configuration broadcast (success), without retry/reset.
+
+Async question now pending: disconnect phones also from Bluetooth and wireless
+CarPlay, keep in P; options "Já desconectei tudo" / "Não há telefone conectado".
+Wait for answer while checking live local preparation. Do not request connection
+to iPhone until native9/pinned, Java armed and both owners verified. Do not weaken
+quiescence guards if owner says none: inspect exact current service evidence.
+
+Installer private receipt: delta-install-20261025T185739Z-ec1c8ad77bc6. Inspection files installed134-boot55bd-* and
+installed134-waiting-status.txt under private install-133-persistent-20261025.
+Helper inspect_134.py accepts latest134 validation.json and stores readiness
+receipts; prior inspect_133.py is intentionally unchanged. Latest source remains
+563123d9, signed Mini134 validated; no new build is needed.
+
 ## Current handoff — 134 READY TO INSTALL; owner will turn on car
 
 Owner requested notification when ready, then will turn on the car for installation

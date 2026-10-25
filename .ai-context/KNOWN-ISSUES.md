@@ -1,3 +1,11 @@
+## Current status — 134 INSTALLED; bridge waiting (2026-10-25)
+
+134 is installed and its actual APK hash verified. Do not repeat build/install.
+Car boot55bd/OEM3749; fresh P/0; quiescence=false. Current134 has no native/Java
+owners or attempt yet. Await owner response to the phone/Bluetooth/wireless CarPlay
+disconnection question, then inspect preparation. Old failed preferences refer to
+133/boot9055. Read current HANDOFF before any operation; map test is not ready yet.
+
 ## Current status — 134 ready, not installed (2026-10-25)
 
 Use the current HANDOFF first. Signed 134 passed Mini JVM/Release checks and local

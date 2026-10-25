@@ -1,3 +1,10 @@
+## 2026-10-25 — 134 installed and verified on the car
+
+- Confirmed new boot55bd, fresh P/0 and no visual projection; reconstructed and installed the exact signed 134.
+- Package manager reported Success; actual installed base.apk SHA matches 3c762663b1da384c17c2e0d9f7bc1d959a12029ec0658d39d0c969e30bad5f5b. Temporary download blob removed.
+- Local automatic preparation enabled; live quiescence remains false, so preparation correctly waits. No current134 native attempt, owner or Java endpoint exists yet; recorded failed preferences belong to old133/boot9055.
+- Owner was asked to disconnect phones also from Bluetooth/wireless CarPlay. Physical bridge/map readiness remains pending; no HU reboot or manual injection performed.
+
 ## 2026-10-25 — 134 signed APK validated, installation pending
 
 - Mini commit 563123d9: full JVM task and seven new race tests passed; signed Release/R8/lint vital passed in 5m53s (83 tasks).
