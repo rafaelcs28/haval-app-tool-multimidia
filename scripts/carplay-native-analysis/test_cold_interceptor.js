@@ -43,6 +43,7 @@ function runtime(fault = {}) {
     let nativeReady = 0;
     let readyThrows = false;
     let loaderListener = null;
+    let pendingLoaderListener = null;
     let notification = false;
     let loaderComplete = false;
     let loaderLocked = false;
@@ -179,8 +180,8 @@ function runtime(fault = {}) {
         Interceptor: {
             attach(target, callbacks) {
                 assert.ok(target.equals(linker.base.add(boundary.load.offset)));
-                loaderListener = callbacks;
-                return { detach() { loaderListener = null; operations.push('detach-loader'); } };
+                pendingLoaderListener = callbacks;
+                return { detach() { loaderListener = null; pendingLoaderListener = null; operations.push('detach-loader'); } };
             },
             replaceFast(target) {
                 operations.push('replace');
@@ -196,7 +197,7 @@ function runtime(fault = {}) {
                 const patch = patched.get(target.value);
                 if (patch) { target.region.memory[patch.offset] = patch.byte; patched.delete(target.value); }
             },
-            flush() { operations.push('flush'); }
+            flush() { operations.push('flush'); if (pendingLoaderListener) loaderListener = pendingLoaderListener; }
         },
         Script: { pin() { pins++; }, unpin() { pins--; assert.ok(pins >= 0); } },
         setTimeout(fn, delay) { timer = fn; timerDelay = delay; return 1; }, clearTimeout() { timer = null; }

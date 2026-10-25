@@ -305,6 +305,7 @@ function createColdOemInterceptor(api) {
                     install();
                 }
             });
+            Interceptor.flush();
             observer = Process.attachModuleObserver({
                 onAdded(module) {
                     if (phase !== 'armed') return;
