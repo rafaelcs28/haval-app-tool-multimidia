@@ -231,12 +231,13 @@ object HudOverlayModel {
     const val TRIP_MIN_LEFT = 2f
 
     // Turn hidden (further than "Mostrar próxima manobra"): the trip on two lines, distance over
-    // time, with the flag on the left centred on both (owner, 2026-10-24).
-    const val TRIP_BLOCK_LINE1 = 106f
-    const val TRIP_BLOCK_LINE2 = 138f
-    const val TRIP_BLOCK_SIZE = 26f
-    const val TRIP_BLOCK_FLAG = 30f
-    const val TRIP_BLOCK_GAP = 8f
+    // time, with the flag on the left centred on both (owner, 2026-10-24). At the trip line's own
+    // size and place, the time on its baseline (owner, 2026-10-25: it came out big and moved).
+    /** Second line to first: this many text sizes up. */
+    const val TRIP_BLOCK_LINE_STEP = 1.25f
+    /** The flag, against the text size (it spans both lines). */
+    const val TRIP_BLOCK_FLAG_SCALE = 1.4f
+    const val TRIP_BLOCK_GAP = 6f
 
     /** pt-BR grouping, as groupThousands in tbtTurnIcons.js: 1234 -> "1.234". */
     private fun groupThousands(n: Int): String =
@@ -274,6 +275,22 @@ object HudOverlayModel {
         if (token.endsWith("_LEFT")) return "TURN_LEFT"
         if (token.endsWith("_RIGHT")) return "TURN_RIGHT"
         return token
+    }
+
+    /**
+     * The HUD's icon for a maneuver: [resolveTurnIcon], except the gentle ones (slight, keep,
+     * fork, exit ramp) get a 45 deg arrow to their side ("SLIGHT_LEFT"/"SLIGHT_RIGHT") instead of
+     * the fork glyph or the 90 deg turn: a 45 deg exit read as a junction (owner, 2026-10-25).
+     */
+    fun hudIcon(turn: String?): String {
+        val token = turn.orEmpty().uppercase()
+        val side = when {
+            token.endsWith("_RIGHT") -> "RIGHT"
+            token.endsWith("_LEFT") -> "LEFT"
+            else -> null
+        }
+        val gentle = token.startsWith("SLIGHT") || token.startsWith("KEEP") || token.startsWith("FORK") || token.startsWith("OFF_RAMP")
+        return if (side != null && gentle) "SLIGHT_$side" else resolveTurnIcon(turn)
     }
 
     /** Tokens with artwork in tbtTurnIcons.js (SVG or text glyph). */
@@ -661,6 +678,10 @@ object HudOverlayModel {
         return right
     }
     const val CHEVRON_HALF_H = 7f
+    /** The map/arrow's destination flag shows from this far (owner, 2026-10-25). */
+    const val DEST_FLAG_SHOW_M = 150f
+    /** Margin each chevron clears in the text under it, so it reads as on top. */
+    const val CHEVRON_CUT_MARGIN = 1.5f
     const val CHEVRON_W = 7f
     const val CHEVRON_STROKE = 4f
     const val CHEVRON_COUNT = 4
@@ -776,7 +797,9 @@ object HudOverlayModel {
         val tripDistance: String = "",
         val tripTime: String = "",
         /** AR map: grey streets as edge lines ([Config.mapEdges]). */
-        val mapEdges: Boolean = false
+        val mapEdges: Boolean = false,
+        /** Google style ([Config.iconStyle]): the Material Symbols icon to draw; null = ours. */
+        val googleIcon: String? = null
     ) {
         /** Draw the roundabout with its real exit instead of the static icon. */
         val dynamicRoundabout: Boolean get() = icon == "ROUNDABOUT" && exitAngle != null
@@ -883,6 +906,45 @@ object HudOverlayModel {
         val font: Font = Font.LIGHT
     )
 
+    /** Maneuver icon sets (owner, 2026-10-25: choose between them). */
+    enum class IconStyle(val key: String) {
+        CLASSIC("classic"),
+        GOOGLE("google");
+
+        companion object {
+            fun fromKey(key: String?): IconStyle? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    /**
+     * Google's icon (Material Symbols name) for a maneuver token: its own icons for ramps and
+     * either side's U-turn. Sharp turns take the normal turn, and forks our slight turn with the
+     * road going on (see HudTbtIcons): the library's sharp (a step) and fork glyphs read wrong
+     * (owner, 2026-10-25, until checked against Google Maps itself). Null for the destination (the checkered flag, as on the trip
+     * line) and tokens with no icon.
+     */
+    fun googleIcon(turn: String?, clockwise: Boolean = false): String? {
+        val t = turn.orEmpty().uppercase()
+        val side = when {
+            t.endsWith("_RIGHT") -> "right"
+            t.endsWith("_LEFT") -> "left"
+            else -> null
+        }
+        return when {
+            t.isEmpty() || t.startsWith("DESTINATION") -> null
+            t.startsWith("ROUNDABOUT") -> if (clockwise) "roundabout_left" else "roundabout_right"
+            t.startsWith("U_TURN") -> "u_turn_${side ?: "left"}"
+            t.startsWith("MERGE") -> "merge"
+            t == "STRAIGHT" || t == "NAME_CHANGE" || t == "DEPART" || t.startsWith("FERRY") -> "straight"
+            side == null -> null
+            t.startsWith("SHARP") || t.startsWith("TURN") -> "turn_$side"
+            t.startsWith("SLIGHT") || t.startsWith("KEEP") -> "turn_slight_$side"
+            t.startsWith("FORK") -> "fork_$side"
+            t.startsWith("OFF_RAMP") || t.startsWith("ON_RAMP") -> "ramp_$side"
+            else -> null
+        }
+    }
+
     /**
      * HUD text faces. The head unit's fonts.xml maps sans-serif, -thin and -light all to one
      * regular Roboto (measured 2026-10-24), so each is loaded from its own file in
@@ -983,6 +1045,8 @@ object HudOverlayModel {
         val mapEdges: Boolean = false,
         /** The HUD's text face (owner, 2026-10-24: Leve by default; thin was too thin). */
         val font: Font = Font.LIGHT,
+        /** Maneuver icons: our bold arrows, or Google's (Material Symbols) as in Google Maps. */
+        val iconStyle: IconStyle = IconStyle.CLASSIC,
         /**
          * Next maneuver (icon, distance, street, lanes) only from this many metres; further away
          * just the trip line. 0 = always (see [SHOW_TURN_FROM_OPTIONS]).
@@ -1047,16 +1111,18 @@ object HudOverlayModel {
         val (value, unit) = splitDistance(d.distance, d.distanceM)
         val lanes = d.lanes.map { laneArrows(it) }
         val meters = distanceMeters(d.distance, d.distanceM)
-        val icon = resolveTurnIcon(d.turn)
+        val icon = hudIcon(d.turn)
         val hidden = turnHidden(config, meters)
         val exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null
         // AR: turns by their bend angle; a roundabout with a known exit gets the 3D ring (angle 0
-        // here, the renderer draws it from exitAngle).
-        val arAngle = if (config.layout != Layout.AR) null
-        else HudArArrow.angleFor(d.turn) ?: if (exitAngle != null) 0f else null
+        // here, the renderer draws it from exitAngle). A maneuver with no shape (a merge with no
+        // side, a ferry, a roundabout without its exit) or no distance yet (AA sends the new step
+        // before its distance) stays in AR, straight on: dropping to the plain row took the 3D
+        // map away at junctions (owner, 2026-10-25).
+        val arAngle = if (config.layout != Layout.AR) null else HudArArrow.angleFor(d.turn) ?: 0f
         val style = when {
             // AR keeps the centre arrow with lanes too; the lanes go to the left column.
-            arAngle != null && meters != null -> TbtStyle.AR
+            arAngle != null -> TbtStyle.AR
             lanes.isNotEmpty() -> TbtStyle.COMPACT
             config.smallArrowWhenFar && meters != null && meters >= FAR_THRESHOLD_M -> TbtStyle.FAR
             else -> TbtStyle.HERO
@@ -1072,6 +1138,7 @@ object HudOverlayModel {
             // With the maneuver hidden the trip line is all there is, so it stays.
             trip = if (config.trip && (icon != "DESTINATION" || hidden)) tripLabel(d.remainingM, d.remainingS) else "",
             turnHidden = hidden,
+            googleIcon = if (config.iconStyle == IconStyle.GOOGLE) googleIcon(d.turn, d.roundaboutClockwise == true) else null,
             tripDistance = if (config.trip) tripParts(d.remainingM, d.remainingS).first.orEmpty() else "",
             tripTime = if (config.trip) tripParts(d.remainingM, d.remainingS).second.orEmpty() else "",
             arAngle = arAngle.takeIf { style == TbtStyle.AR },

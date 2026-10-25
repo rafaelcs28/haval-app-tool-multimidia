@@ -1184,6 +1184,14 @@ fun TelasTab() {
                 }
             }
 
+                    // Both switches are only read by the legacy Sport bundles (SportRed /
+                    // SportRedLite); no other theme consumes them, so hide them elsewhere.
+                    val isSportThemeActive = remember(selectedTheme) {
+                        val folder = prefs.getString(SharedPreferencesKeys.ACTIVE_CUSTOM_THEME.key, "") ?: ""
+                        folder.equals("SportRed", ignoreCase = true) ||
+                                folder.equals("SportRedLite", ignoreCase = true)
+                    }
+                    if (isSportThemeActive) {
                     Spacer(Modifier.height(16.dp))
 
                     Row(
@@ -1286,6 +1294,7 @@ fun TelasTab() {
                                             )
                             )
                         }
+                    }
                     }
 
                     Spacer(Modifier.height(16.dp))

@@ -40,8 +40,12 @@ class HudOverlayRenderer {
         const val FLAG_R = 21f
         const val FLAG_B = 14f
         /** The destination flag on the map/arrow: size factor, largest size, and alpha (min + span x arrow opacity). */
-        const val AR_FLAG_SCALE = 0.85f
-        const val AR_FLAG_MAX = 30f
+        const val AR_FLAG_SCALE = 0.6f
+        const val AR_FLAG_MIN = 8f
+        const val AR_FLAG_MAX = 20f
+        /** Its pole and outline, in the flag's 24 box (the white trip flag: 2.6 and 0.7). */
+        const val AR_FLAG_POLE = 1.6f
+        const val AR_FLAG_OUTLINE = 0.45f
         const val AR_FLAG_ALPHA_MIN = 0.3f
         const val AR_FLAG_ALPHA_SPAN = 0.5f
         /** Map view roads: soft grey under the blue route. */
@@ -134,14 +138,61 @@ class HudOverlayRenderer {
      */
     fun draw(canvas: Canvas, frame: M.Frame?, nowMs: Long = android.os.SystemClock.uptimeMillis()) {
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-        drawContent(canvas, frame, nowMs)
-        frame?.chevrons?.let { drawChevrons(canvas, it, nowMs) }
+        drawWithChevrons(canvas, frame, nowMs, nowMs)
     }
+
+    /**
+     * The content, then the chevrons on top. Translucent over white text they read as behind it
+     * (owner, 2026-10-25), so the content goes into a layer first and each chevron cuts a thin
+     * margin out of it before it is drawn.
+     */
+    private fun drawWithChevrons(canvas: Canvas, frame: M.Frame?, nowMs: Long, chevronMs: Long) {
+        val ch = frame?.chevrons
+        if (ch == null) {
+            drawContent(canvas, frame, nowMs)
+            return
+        }
+        val layer = canvas.saveLayer(0f, 0f, 480f, 240f, null)
+        drawContent(canvas, frame, nowMs)
+        for (mark in chevronMarks(ch)) placeChevron(canvas, mark, chevronCut)
+        canvas.restoreToCount(layer)
+        drawChevrons(canvas, ch, chevronMs)
+    }
+
+    /** Clears a chevron's shape, a little larger, from what is under it (see drawWithChevrons). */
+    private val chevronCut = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL_AND_STROKE
+        strokeWidth = M.CHEVRON_CUT_MARGIN * 2
+        strokeJoin = Paint.Join.ROUND
+        xfermode = android.graphics.PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+    }
+
+    private fun placeChevron(canvas: Canvas, mark: M.ChevronMark, paint: Paint) {
+        canvas.save()
+        canvas.translate(mark.x, mark.y)
+        canvas.rotate(mark.dir)
+        canvas.drawPath(chevronPath, paint)
+        canvas.restore()
+    }
+
+    /** The chevrons to draw for [ch]: the animated strip, or the still direction arrow. */
+    private fun chevronMarks(ch: M.Chevrons): List<M.ChevronMark> =
+        if (ch.animate) M.chevronStrip(ch.side, ch.sharp, ch.intensity)
+        else listOf(M.chevronCompass(ch.side, ch.sharp, ch.lean, ch.roadDeg))
 
     // ---- AR chevrons above the speed ----
 
     private val chevronPaint = fillPaint(Color.rgb(90, 180, 255))
-    private val chevronPath = Path()
+    /** A right-pointing chevron round the origin, turned to each one's direction. */
+    private val chevronPath = Path().apply {
+        moveTo(-M.CHEVRON_W, -M.CHEVRON_HALF_H)
+        lineTo(-(M.CHEVRON_W - M.CHEVRON_STROKE), -M.CHEVRON_HALF_H)
+        lineTo(M.CHEVRON_STROKE, 0f)
+        lineTo(-(M.CHEVRON_W - M.CHEVRON_STROKE), M.CHEVRON_HALF_H)
+        lineTo(-M.CHEVRON_W, M.CHEVRON_HALF_H)
+        lineTo(0f, 0f)
+        close()
+    }
 
     /**
      * A row of chevrons pointing to the turn side, sliding that way as the car closes in; a pulse
@@ -154,27 +205,14 @@ class HudOverlayRenderer {
         val appear = 1f
         val base = if (ch.animate) 0.45f + 0.4f * t else 0.9f
         // Still: the direction arrow round the arc ("Sempre" far away; on the diagonal from 100 m).
-        val marks = if (ch.animate) M.chevronStrip(ch.side, ch.sharp, t) else listOf(M.chevronCompass(ch.side, ch.sharp, ch.lean, ch.roadDeg))
-        // A right-pointing chevron round the origin, turned to each one's direction.
-        chevronPath.reset()
-        chevronPath.moveTo(-M.CHEVRON_W, -M.CHEVRON_HALF_H)
-        chevronPath.lineTo(-(M.CHEVRON_W - M.CHEVRON_STROKE), -M.CHEVRON_HALF_H)
-        chevronPath.lineTo(M.CHEVRON_STROKE, 0f)
-        chevronPath.lineTo(-(M.CHEVRON_W - M.CHEVRON_STROKE), M.CHEVRON_HALF_H)
-        chevronPath.lineTo(-M.CHEVRON_W, M.CHEVRON_HALF_H)
-        chevronPath.lineTo(0f, 0f)
-        chevronPath.close()
+        val marks = chevronMarks(ch)
         for ((k, mark) in marks.withIndex()) {
             // k = 0 trails, the last is the lead (pulse runs towards it, as before).
             var d = phase - k.toFloat() / M.CHEVRON_COUNT
             d -= kotlin.math.floor(d)
             val pulse = (1f - d) * (1f - d) * (1f - d)
             chevronPaint.alpha = (255 * appear * mark.appear * (base + (1f - base) * pulse)).toInt().coerceIn(0, 255)
-            canvas.save()
-            canvas.translate(mark.x, mark.y)
-            canvas.rotate(mark.dir)
-            canvas.drawPath(chevronPath, chevronPaint)
-            canvas.restore()
+            placeChevron(canvas, mark, chevronPaint)
         }
     }
 
@@ -347,11 +385,12 @@ class HudOverlayRenderer {
     private fun drawTripBlock(canvas: Canvas, tbt: M.Tbt, arcs: Boolean, wideArcs: Boolean) {
         val lines = listOf(tbt.tripDistance, tbt.tripTime).filter { it.isNotEmpty() }
         if (lines.isEmpty()) return
-        val baselines = if (lines.size == 2) listOf(M.TRIP_BLOCK_LINE1, M.TRIP_BLOCK_LINE2)
-        else listOf((M.TRIP_BLOCK_LINE1 + M.TRIP_BLOCK_LINE2) / 2)
+        // The trip line's own size and baseline; the first line sits above it.
+        val (base, wanted) = if (tbt.style == M.TbtStyle.AR) M.AR_TRIP_BASELINE to M.AR_TRIP_SIZE else M.tripPlacement(tbt.style)
+        val baselines = if (lines.size == 2) listOf(base - wanted * M.TRIP_BLOCK_LINE_STEP, base) else listOf(base)
         fun rightAt(b: Float, size: Float) = if (arcs) M.columnRightAt(b, size, wideArcs) else M.BOX_RIGHT
-        var size = M.TRIP_BLOCK_SIZE
-        var flag = M.TRIP_BLOCK_FLAG
+        var size = wanted
+        var flag = wanted * M.TRIP_BLOCK_FLAG_SCALE
         fun width() = flag + M.TRIP_BLOCK_GAP + lines.maxOf { richWidth(it, size) }
         val right = baselines.minOf { rightAt(it, size) }
         val room = right - M.TRIP_MIN_LEFT
@@ -369,16 +408,36 @@ class HudOverlayRenderer {
     }
 
     /** Destination flag in a [size] square standing on [baseline]: a pole and a pennant. */
-    private fun drawFlag(canvas: Canvas, left: Float, baseline: Float, size: Float) {
+    private fun drawFlag(
+        canvas: Canvas,
+        left: Float,
+        baseline: Float,
+        size: Float,
+        pole: Paint = flagPole,
+        outline: Paint = flagOutline,
+        checks: Paint = flagFill
+    ) {
         val s = size / 24f
         canvas.save()
         canvas.translate(left, baseline - size)
         canvas.scale(s, s)
-        canvas.drawLine(5f, 3f, 5f, 23f, flagPole)
-        canvas.drawRect(FLAG_L, FLAG_T, FLAG_R, FLAG_B, flagOutline)
-        canvas.drawPath(flagChecks, flagFill)
+        canvas.drawLine(5f, 3f, 5f, 23f, pole)
+        canvas.drawRect(FLAG_L, FLAG_T, FLAG_R, FLAG_B, outline)
+        canvas.drawPath(flagChecks, checks)
         canvas.restore()
     }
+
+    // The map's flag (owner, 2026-10-25): in the route's own blue, so it reads as part of the road
+    // and not as the white trip flag on the left; thinner pole and outline, it is small.
+    private val arFlagPole = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = AR_FLAG_POLE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val arFlagOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = AR_FLAG_OUTLINE
+    }
+    private val arFlagChecks = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     private val navTripPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(217, 255, 255, 255)
@@ -669,7 +728,8 @@ class HudOverlayRenderer {
         fadeSides(canvas, left, right, top, HudArArrow.CX, edge = if (map) 0 else 60, keep = if (map) 0.16f else 0.32f)
         canvas.restore() // layer
         canvas.restore() // transform + clip
-        shape.flag?.let { drawArFlag(canvas, it, cx, sx, sy, opacity) }
+        // The flag only in the last stretch (owner, 2026-10-25): further out it just competes.
+        if (meters <= M.DEST_FLAG_SHOW_M) shape.flag?.let { drawArFlag(canvas, it, cx, sx, sy, opacity) }
     }
 
     private val mapPendingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -759,7 +819,7 @@ class HudOverlayRenderer {
         val y = HudArArrow.BOTTOM - (HudArArrow.BOTTOM - flag.y) * sy
         if (y <= M.CHEVRON_CY || y > HudArArrow.BOTTOM) return
         // Smaller and see-through (owner): it marks the spot, it should not cover the road.
-        val size = (flag.height * kotlin.math.sqrt(sx * sy) * AR_FLAG_SCALE).coerceIn(10f, minOf(AR_FLAG_MAX, y - 40f))
+        val size = (flag.height * kotlin.math.sqrt(sx * sy) * AR_FLAG_SCALE).coerceIn(AR_FLAG_MIN, minOf(AR_FLAG_MAX, y - 40f))
         // The pennant flies away from the road: keep that side of it on the panel.
         val x = if (flag.pennant < 0) raw.coerceAtLeast(size * 0.7f) else raw.coerceAtMost(480f - size * 0.7f)
         canvas.saveLayerAlpha(x - size, y - size - 2f, x + size, y + 2f, (255 * (AR_FLAG_ALPHA_MIN + AR_FLAG_ALPHA_SPAN * opacity)).toInt().coerceIn(0, 255))
@@ -769,8 +829,12 @@ class HudOverlayRenderer {
             canvas.scale(-1f, 1f)
             canvas.translate(-x, 0f)
         }
-        // drawFlag's pole runs at x 5, y 3..23 of its 24 box: stand it on (x, y).
-        drawFlag(canvas, x - 5f * size / 24f, y + size / 24f, size)
+        // drawFlag's pole runs at x 5, y 3..23 of its 24 box: stand it on (x, y). Route blue.
+        val blue = arRgb(y)
+        arFlagPole.color = blue
+        arFlagOutline.color = blue
+        arFlagChecks.color = blue
+        drawFlag(canvas, x - 5f * size / 24f, y + size / 24f, size, arFlagPole, arFlagOutline, arFlagChecks)
         canvas.restore()
         canvas.restore()
     }
@@ -850,6 +914,30 @@ class HudOverlayRenderer {
             )
             return top + (M.RB_ENTRY_BOTTOM + M.RB_STROKE / 2) / 24f * size
         }
+        // Google style: its Material Symbols icon (the dynamic ring and the flag stay ours).
+        tbt.googleIcon?.let { HudTbtIcons.googlePath(it, size) }?.let { g ->
+            canvas.save()
+            canvas.translate(left, top)
+            canvas.drawPath(g, fill)
+            canvas.restore()
+            g.computeBounds(arrowBounds, true)
+            return top + arrowBounds.bottom
+        }
+        if (icon == "SLIGHT_RIGHT" || icon == "SLIGHT_LEFT") {
+            // The straight arrow turned 45 deg to the side (see M.hudIcon).
+            val straight = HudTbtIcons.turnPath("STRAIGHT", size)
+            if (straight != null) {
+                slightMatrix.setRotate(if (icon == "SLIGHT_RIGHT") 45f else -45f, size / 2, size / 2)
+                slightPath.set(straight)
+                slightPath.transform(slightMatrix)
+                canvas.save()
+                canvas.translate(left, top)
+                canvas.drawPath(slightPath, fill)
+                canvas.restore()
+                slightPath.computeBounds(arrowBounds, true)
+                return top + arrowBounds.bottom
+            }
+        }
         val path = HudTbtIcons.turnPath(icon, size)
         if (path != null) {
             canvas.save()
@@ -870,6 +958,9 @@ class HudOverlayRenderer {
      * Ring with the entry at the bottom and an arrow at the exit [angle] degrees around it; the
      * exits passed before it are short dim stubs (positions approximate, see passedExitAngles).
      */
+    private val slightMatrix = android.graphics.Matrix()
+    private val slightPath = Path()
+
     private fun drawRoundabout(
         canvas: Canvas,
         left: Float,
@@ -1046,9 +1137,8 @@ class HudOverlayRenderer {
                 wideArcs = M.wideArcs(scenario.speedKmh.toDouble(), wasWide = false),
                 speedKmh = scenario.speedKmh.toDouble()
             )
-            drawContent(canvas, frame)
             // A still of the approach chevrons (the sharp-left preview), mid-pulse.
-            frame.chevrons?.let { drawChevrons(canvas, it, PREVIEW_PULSE_MS) }
+            drawWithChevrons(canvas, frame, 0L, PREVIEW_PULSE_MS)
         }
         return bitmap
     }

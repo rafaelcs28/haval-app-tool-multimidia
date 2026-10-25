@@ -178,7 +178,11 @@ class HudArArrowTest {
         val frame = HudOverlayModel.frameFor(ar, rb, 0, null, arMetersOverride = 0f, arProgress = 0.4f)
         assertEquals(0.4f, frame.tbt!!.arProgress, 0f)
         // Without the exit angle it stays the flat icon.
-        assertEquals(HudOverlayModel.TbtStyle.HERO, HudOverlayModel.tbtFor(rb.copy(turnAngle = null), ar)!!.style)
+        // No exit angle: still AR (the map stays), straight on, with the flat roundabout icon.
+        val flat = HudOverlayModel.tbtFor(rb.copy(turnAngle = null), ar)!!
+        assertEquals(HudOverlayModel.TbtStyle.AR, flat.style)
+        assertEquals(0f, flat.arAngle)
+        assertTrue(!flat.dynamicRoundabout)
     }
 
     @Test
@@ -231,7 +235,9 @@ class HudArArrowTest {
         assertEquals("R. Augusta", laned.street)
         assertEquals(HudOverlayModel.TbtStyle.COMPACT, HudOverlayModel.tbtFor(withLanes, nav)!!.style)
         val roundabout = turn.copy(turn = "ROUNDABOUT") // no exit angle: flat icon
-        assertEquals(HudOverlayModel.TbtStyle.HERO, HudOverlayModel.tbtFor(roundabout, ar)!!.style)
+        // A roundabout without its exit stays in AR too (straight on, flat icon), so the map stays.
+        assertEquals(HudOverlayModel.TbtStyle.AR, HudOverlayModel.tbtFor(roundabout, ar)!!.style)
+        assertTrue(!HudOverlayModel.tbtFor(roundabout, ar)!!.dynamicRoundabout)
     }
 
     @Test
@@ -438,6 +444,25 @@ class HudArArrowTest {
     }
 
     @Test
+    fun `AR keeps its view for any maneuver, and gentle exits get the 45 degree icon`() {
+        val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR)
+        val d = Directions(active = true, distance = "300 m", distanceM = 300, turn = "MERGE")
+        // A merge with no side, a ferry, an unknown step: AR, straight on (the map stays).
+        for (t in listOf("MERGE", "FERRY_BOAT", "")) {
+            val tbt = HudOverlayModel.tbtFor(d.copy(turn = t), ar)!!
+            assertEquals(t, HudOverlayModel.TbtStyle.AR, tbt.style)
+            assertEquals(0f, tbt.arAngle)
+        }
+        // No distance yet (AA sends the step before its distance): still AR.
+        assertEquals(HudOverlayModel.TbtStyle.AR, HudOverlayModel.tbtFor(d.copy(turn = "TURN_RIGHT", distance = "", distanceM = null), ar)!!.style)
+        // Gentle maneuvers: the 45 degree arrow to their side, not the fork glyph or the 90 degree turn.
+        for ((t, icon) in listOf(
+            "SLIGHT_RIGHT" to "SLIGHT_RIGHT", "KEEP_LEFT" to "SLIGHT_LEFT", "FORK_RIGHT" to "SLIGHT_RIGHT",
+            "OFF_RAMP_LEFT" to "SLIGHT_LEFT", "TURN_RIGHT" to "TURN_RIGHT", "ROUNDABOUT" to "ROUNDABOUT", "MERGE" to "MERGE"
+        )) assertEquals(t, icon, HudOverlayModel.hudIcon(t))
+    }
+
+    @Test
     fun `chevrons on a roundabout - never entering it, only near the exit`() {
         val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR, chevronsAlways = true)
         val rb = Directions(active = true, distance = "120 m", distanceM = 120, turn = "ROUNDABOUT", exitNumber = 3, turnAngle = 270, roundaboutClockwise = false)
@@ -501,9 +526,11 @@ class HudArArrowTest {
         val leftFlag = leftShape.flag!!
         val rightFlag = rightShape.flag!!
         assertTrue(leftFlag.x < HudArArrow.CX && rightFlag.x > HudArArrow.CX)
-        // Outside the arrow head, not on the centreline of the road. Pennant flies away from it.
-        assertTrue(leftFlag.x < leftShape.head[2])
-        assertTrue(rightFlag.x > rightShape.head[4])
+        // No head on the last stretch: the route ends at the flag, which stands outside the road's
+        // own edge, not on its centreline. Pennant flies away from it.
+        assertTrue(leftShape.head.isEmpty() && rightShape.head.isEmpty())
+        assertTrue(leftFlag.x < leftShape.blue.last().lx && leftFlag.x < leftShape.blue.last().rx)
+        assertTrue(rightFlag.x > rightShape.blue.last().rx && rightFlag.x > rightShape.blue.last().lx)
         assertEquals(-1, leftFlag.pennant)
         assertEquals(1, rightFlag.pennant)
         assertTrue(leftFlag.y in HudArArrow.TOP..HudArArrow.BOTTOM)
