@@ -1,3 +1,54 @@
+## Current handoff — 138 PUBLISHED/OTA VERIFIED; owner downloading on car
+
+Latest owner: "já tô baixando aqui pelo carro ... abrirPulse, esperarpreparar,
+conectariPhone, depoisiniciarteste?" AnswerYESWITHmandatoryfirststep: AFTERinstall138
+restartwholeAndroidcentralwithphonesdisconnected, openImpulse/automaticoptionON,
+wait"Bridgepreparadaparaestasessão", THENiPhoneUSB andprincipalCarPlayDISPLAY0,
+AppleMapsroute, IniciartesteCarPlay, returntoprincipalCarPlay;5minautostop.
+Ownerinstalls/reboots HIMSELF now. Do NOT install/reboot remotely or sendGWMpower.
+No furtherpermission question needed. No physical138success/firstframeclaimed.
+
+FINALsignedMiniAPKsourceef26864ff3f0f1d17c0dd2ae59cd79fe15603ddc SUCCESS5m33s/83tasks
+jobhaval-impulse-133-ef26864ff3f0f1d1-20261025T215416Z-15985. FULLJVMpassedincluding9
+newtests, Release/R8/lint/signingallPASS. APKcode74138/name1.0.0.74.138-preview,
+size81615171, SHAe702d2d788ca0b5ae1aba846f1ef9c11f782c8c7c5cd35c5e6ce1986a6e9db9e,
+certificate5efeunchanged. SourcecontrollerdigestANDallpayloadhashesverified;
+revision74138-cdd0c0a4f94c-fa15c1bedf3c;residencyProtocol1/injectorModeeternalize.
+Artifactoriginalworkspaceartifacts/impulse-74138-resident-release-mini/validation.json.
+Preliminary668APKsuperseded, NOTpublished. No newbuildrequired.
+
+PublicprereleaseANDfixedpreviewmanifest PUBLISHEDandindependentlyVERIFIED:
+https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.138-preview
+APKassetimpulse-74138.apk, release423689881, asset676247235. GitHubdigestANDcomplete
+unauthenticatedHTTPdownloadsha matchsignedMiniAPK. Onlyafterthatfixedapp-latest/
+app-preview.json updated131to138; downloadedmanifestmatchesexactlocalbytes.
+AssetsalsoSHA256SUMS+build-info.json. SourcePRIVATEhaval-impulsebranchpushedprivately;
+no privatecodepushedpublic. Publictagusesexistingpublicmastercommit048749ae,
+followingprior131distributionpattern. No extraGitHubAndroidbuildtriggered.
+Publicationreceipt: originalworkspace test-artifacts/publish-74138-20261025/
+published-release.json; fullqueue/validationreceiptinstall-133-persistent-20261025/
+build-138-queue.json. No rootinstallation or on-carcommands thisturn.
+
+138 IMPORTANT: externalcpbridgeclients intentionally EXIT(-e); no PIDowner is
+requiredaftertransfer. DO NOT use oldinspect_137.py todeclare138failed because
+pidofcpbridgeisempty. Newreadyrequires2freshpost-exitchallengesamples natively
+installed9/pinned/noFailure ANDJavaarmed. Bothnativearmed0andinstalled9 areaccepted
+beforegateack tosupportnaturalcoldattach; actualREADYstillrequiresinstalled9.
+Script.pinprotectedJavaBEFOREcallbackpublication andnativepinremain;dispose revokes
+residenceproofwithoutunpin/revert. Preserveanyunknown/legacymappedcallbacks.
+
+Forfielddiagnosis READcurrentboot/OEMpid+start+installedAPKversionfirst. Readper-role
+launch/exitrootreceipts, app-ownedchallenge+responsefiles PASSIVELY (workerrefreshes
+readiness~30s); neveroverwriteappchallengefilesduringpreparation/observation.
+Lastpeerresponsescanbeolderthan3sbetweenchecks; stalefilealoneNOTproofscriptdied.
+Old137LastFailurepref maypersistafter138success; currentidentity/revision/phase and
+residentproofsdeterminehealth. 137oldboot28c59failurewasafterOWNERmanualreboot.
+Test actual138boot + AndroidReceiver REVOKE/REQUEST/REVOKE and principalD0CarPlay
+before claimingnewJNI/binding/mapvalidation. Linuxrealtests are NOTAndroidJNI:
+4cases passfrozenhelperSHAfc5f06aa... inclactualNativeCallback/replaceFasttrampoline
+and send() AFTERclientexit, plusordinarydetach+pinneddispose rejection.53Python,
+27Node+actualpinnedJavaDEXsignature and4supervisorshellfixtures alsoPASS.
+
 ## Publication authorized — owner will install138 himself
 
 Latest owner: "Pode publicar que instalo. Vou no carro agora". Publish138 once

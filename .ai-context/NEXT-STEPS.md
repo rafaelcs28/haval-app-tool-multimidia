@@ -1,3 +1,13 @@
+## Current status — 138 published/OTA verified, owner installing himself
+
+Finalef26864f signedMini/JVM/Release checks pass; APK e702d2d7... independently
+downloadverified. Publicprerelease1.0.0.74.138-preview andfixedOTApreviewmanifest
+published; owneralreadydownloadingthroughcar. No morebuild/rootinstall/rebootnow.
+Afterupdate ownerrestartscentralphonesoff, waits138residentREADY, theniPhoneUSB/
+primaryD0/AppleMaps/5mintest. Physical138boot,AndroidJNI,mapfirstframepending.
+Externalinjectorsending is NORMALin138; usecurrentboot/residentproofs, notold137
+pidofownercriteria orstalefailureprefs. CurrentHANDOFF hasreceipts/paths/limits.
+
 ## Current status — 137 NOT READY after another boot (28c59)
 
 Latest screenshot is from a NEW kernel, not the validated22c3 session. Current

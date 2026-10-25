@@ -1,3 +1,11 @@
+## 2026-10-25 — 138 signed, published and verified; owner downloading
+
+- Finalef26864f Mini fullJVM/Release/R8/lint/signing passed5m33s/83tasks; exactAPK/controller/payload validated. Code74138, size81615171, SHA e702d2d788ca0b5ae1aba846f1ef9c11f782c8c7c5cd35c5e6ce1986a6e9db9e, production certificate unchanged.
+- Owner explicitly authorized publication and will install himself. Published publicversionedprerelease withAPK/checksum/buildmetadata; private sourcebranch remainedprivate.
+- GitHub assetdigest and full unauthenticatedAPKdownload matchMiniartifact. Then updated fixedpreview manifest131to138 and independently verifiedexactbytes; stablechannel untouched.
+- Owner confirms downloading through car. Procedure starts with wholecentralrestart AFTERupdate, phonesdisconnected, automaticprepON, waitREADY, theniPhoneUSB/principalD0/AppleMaps/test5min. Androidboot/JNI/mapverification remains pending; no oncar mutation thisturn.
+- FinalrealFrida17.5.2/frozenhelper4cases include NativeCallback, replaceFast originaltrampoline andsend afterclientexit plus disposalnegative; native/Javaprotocolroles are notAndroidJNI.53Python/27Node, pinnedDEXsignature and4realsupervisorfixtures pass. No furtherbuildrequired.
+
 ## 2026-10-25 — 138 resident-agent implementation; reboot was manual
 
 - Owner confirmed intentional reboot. Existing137 failure remains on boot28c59; no unexpected reset inferred and no further car action performed while offline.
