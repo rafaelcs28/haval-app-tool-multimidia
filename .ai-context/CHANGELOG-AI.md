@@ -1,3 +1,11 @@
+## 2026-10-25 — 140 signed, published and fully verified
+
+- Exact source3dcbc3b1: full JVM/signedRelease/R8/lint passed on authorizedMini in5m47s/83tasks. APK74140 SHA-256 5588b006d48a0192e0bcf37483daa41a3d476662c0e560595a71e8f6488e7dea, 81616399 bytes, production certificate unchanged.
+- Verified signed APK regeneratedDefault bytes/metadata, bridge method names and all CarPlay payload/source digests. Three theme builds, aggregate checks, six focus tests,46 integrated scenarios and Apex/parity QA passed.
+- Published APK/checksum/buildmetadata; GitHubdigest and whole publicdownload verified. Fixedpreview139→140 updated LAST and exact publicbytes verified; stable untouched.
+- Published only ten compiledtheme artifacts in a new orphan public themes-preview branch; all public bytes verified. Updated catalog delivers matching Default1.4.47/Minimalist1.0.7/ApexGT1.0.16; installed dynamic themes require owner update. Private code/history stays private.
+- No vehicle actions or physical success claim. Owner installs himself; no more140 build/release work pending.
+
 ## 2026-10-25 — Integrate PR165/166 for 140
 
 - Ported exact reviewed steering preservation and global AC focus commits, retaining our UI/v9 changes and all139 CarPlay code. Additive bridge1.0.2 keeps contractv1.0 and older themes compatible.

@@ -1,3 +1,18 @@
+## Current status — 140 published and verified, owner installation pending
+
+140 includes PR165 steering OEM preservation and PR166 global AC focus, retaining
+our v9/UI/139 CarPlay changes. Full Mini JVM/signedRelease/R8/lint and theme suites
+pass. APK public SHA and fixed preview manifest are independently verified; matching
+Default1.4.47/Minimalist1.0.7/ApexGT1.0.16 are published in artifact-only themes-preview.
+Owner installs via Informações → Buscar Atualizações and separately updates installed
+Minimalist/ApexGT in the theme screen. Default is bundled. No more build/release needed.
+
+Physical steering/AC integration and CarPlay boot/JNI/map validation remain pending.
+No remote install/reboot/car commands issued. Preserve OEM double/long overlap and
+missing-backup limits; apply() focus save is acceptance, not synchronous disk proof.
+Use current HANDOFF for immutable source, hashes and publication receipts. Entries
+below are historical.
+
 ## Current status — 139 published; physical validation pending
 
 139 is signed and publicly available through the preview updater; complete public
