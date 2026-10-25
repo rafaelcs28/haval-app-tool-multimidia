@@ -18,7 +18,7 @@ Cluster UI is **theme-owned**. The Android host loads a self-contained `app.html
 
 ### Bridge version vs contract version
 
-1. **Bridge** (`minBridgeVersion` / host `CURRENT_BRIDGE_VERSION = "1.0.1"`)
+1. **Bridge** (`minBridgeVersion` / host `CURRENT_BRIDGE_VERSION = "1.0.2"`)
    - Native `@JavascriptInterface` surface on `window.Android` (`subscribe`, `setClusterBackground`, …).
    - Back-compat polyfills: `CompatTranslationLayer.kt`.
 
@@ -59,6 +59,20 @@ contracts. Default, Minimalist and legacy Sport keep their prior behavior becaus
 subscribe to the new keys. Themes using pressure telemetry or reset must declare
 `<minBridgeVersion>1.0.1</minBridgeVersion>`.
 
+### Bridge 1.0.2: global AC focus
+
+Adds optional global focus read/save methods; see the canonical
+[API reference](../../cluster-widgets/Themes/THEME_GUIDE.md#global-ac-focus-102).
+No prior method, telemetry key, scoped preference, layout or v1.0 event contract changes.
+Older themes remain supported; no compatibility polyfill pretends to persist a global
+selection on hosts that lack the API.
+
+Updated packages are Default1.4.47, Minimalist1.0.7 and ApexGT1.0.16, each requiring
+bridge1.0.2. Default's regenerated HTML/manifest are bundled in the APK. Minimalist and
+ApexGT remain separate OTA packages under `Themes/v1.0/`; updating the APK alone does
+not update their installed theme files. No ThemeManager/download/install mechanism is
+changed by this feature.
+
 ## On-disk layout
 
 ```text
@@ -87,16 +101,16 @@ OTA publish checklist:
 1. Bump `<version>` in the theme’s `theme.xml`.
 2. `npm run build` in the theme source (Parcel + `inline.js`).
 3. Commit **source and** `Themes/v1.0/<theme>/` artifacts.
-4. Push to the branch `ThemeManager` crawls (currently `preview` in `bobaoapae/haval-app-tool-multimidia` — see `ThemeManager.THEME_REPO_URL`).
+4. Publish the approved compiled packages to the artifact-only `themes-preview` branch in `rafaelcs28/haval-app-tool-multimidia` (see `ThemeManager.THEME_REPO_URL`). Keep private source/history out of that distribution branch.
 
 `theme.xml` must ship with `app.html`; the updater compares `<version>` there.
 
 ## Published catalogue sources
 
-The production picker aggregates two deliberately separate paths on the same `preview` branch:
+The production picker aggregates two deliberately separate catalogues:
 
-- `Themes/v1.0` for contract-compatible themes such as Minimalist;
-- `Themes` only for the explicitly allowlisted legacy packages `SportRed` and `SportRedLite`.
+- `cluster-widgets/Themes/v1.0` on `rafaelcs28/haval-app-tool-multimidia:themes-preview` for contract-compatible Default, Minimalist and ApexGT packages;
+- `cluster-widgets/Themes` on `bobaoapae/haval-app-tool-multimidia:preview` only for the explicitly allowlisted legacy packages `SportRed` and `SportRedLite`.
 
 The legacy root is not a second contract catalogue. `ThemeManager` skips every other folder there,
 requires the exact expected folder/name/version/main-file metadata, downloads Sport from that root,

@@ -1,3 +1,9 @@
+## 2026-10-25 — Integrate PR165/166 for 140
+
+- Ported exact reviewed steering preservation and global AC focus commits, retaining our UI/v9 changes and all139 CarPlay code. Additive bridge1.0.2 keeps contractv1.0 and older themes compatible.
+- Rebuilt Default1.4.47, Minimalist1.0.7 and ApexGT1.0.16 from sources, avoiding upstream version downgrades. Theme suites and generated parity pass; early prebuild parity failure resolved by normal regeneration.
+- Prepared matching compiled-only public theme catalog delivery, preserving legacySport source/hashallowlist. No external CI workflow or upstream AI context imported. Full JVM/signedAndroidRelease queued next on authorizedMini only.
+
 ## 2026-10-25 — Review upstream PRs #165 / #166 (no integration)
 
 - Reviewed code and verified successful exact-head fork CI for steering OEM preservation (688b9957) and global AC focus persistence (1228f84c); both remain draft/open.

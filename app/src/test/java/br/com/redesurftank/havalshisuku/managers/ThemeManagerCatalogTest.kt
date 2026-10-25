@@ -8,10 +8,10 @@ import org.junit.Test
 
 class ThemeManagerCatalogTest {
     @Test
-    fun `default catalog uses upstream preview contract v1 release branch`() {
+    fun `default catalog uses matching compiled contract v1 release packages`() {
         assertEquals(
-            "https://github.com/netseek/haval-app-tool-multimidia/tree/" +
-                "feature/new-screen-enhancements-v9/cluster-widgets/Themes/v1.0",
+            "https://github.com/rafaelcs28/haval-app-tool-multimidia/tree/" +
+                "themes-preview/cluster-widgets/Themes/v1.0",
             ThemeManager.THEME_REPO_URL
         )
     }

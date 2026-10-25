@@ -9,9 +9,9 @@ plugins {
 
 val appVersionCode = providers.gradleProperty("appVersionCode")
     .map(String::toInt)
-    .orElse(74139)
+    .orElse(74140)
 val appVersionName = providers.gradleProperty("appVersionName")
-    .orElse("1.0.0.74.139-preview")
+    .orElse("1.0.0.74.140-preview")
 val impulseReportSupabaseUrl =
     providers.gradleProperty("impulseReportSupabaseUrl")
         .orElse("https://eymyarugcfcwkezqjiba.supabase.co")

@@ -1,3 +1,47 @@
+## Current handoff — 140 integrates upstream PR165/166; signed Mini build next
+
+Owner explicitly requested "puxar e gerar140". Branch release/impulse-74140-v9,
+based on private139 plus its publication/review docs. Ported exact public PR165
+688b99571a327f5cf33d00db64c25beda24fc75f and PR166
+1228f84c2e134a22a284545bfd3e9b7824c6ffeb (common base2d4e32e6). Imported production
+logic/tests/docs only, preserving local UI and v9 changes, omitting upstream AI docs
+and external Android CI workflow. No car/installation/reboot operation authorized
+or performed; deliver a signed preview for owner to install himself.
+
+165: preserve live OEM choice when shortDEFAULT; synchronous durable backup before
+99 capture, reread race guards, write confirmation, two per-button overlap warnings.
+Eight bounded files ported and reviewed; source contracts preserve stealth/dispatch.
+166: additive bridge1.0.2 get/save global AC focus using existinglastClusterAcConfig;
+restores before render, keeps selected target through off/unknown power telemetry.
+Existing methods/keys/layout/contractv1.0 unchanged, legacySport untouched. No HVAC
+commands during restoration/save. The preference still uses apply (acceptance, not
+synchronous disk proof). All source/package versions advanced from our newer base:
+Default1.4.47, Minimalist1.0.7, ApexGT1.0.16, allminBridge1.0.2.
+
+Theme npmci (ignore-scripts), three normal theme builds, aggregate npmruncheck,
+ApexGTfullchecks and six helpertests PASS. Aggregate first ran before generatedfiles
+and failed expected oldmanifest parity; after builds rerunPASS. Fullsource/dist/
+APK/catalog HTMLandmanifest parity independently reviewed. QA: additive bridge
+backwardscompatible, existingUIretained, CarPlayandworkflowdiff139EMPTY. Full JVM
+and AndroidsignedRelease must run ONLYauthorizedMini; not oncoordinator.
+
+Delivery: actual prior catalog pointed NETSEEKv9, so private artifacts alone would
+not reach owner. ThemeManager fixedcatalog nowpoints PUBLICdistributionrepo
+rafaelcs28/haval-app-tool-multimidia branchthemes-preview/cluster-widgets/Themes/v1.0.
+Only TEN compiledpackagefiles will be published in a clean artifact-only Gitbranch:
+Default{index.html,theme.xml,thumbnail.png},minimalist{app.html,theme.xml,thumbnail.png,
+car-bg.png},ApexGT{app.html,theme.xml,thumbnail.png}. NEVERpushprivatebranch/history
+public. LegacySportcatalog/hashallowlist unchanged; hostcatalogtest adapted. After
+signedAPKverification publishcompiledcatalog, versionedAPK release, independent
+publicchecks, thenfixedpreviewmanifestLAST. Sourcebranch goesPRIVATEhaval-impulse.
+No new issue/PRcomment to others. Owner normalthemeupdate needed forinstalleddynamic
+packages; Defaultisembedded. Existinghidden customThemeRepoUrlProd mayoverride
+packagedownload (noevidenceownerhasit); do not expand into unrelatedrefactor.
+
+Next: finaldiff/sourceaudit immutablecommit, submit74140/1.0.0.74.140-preview signed
+Mini, fetchNEWdirectory, validatecert/version/controllerandpayload/themeassetdigests.
+PhysicalCarPlayboot/JNI/map remains pending from139;140doesnotclaimtofixthatpath.
+
 ## 2026-10-25 — Read-only review of upstream PRs 165 and 166
 
 Owner asked to look at bobaoapae/haval-app-tool-multimidia PRs 165 and 166. Reviewed
