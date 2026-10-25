@@ -1,3 +1,168 @@
+## ACTIVE 2026-10-25 18:05 UTC — FINAL133 installed; clean boot approval pending
+
+CURRENT FUNCTIONAL SOURCE04ee94e27f50df9c185315172b97ab38cae08c00, branch
+release/impulse-74133-v9. Latest signedMiniRelease
+haval-impulse-133-04ee94e27f50df9c-20261025T175610Z-19343 SUCCESS5m17/83tasks.
+FETCHED+VALIDATED+INSTALLED sameversion74133/1.0.0.74.133-preview. Actualinstalled
+base.apk SHA e531c2a1bc4255ef0b704827903ba8c238533299a94327d54823547fdd984811,
+81582379bytes, productioncert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Artifactdir /root/projects/haval-impulse/artifacts/impulse-74133-procfs-release-mini.
+Installationreceipt delta-install-20261025T180255Z... under private133directory;
+helperstdoutconfirmed actualinstalledbase.apkSHA +Success. Publictempblobremoved.
+AllAndroid/nativebuildsMiniONLY; noVPSfallback. Boot/mapphysicalvalidationpending.
+
+Latestfunctionalfixboundedprocfsread: REALFridaFile.readText()withoutn returnsEMPTY
+on/proc/self/stat andboot_id despiteexplicitread4096return288/37bytes. Primary
+file-staged-result.txt usesdisposablesleep9866/root(noOEMtouch), stagecomplete.
+Thusautomaticendpointfailedbeforepublishingloaded: invalidkernelbootidentity.
+REGEXHYPOTHESISWASFALSE: actualAPKregexsingle92bytecorrect. eab1192d testsprovedit;
+04ee94e2realfixusesreadText(max+1),boot128/stat4096,oversize/typeguards+close.
+19Pythonendpoint/assets testsPASS. Testonlyeab+dacf25;905JVM0fail1skiplastMini9df,
+latest04eeMiniReleasepassesDebugJVMagain. FullCarPlayregressionguardlastPASS.
+
+CRITICAL CURRENT LIVE SESSION (old9dfpayload): kernelboot79f7b4b4-483e-4199-aba2-
+122e8346027f, OEM20459/start1131261, Nativeowner20605 INSTALLED-PINNED9/pinnedtrue/
+failureNULL. Nativecode/callbacksVALID; preserve20605andOEM. Javaowner22512alive
+butoldprocess-prefixfailedbeforeloaded/receiver dueimplicitprocfsreadEMPTY; preserve
+ittoo pendingcleanboot (nonewduplicateJavaarchive/unload). NoSurfacemaplease or5min
+started. OldsessionnowpreviouspayloadrevisionafterlatestAPK; managerpreservesmapping
+andawaitsnewboot. DO NOTexplicitretry/killOEM/killNativeowner whilepinned.
+CurrentautoPrefTRUEpersists; controllerwaitsafteroldsession. FreshP0throughinstalls,
+userconfirmedNOphones. RealOEMBTprobeall5supportedprofilesstate0SUCCESS+aggregate
+empty, noactiveprojection. Firmwarefingerprintguardsinstalled. Parent0711DACfix
+andowneroptionalNULfixalreadyinstalled/proven; oldfailed22453wasguardedTERMonly
+prepublication, confirmedexitedbeforelaterrealNative9success. ItisNOTliveanymore.
+
+ROOT HAS ASKED USER via async tool at18:05: "Posso reiniciar o Android da central
+agora ... telas e áudio ..." choicesPode reiniciar agora/Prefiro reiniciar depois.
+APPROVALISREQUIREDANDPENDING; elapsedtimeisNOTapproval. NeednewfreshP0+noprojection
+immediatelybeforeanyauthorizedHUreboot. NoGWMvehiclepowercommands. Userdeferredmap
+anddrivingtest. Ifapproved, rebootHUonly, reconnectboundedread-only afterboot, wait
+localselfbootstrap, inspect_133.py LATESTvalidation withnewlabel. RequireNEWbootid,
+Nativeinstalled-pinned9+Javaarmed+bothliveowners. Preserveanypublishedcallbacks.
+Ifownerdefers, finishdocs/sourcepush+finalhonestlyallinstalled/autoconfigsaved but
+fullboot/Javaarm/mapvalidationpending; don'tclaimbridgecompletelyreadycurrentboot.
+
+CurrentGitfunctional04eecommitted,4AIcontextfilesmodified. Pushfinalbranchtoorigin
+personal rafaelcs28/haval-impulse (previouspushonlya294); noPR15/OTA/tag/publicrelease.
+UpdateoriginalnonGit/rootprojectAIcontext withfinalcurrentstate forfuturehandoff.
+Privateevidence/helpers /root/projects/haval-impulse/test-artifacts/
+install-133-persistent-20261025. Keyfinal-native receipt final-bootstrap-receipt.json
+showsNative9+bothownersbutJavafalse (OLD9dfsession). Don'tmistakeitforfinalbootpass.
+
+## ACTIVE 2026-10-25 17:22 UTC — final DAC/owner fix building, car 133 installed
+
+CURRENT SOURCE9df7dd247f6a759557f309f1260ac34ca9aeb277, release/impulse-74133-v9.
+Mini signedRelease job haval-impulse-133-9df7dd247f6a7595-20261025T172142Z-16514
+RUNNING. Control digest37b9d1476d3e99e59973924f3f27a4d709b551d6464adcfa3c0fd35f6719d5a7.
+NoVPSAndroidbuilds. LastsuccessfulMiniRelease21d5e55d(5m34/83tasks), installed
+sameversion133 SHA b94ee548f201f43031c5c59097b24bddb0d78ab4b38763873fc01a4cdedc8b4c.
+Signedcert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Priorbaseline133APK SHA86426a2d416c08130f52c56538821a5e285316d7c84f3743b9e5737b84d2aa26
+is STILL remote /data/local/tmp/impulse-74133-reviewed/app.apk; useasdeltaBASE.
+
+PhysicalBTproblem SOLVED in21d: DCMtx45NULL=emptyonlyexactfirmware, EMPTYlist=pending;
+retainedOFFLINEAndroidBTREADYrecord +noactivecaps admittedONLYafterOEMBTrawBinder
+provesall5realprofileproxiesSUCCESS/state0, stablecachedaddressset andaggregateempty.
+REALownAppreadonlyprobe confirmsall5state0/SUCCESS1,aggregate(-1)empty SUCCESS1,
+adapterON12/code0quirk. UserexplicitlyconfirmsNOphonesconnected. ExactDCM/BTfirmware
+hashespinned. ConnDevice FQCNkeptforOEMBundle. SourceData/Javawireunchanged.
+
+FirstREALautoprep21d DID passP0/BTquiet and safewarmrestartedOEM6137->22287,
+start952661, sameboot79f7b4b4-483e-4199-aba2-122e8346027f. Thenfailed BEFOREnative
+publication. ROOTCAUSEparentversions/runtime0700ROOT underumask077: targetUID1000
+CapEff0 cannotreadbridgeorwritestatus. NoBridgeDLLmapped, no cold-state; emptylog,
+ownrootCLI22453/start952785 alive argsoldrevision74133-b311fc614550-07956bb33df3.
+SourcecoldarmfileBytes BEFOREModule.load/anypin/hook proven byNodeEACCESfixture.
+CurrentparentsareNOTyetfixedoncar. Rootguardedcleanup ofONLY22453 runninglocal
+execsession58463 via private stop-unmodified-client.sh; checkresultbeforeproceed.
+NEVERkillifbridge/pinnedstate appears. TargetOEM22287 mustremainuntoucheduntilnew
+managerexplicitguardedretry. NoSurface/maplease, noGWMpower orfullcentralreboot.
+
+9df fixesall3parents ROOT/versions/runtime ROOT:ROOT0711 BEFOREexisting-version
+branch; childSystem permissionsunchanged. Alsoownerloop exactargs normalizesoptional
+finalNUL (real/proc22453cmdlinewasunterminated; oldtrailing-spaceprefixwouldmissowner).
+Persistentfailuremessage/stack nowinsafetyfile; DUMPconfigreceiver optionalboolean
+extra_retry=true callsSAMEguardedUIreset(no mappings/no owners; freshworkerP0checks).
+25lifecyclePythonPASS inclREALUID1000DACreproductionandowner4valid/24rejectcases.
+NewBTpureJUnit11passedpreviousMini; needfinalMiniRelease/JVM.
+
+NEXT: fetch9dfMiniRelease NEWdest, validate_apk.py --release exactsourcecommit.
+Build transportdelta using PRIVATE build_transport_delta.py baselineold86426APK
+->newsignedAPK ->newdir. install_delta_133.py baselineLocal newLocal deltadir
+validatesprod/hashes/reconstructsMINIbytes, freshP0/noprojection/install-rsameversion,
+verifiesactualinstalledAPKhash; transfersONLY~4MBgzip viaexistingtemporaryHTTPS.
+First21d update successfullyusedthishelper(rootreviewed,18offlinechecks). DO NOT
+retransfer69MBunlessnecessary. CurrenthelperBASEfixed86426andremotebaseunchanged.
+Afternewinstall, rootbroadcast CONFIGURE_CARPLAY_BRIDGE --ez extra_enabled true
+--ez extra_retry true -p package; thisexplicitlyclearsoldfailedbudgetONLYifno
+mappedbridge/owner. Wait20sec, inspect_133.py NEWvalidation --label final-ready;
+requireinstalled-pinned9,pinnedtrue,NULLfailure,Javaarmed,bothliveownersidentity.
+VerifyApprestart ONLYP0/noproj: ownImpulseforce-stop+start, preserveOEM/injectors.
+Fullcentralboot/maptestdeferredtolaterowner. Neverclaimmapfirstframevalidated.
+
+Private helpers/evidence /root/projects/haval-impulse/test-artifacts/
+install-133-persistent-20261025. Helpers inspect_133, validate_apk, delta builder,
+delta installer allready. Ifnewattemptfails, newSafetyJSONpersistentfailurestack.
+RepoAIcontextmodifieduncommitted; code9dfcommitted. Personaloriginbranchpushedonly
+a29444d2 earlier; pushfinalcode+docsatcompletion. Upstreamv9tip5ccd91e2all6today
+alreadymergedd6e2d216 andverifiedlatest. NoPR15/OTA/tag/publicrelease scope.
+
+## ACTIVE 2026-10-25 16:04 UTC — final Release retry, central still 132
+
+Current Android/build source a29444d257af49eac0ce2bc7448f49d5b02b291a.
+Mini Debug6124febc SUCCESS2m27s/49tasks; fullJVM894 total,893pass/1skip,
+including15bootstrappolicy+12quiescencewindow. DebugAPK verified assets/ELF/ESM,
+156767461bytes, SHA2c620e2835c5c57d8f04fcd66bad8e01fd469afea1229ea4e61531a93e9edd81,
+notproduction-signed and NOTinstalled. Private fetchedDebugdir
+artifacts/impulse-74133-persistent-debug-mini.
+
+FirstRelease6124febc failedafterR8 at generateReleaseLintVitalReportModel:
+implicit generated-assets dependency. a29444d2 explicitly links ALL variantlint
+consumers to asset generator; no Android/runtime source changes from Debugpass.
+Audited control digest37b9d1476d3e99e59973924f3f27a4d709b551d6464adcfa3c0fd35f6719d5a7.
+Current signedRelease74133 job
+haval-impulse-133-a29444d257af49ea-20261025T160032Z-30377 RUNNING on Mini.
+No VPS Android builds. No133 install or bridge enabled yet.
+
+Owner confirms central online waiting. Readonly freshP0; boot79f7b4b4,
+OEM6137/start2272, no projectiontasks, mountedserviceMD5b61 exact.
+Currentvehicle132. Do NOT repeat oldmanualinjection. Await signedRelease,
+fetchNEWdir, verify using private install-133-persistent-20261025/validate_apk.py
+(--release --source-commit exactsha), prepare_https.py temporary artifact then
+install_133.py APK transport-https.json (freshP0/no projection installguards).
+Enable via DUMP-protected CONFIGURE_CARPLAY_BRIDGE with extra_enabled true;
+inspect_133.py validation.json verifies nativeinstalled-pinned9/Javaarmed/owners.
+Only aftersuccessfulready, safeP0/no projection, verifyImpulseapprestart survives
+withouttouchingOEMowners. Fullcentralboot/map/driving validation deferred.
+Do not GWMpoweron/off. NoOTA, tag, publicrelease or PR15 update this scope.
+
+## ACTIVE 2026-10-25 15:51 UTC — final candidate 133 on Mini; central online
+
+Current source 6124febc, release/impulse-74133-v9. User confirms central online
+waiting for installation. Read-only telemetry fresh P/0. Still production74132;
+no133 installed yet. No map/driving test or central reboot authorized this turn.
+
+Mini attempts: 5bcb9fc9 rejected SourceSet Provider (fixed concrete file path);
+3b218741 rejected private Shizuku.newProcess (fixed public IShizukuService Binder,
+allpipeFDs closed); a73bc98c compiled+packaged native+assets+APK and ran893JVMtests,
+1HUDtest failed/1skipped. Root cause real v9 integration regression: unconditional
+AR straight-arrow fallback fabricated a maneuver for text-only CarPlay. 6124febc
+restores text-only handling, preserves new AA cases, adds boundary test. NewMini
+Debug pending, signedRelease after validation. Do not install earlierfailedsource.
+
+Latest offline checks103NodePASS,42scopedPythonPASS,17lifecyclePythonPASS,
+fullregressionlockPASS; generic59Python50pass9fixture-dependent skips. Audited
+build-control digest07e4947a8985e28516cf19d853769e95231465703425a46d431e188b0a59af01.
+No Android, Gradle, Kotlin or native compilation on VPS.
+
+Pending: successful finalMiniDebug/JVM and productionRelease74133; verify APK
+signature/hashes/version/OEMassets/embeddedbundle; freshP0/no projection install;
+DUMP-protected CONFIGURE_CARPLAY_BRIDGE boolean extra_enabled=true; inspect local
+bootstrapstate/owners withoutstartingmaplease. Physicalcoldboot/drivingtestlater.
+Private install/evidence staging /root/projects/haval-impulse/test-artifacts/
+install-133-persistent-20261025. Preserve all productionsettings/Minimalist/noOTA.
+
 ## ACTIVE 2026-10-25 — version 133 persistent local bootstrap + latest v9
 
 User deferred driving tests and explicitly requested a new installed version that
