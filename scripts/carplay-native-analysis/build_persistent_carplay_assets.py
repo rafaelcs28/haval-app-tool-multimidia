@@ -25,6 +25,7 @@ SOURCE_FILES = (
     "build_endpoint_agent.py",
     "cold_passthrough_controller.py",
     "make_cold_launcher.py",
+    "impulse_residency_peer.js",
     "cold_oem_interceptor.js",
     "carplay_clean_map_endpoint.js",
     "testdata/oem-cold-profile-v3.json",
@@ -39,6 +40,7 @@ BOOTSTRAP_SOURCE_FILES = (
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBootstrapRoot.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBridgeBootstrapPolicy.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlaySafetyPublicationGate.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayResidentProof.kt",
 )
 ASSET_FILES = (
     "libcarplay_video_bridge.so",
@@ -105,6 +107,8 @@ def build(native_lib: Path, output: Path, version_code: int = 74136) -> dict:
         read_endpoint_bundle(stage / "endpoint.js", bridge_path=bridge_path, status_mode=ENDPOINT_STATUS_PROCESS)
         manifest = {
             "schema": 1,
+            "residencyProtocol": 1,
+            "injectorMode": "eternalize",
             "versionCode": version_code,
             "revision": revision,
             "remoteDirectory": remote_directory,

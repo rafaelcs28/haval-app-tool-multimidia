@@ -1,4 +1,44 @@
-## Current handoff — NEW BOOT 28c59: 137 NOT READY; owner retry screenshot
+## Current handoff — 138 resident agents implemented; Mini build pending, car offline
+
+Owner CONFIRMED manually restarted central after137. This is automatic bootstrap
+failure after deliberate reboot, not evidence of spontaneous whole-HU reset.
+Current installed137/boot28c59 remains failed/mapped; no on-car changes this turn.
+Last telemetry stale15+minutes, gear/speedunknown; Telnet timeout. Do not reboot,
+reset/reinject/kill existing mapped session. P/speed remain removed from PREPARATION.
+
+138 removes external injector lifetime dependency with SAME pinnedFrida17.5.2
+raw ELF (bdfa97cdd84ca678c5e5eea9eb6625c9528acff32b4f9413f1e5c58a3d15222e).
+Exact binary has17.5.2/-e help strings. Native+Java launch-e under detached one-shot
+supervisor, recordactualargvSHA/PID/start/exit atomically, thenrequire fresh challenge
+AFTERclientexit with2advancingsamples fromresidentOEMagents. NativeARMED proof
+BEFOREcoldgaterelease; READY requiresnative9/pin/nofailure plusJavaarmedproof.
+New helper impulse_residency_peer.js and pureKotlin CarPlayResidentProof.kt. Peer
+validatesactualprocidentity, compiledpaths/scriptSHA; dispose terminallyinvalidates
+proof evenifordinaryunloadwaitsforpin. Java wrapper now pins BEFOREautoarm/callbacks;
+no dispose/failure unpin. Existing pins/mappings, DCMquiescence, tickets, attempt
+circuit and AndroidAuto isolation remain. Neveradopt old137statesasresident138.
+
+READ-ONLY architecture/code audits completed bymapper/controller/QA beforechanges.
+53Python checks pass(28asset/wrapper/launcher+25legacy lifecycle); Nodepeer15,
+endpoint12 and realpinnedJava7.0.13 DEXsignature tests pass. Nine newJVMtests ready,
+NOT run locally (Mini ONLY). RealFrida17.5.2 tests on OWN disposableLinuxprocesses
+passed4cases with exacthelperSHAfc5f06aa122270ade0e8bc927bd66be121407399de0c66736b30eef1844290b4:
+APIeternalize/detach/clientEXIT thenfreshnonces2xrole and actualNativeCallback+
+replaceFast/originaltrampoline stillwork; ordinarydetach+pinneddispose rejectsnew
+nonce. 'java' role here is protocolrole, NOTAndroidJava/JNI. Initial libcabsfixture
+was too short tointercept; correctedtosacrificialRXfunction; finalallcasesPASS.
+Actualgeneratedsupervisortemplate4Linuxfixtures passed(success0/error17/TERM143/
+KILL137); noAndroidcompile. Private receipts under originalworkspace
+ test-artifacts/residency-138/. No Android/Gradle/Kotlin/nativeAndroid build onVPS.
+
+Next: finish exactsource review/audit immutableGitcommit, submit138ONLYauthorized
+MacMini signedqueue, fetchintoNEWdirectory, verifyAPKversion/cert/controllerdigest.
+Prepare exactdelta/guarded137to138install OFFLINE. Carstill137, not138. Physical
+-e CLI/coldboot, native9+JavaJNIcallbacks and map/frame/type111 remain pending.
+No PR/OTA/tag/GWMpower or new vehicle commands. Allsource inworktree133,
+branchrelease/impulse-74138-v9; no sourcecommityet.
+
+## Previous handoff — NEW BOOT 28c59: 137 NOT READY; owner retry screenshot
 
 Owner sent screenshot "A sessão atual deve terminar antes de repetir o preparo".
 Do NOT interpret this as current137ready or old UI text alone. Current kernel

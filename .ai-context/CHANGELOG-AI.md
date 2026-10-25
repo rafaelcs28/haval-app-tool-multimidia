@@ -1,3 +1,11 @@
+## 2026-10-25 — 138 resident-agent implementation; reboot was manual
+
+- Owner confirmed intentional reboot. Existing137 failure remains on boot28c59; no unexpected reset inferred and no further car action performed while offline.
+- Replace external-client liveness with Frida-e and fresh post-exit, identity-bound two-sample proof. Native proof precedes gate release; native9/pinned plus Javaarmed proof precede READY.
+- Add one-shot supervisor receipts, atomic challenge/response and terminal dispose revocation. Pin Java before callback publication; never unpin/reinject on failure. P/speed removal and phone/projection guards retained.
+- Real Frida17.5.2 disposableLinux tests pass4cases: callbacks/trampolines survive clientexit; ordinarydetached pinned script rejects a fresh challenge. Supervisor4fixtures and53Python/27Node cases pass; exactDEXsignature regression passes. Android/JNI/OEM/map validation is pending.
+- Defaults advanced to74138 /1.0.0.74.138-preview; nine newJVMtests and signedRelease await authorizedMini. NoVPSAndroidbuild, installation, reboot or vehiclepower action.
+
 ## 2026-10-25 — 137 new boot loses preparation owner; read-only diagnosis
 
 - Screenshot retry warning belongs to NEW kernel28c59/OEM7707, not previously validated22c3/OEM15640. Current native state armed0/pinned with no injector or Java owner; failed circuit remains. No P/speed prerequisite restored.

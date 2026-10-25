@@ -9,9 +9,9 @@ plugins {
 
 val appVersionCode = providers.gradleProperty("appVersionCode")
     .map(String::toInt)
-    .orElse(74137)
+    .orElse(74138)
 val appVersionName = providers.gradleProperty("appVersionName")
-    .orElse("1.0.0.74.137-preview")
+    .orElse("1.0.0.74.138-preview")
 val impulseReportSupabaseUrl =
     providers.gradleProperty("impulseReportSupabaseUrl")
         .orElse("https://eymyarugcfcwkezqjiba.supabase.co")
@@ -279,7 +279,8 @@ mapOf("Debug" to "Debug", "Release" to "RelWithDebInfo").forEach { (buildType, n
         inputs.files(fileTree(layout.projectDirectory.dir("src/main/java/br/com/redesurftank/havalshisuku")) {
             include("managers/CarPlayBridgeBootstrapManager.kt", "managers/CarPlayBridgeQuiescence.kt",
                 "managers/CarPlayBluetoothQuiescence.kt", "experimental/CarPlayBootstrapRoot.kt",
-                "experimental/CarPlayBridgeBootstrapPolicy.kt", "experimental/CarPlaySafetyPublicationGate.kt")
+                "experimental/CarPlayBridgeBootstrapPolicy.kt", "experimental/CarPlaySafetyPublicationGate.kt",
+                "experimental/CarPlayResidentProof.kt")
         })
         inputs.files(fileTree(layout.buildDirectory.dir("intermediates/cxx/$nativeConfig")) {
             include("**/obj/arm64-v8a/libcarplay_video_bridge.so")

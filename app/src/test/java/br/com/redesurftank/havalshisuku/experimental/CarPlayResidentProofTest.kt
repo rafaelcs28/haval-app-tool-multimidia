@@ -1,0 +1,138 @@
+package br.com.redesurftank.havalshisuku.experimental
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class CarPlayResidentProofTest {
+    private val boot = "00112233-4455-6677-8899-aabbccddeeff"
+    private val ticket = "10112233-4455-6677-8899-aabbccddeeff"
+    private val instance = "20112233-4455-6677-8899-aabbccddeeff"
+    private val nonce = "30112233-4455-6677-8899-aabbccddeeff"
+    private val binding = CarPlayResidentProof.Binding("native", boot, 1234, 5678, "74138-123456789abc-abcdef012345",
+        ticket, instance, "a".repeat(64), "/data/local/tmp/impulse-carplay/runtime/$boot-1234-5678",
+        "/data/local/tmp/impulse-carplay/versions/74138-123456789abc-abcdef012345")
+    private fun launch(b: CarPlayResidentProof.Binding = binding) =
+        CarPlayResidentProof.Receipt(b, 2345, 6000, CarPlayResidentProof.commandSha256(b))
+    private fun exit(b: CarPlayResidentProof.Binding = binding) = launch(b).copy(exitCode = 0, exitElapsedMs = 10_000)
+    private fun challenge() = CarPlayResidentProof.Challenge(instance, nonce, 10_100)
+    private fun sample(sequence: Long, elapsed: Long) = CarPlayResidentProof.Sample(sequence, elapsed,
+        1_000_000 + elapsed, "armed", 0, true, true)
+    private fun response(b: CarPlayResidentProof.Binding = binding) = CarPlayResidentProof.Response(b, nonce, false,
+        listOf(sample(1, 10_200), sample(2, 10_450)))
+    private fun verify(b: CarPlayResidentProof.Binding = binding,
+        start: CarPlayResidentProof.Receipt = launch(b), end: CarPlayResidentProof.Receipt = exit(b),
+        challenge: CarPlayResidentProof.Challenge = challenge(), response: CarPlayResidentProof.Response = response(b),
+        now: Long = 10_500, wall: Long = 1_010_500) =
+        CarPlayResidentProof.checkResponse(b, start, end, challenge, response, now, wall)
+    private fun rejects(action: () -> Unit) {
+        try { action(); fail("Invalid residency proof accepted") }
+        catch (_: IllegalArgumentException) {}
+    }
+
+    @Test fun onlyPostExitFreshAdvancingSamplesProveNativeResidence() {
+        val proof = verify()
+        assertTrue(CarPlayResidentProof.nativeArmed(proof))
+        assertFalse(CarPlayResidentProof.nativeInstalled(proof))
+        val installed = response().copy(samples = response().samples.map { it.copy(phase = "installed-pinned", replacements = 9) })
+        assertTrue(CarPlayResidentProof.nativeInstalled(verify(response = installed)))
+    }
+
+    @Test fun eachIdentityFieldMustMatchReceiptAndResponse() {
+        val variants = listOf(binding.copy(role = "java"), binding.copy(bootId = ticket),
+            binding.copy(targetPid = 1235), binding.copy(targetStartTime = 5679),
+            binding.copy(revision = "74137-123456789abc-abcdef012345"), binding.copy(ticket = boot),
+            binding.copy(instance = nonce), binding.copy(scriptSha256 = "b".repeat(64)),
+            binding.copy(runtimeDirectory = binding.runtimeDirectory + "-other"),
+            binding.copy(payloadDirectory = binding.payloadDirectory + "-other"))
+        for (bad in variants) {
+            rejects { verify(response = response().copy(binding = bad)) }
+            rejects { verify(start = launch().copy(binding = bad)) }
+            rejects { verify(end = exit().copy(binding = bad)) }
+        }
+    }
+
+    @Test fun exactExitedChildAndArgumentsAreMandatory() {
+        for (bad in listOf(launch().copy(childPid = 0), launch().copy(childStartTime = 0),
+            launch().copy(childStartTime = 5677), launch().copy(commandSha256 = "0".repeat(64)))) {
+            rejects { verify(start = bad) }
+        }
+        for (bad in listOf(exit().copy(childPid = 2346), exit().copy(childStartTime = 6001),
+            exit().copy(exitCode = null), exit().copy(exitCode = 143), exit().copy(exitCode = 137),
+            exit().copy(exitElapsedMs = null), exit().copy(exitElapsedMs = 0),
+            exit().copy(commandSha256 = "0".repeat(64)))) rejects { verify(end = bad) }
+        rejects { verify(start = launch().copy(childStartTime = 5677), end = exit().copy(childStartTime = 5677)) }
+        rejects { verify(challenge = challenge().copy(issuedElapsedMs = 9999)) }
+        rejects { verify(challenge = challenge().copy(issuedElapsedMs = 10_501)) }
+    }
+
+    @Test fun replayDisposedOrIncompleteResponseNeverProvesResidence() {
+        for (bad in listOf(response().copy(nonce = ticket), response().copy(disposing = true),
+            response().copy(disposing = null), response().copy(samples = emptyList()),
+            response().copy(samples = response().samples.take(1)),
+            response().copy(samples = response().samples + sample(3, 10_500)))) rejects { verify(response = bad) }
+        rejects { verify(challenge = challenge().copy(instance = ticket)) }
+        rejects { verify(challenge = challenge().copy(nonce = "")) }
+    }
+
+    @Test fun bothSamplesMustAdvanceAfterChallengeAndRemainFresh() {
+        val first = response().samples[0]
+        val second = response().samples[1]
+        for (bad in listOf(first.copy(sequence = 0), first.copy(elapsedMs = 10_099),
+            first.copy(elapsedMs = 7500 - 1), first.copy(wallMs = 1_007_499),
+            first.copy(elapsedMs = 10_501), first.copy(wallMs = 1_010_501))) {
+            rejects { verify(response = response().copy(samples = listOf(bad, second))) }
+        }
+        for (bad in listOf(second.copy(sequence = 1), second.copy(sequence = 0), second.copy(elapsedMs = 10_299))) {
+            rejects { verify(response = response().copy(samples = listOf(first, bad))) }
+        }
+        val boundary = response().copy(samples = listOf(sample(1, 10_100), sample(2, 10_200)))
+        verify(response = boundary, now = 13_100, wall = 1_013_100)
+        rejects { verify(response = boundary, now = 13_101, wall = 1_013_101) }
+    }
+
+    @Test fun everyNativeSampleRequiresPinExactPhaseCountAndNoFailure() {
+        val valid = sample(1, 10_200)
+        for (bad in listOf(valid.copy(phase = "failed-pinned"), valid.copy(phase = "none"),
+            valid.copy(pinned = false), valid.copy(failureAbsent = false), valid.copy(replacements = 9),
+            valid.copy(phase = "installed-pinned", replacements = 8),
+            valid.copy(phase = "installed-pinned", replacements = -1))) {
+            rejects { verify(response = response().copy(samples = listOf(bad, sample(2, 10_450)))) }
+        }
+    }
+
+    @Test fun javaResidenceNeedsTwoArmedSamplesFromJavaRole() {
+        val java = binding.copy(role = "java")
+        val ready = response(java).copy(samples = response().samples.map { it.copy(armed = true) })
+        verify(b = java, response = ready)
+        for (index in 0..1) rejects {
+            verify(b = java, response = ready.copy(samples = ready.samples.mapIndexed { i, value ->
+                if (i == index) value.copy(armed = false) else value
+            }))
+        }
+    }
+
+    @Test fun supervisorUsesExactEternalizeParametersAndWaitsWithoutRetry() {
+        val arguments = CarPlayResidentProof.arguments(binding, "${binding.payloadDirectory}/cpbridge-inject")
+        assertEquals(listOf("-p", "1234", "-s", binding.scriptPath, "-R", "qjs", "-e", "-P"), arguments.drop(1).dropLast(1))
+        assertEquals("{\"impulseResidency\":" + CarPlayResidentProof.bindingJson(binding) + "}", arguments.last())
+        val shell = CarPlayResidentProof.supervisor(binding)
+        assertTrue(shell.contains("wait \"\$cpb_child\""))
+        assertTrue(shell.contains("sha256sum /proc/\$cpb_child/cmdline"))
+        assertTrue(shell.contains("childStartTime"))
+        assertTrue(shell.contains("exitElapsedMs"))
+        assertFalse(shell.contains("kill "))
+        assertEquals(1, Regex("'" + Regex.escape("${binding.payloadDirectory}/cpbridge-inject") + "'").findAll(shell).count())
+        rejects { CarPlayResidentProof.arguments(binding, "bad'; touch /tmp/injected; '") }
+        rejects { CarPlayResidentProof.bindingJson(binding.copy(revision = "bad'; touch x")) }
+    }
+    @Test fun generatedSupervisorPassesHostShellSyntaxCheck() {
+        val file = java.io.File.createTempFile("carplay-residency-", ".sh")
+        try {
+            file.writeText(CarPlayResidentProof.supervisor(binding))
+            val process = ProcessBuilder("sh", "-n", file.absolutePath).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(output, 0, process.waitFor())
+        } finally { file.delete() }
+    }
+
+}

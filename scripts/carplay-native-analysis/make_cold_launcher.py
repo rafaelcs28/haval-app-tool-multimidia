@@ -84,6 +84,15 @@ def build_launcher(
     const impulseOptions = {canonical_json(options)};
     const impulseInstaller = rpc.exports;
     const impulseStatusPath = {json.dumps(status_path)};
+    const impulseResidency = createImpulseResidencyPeer('native', impulseOptions.bridgePath,
+        () => impulseInstaller.status());
+    impulseInstaller.init = (_stage, parameters) => {{
+        if (parameters && parameters.impulseResidency !== undefined) {{
+            impulseResidency.init(parameters.impulseResidency);
+        }}
+        return impulseInstaller.status();
+    }};
+    impulseInstaller.dispose = reason => impulseResidency.dispose(reason);
     let previous = null;
     const publish = status => {{
         const encoded = JSON.stringify(status);
@@ -114,7 +123,8 @@ def build_launcher(
 }})();
 """
     boundary = json.loads((Path(__file__).resolve().parent / "testdata/android9-linker-profile.json").read_text())
-    return "const impulseColdLoadProfile = " + canonical_json(boundary) + ";\n" + interceptor_source.rstrip() + auto_arm
+    residency = (Path(__file__).resolve().parent / "impulse_residency_peer.js").read_text(encoding="utf-8")
+    return residency + "\nconst impulseColdLoadProfile = " + canonical_json(boundary) + ";\n" + interceptor_source.rstrip() + auto_arm
 
 
 def main() -> int:

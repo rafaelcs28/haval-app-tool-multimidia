@@ -68,6 +68,7 @@ process.stdout.write(JSON.stringify(results));
 
     def test_revision_digest_covers_program_profile_and_generator_changes(self):
         essential = {'cold_oem_interceptor.js', 'carplay_clean_map_endpoint.js', 'make_cold_launcher.py',
+                     'impulse_residency_peer.js',
                      'cold_passthrough_controller.py', 'testdata/oem-cold-profile-v3.json',
                      'testdata/android9-linker-profile.json', 'agent/package.json', 'agent/package-lock.json'}
         self.assertTrue(essential.issubset(assets.SOURCE_FILES))

@@ -1,4 +1,4 @@
-# Preparo CarPlay local — versões 133 a 137
+# Preparo CarPlay local — versões 133 a 138
 
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote
@@ -10,9 +10,9 @@ persistida no armazenamento protegido do dispositivo; vem desativada por padrão
 O receiver de configuração exige a permissão DUMP e um boolean explícito.
 
 Os payloads ficam em diretórios imutáveis por revisão. Os estados de execução
-ficam separados por boot UUID, PID OEM e starttime do kernel. Dois injectors com
-nome dedicado, desligados do terminal e da vida da Activity, mantêm os callbacks
-nativo e Java vivos. Atualizar o APK não sobrescreve a biblioteca de uma sessão
+ficam separados por boot UUID, PID OEM e starttime do kernel. Até a 137, dois injectors com nome dedicado mantinham os callbacks nativo e Java
+vivos. Na 138, os agentes permanecem no processo OEM após o encerramento dos
+clientes de injeção. Atualizar o APK não sobrescreve a biblioteca de uma sessão
 existente. Não matar, descarregar ou substituir callbacks publicados.
 
 A partir da versão 137, a preparação não consulta câmbio nem velocidade e não
@@ -62,3 +62,41 @@ Se o telefone conectar antes das condições de preparação, o CarPlay original
 continua disponível e o preparo aguarda a desconexão. A versão não promete que um
 primeiro autoconnect seja interceptado em todos os boots. Validação de cold boot
 real e mapa limpo continua separada da compilação e dos testes de política.
+
+
+## Residência no processo OEM — 138
+
+Após um reinício manual da 137, o agente nativo ficou em `armed` com a biblioteca
+mapeada, mas seu cliente externo já não estava presente. O recibo antigo de preparo
+não descrevia esse novo boot. A causa exata da saída do cliente não foi comprovada.
+A versão 138 elimina a dependência da vida desse processo auxiliar: usa o modo
+`-e` do mesmo executável Frida 17.5.2 já empacotado. O mecanismo mantém o script
+no processo alvo após o cliente encerrar, conforme o [CLI oficial](https://github.com/frida/frida-core/blob/17.5.2/inject/inject.vala).
+
+Um supervisor separado registra uma única execução, seu PID/starttime, o hash dos
+argumentos completos e a saída. Não relança o cliente. Código zero sozinho não
+comprova residência: somente depois da saída validada, o app cria um desafio novo.
+O agente precisa responder de dentro do OEM com duas amostras sequenciais recentes,
+ligadas a boot, PID/starttime, revisão, hash do script, ticket, papel e instância.
+As respostas e os recibos são publicados por substituição atômica, em arquivos
+separados por papel. Nenhuma evidência de outro boot ou outra tentativa é adotada.
+
+O `dispose()` de cada agente invalida sua prova permanentemente. Isso distingue
+um script residente de um unload comum que continua pendente por causa de um pin;
+o [script engine oficial](https://github.com/frida/frida-core/blob/17.5.2/lib/payload/script-engine.vala)
+chama `dispose` antes desse unload. O pin nativo permanece; o wrapper Java adquire
+seu pin antes de publicar callbacks. Falha, dispose ou saída do cliente não soltam
+pins nem revertem callbacks já publicados.
+
+A inicialização OEM só é liberada após prova residente nativa em `armed`. O estado
+pronto exige prova nova de nove replacements nativos pinados, sem falha, e agente
+Java armado. Reiniciar apenas o app repete o desafio para os agentes da mesma
+identidade; ausência de cliente externo passa a ser esperada. Mapeamento legado,
+prova ausente ou estado desconhecido continuam preservados, sem reinjeção.
+
+A validação em Linux com o Frida 17.5.2 real comprovou respostas a desafios criados
+após o cliente sair e execução de NativeCallback e trampoline `replaceFast`
+residentes. O caso negativo de detach comum com pin invalidou a prova e rejeitou
+outro desafio. Esses testes não executam Java/JNI ou os hooks OEM do Android.
+O build e a validação de reinício, comandos Java e mapa na central permanecem
+etapas separadas; a 137 instalada não é convertida por uma edição de arquivo.

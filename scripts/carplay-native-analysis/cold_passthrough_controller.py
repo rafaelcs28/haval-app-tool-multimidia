@@ -157,13 +157,31 @@ def endpoint_launcher(source: str, *, bridge_path: str = REMOTE_BRIDGE,
 }}
 """
     instrumented = source.replace("send({", "impulsePublishEndpoint({")
-    return publisher + instrumented.rstrip() + f"""
+    residency = (Path(__file__).resolve().parent / "impulse_residency_peer.js").read_text(encoding="utf-8")
+    return residency + "\n" + publisher + instrumented.rstrip() + f"""
 
+// RegisterNatives and Java receivers publish callbacks into this script. Pin
+// before scheduling arm, including if eternalization later fails or is interrupted.
+if (typeof Script === 'undefined' || typeof Script.pin !== 'function') {{
+    throw new Error('Script pinning is required before publishing Java callbacks');
+}}
+Script.pin();
 impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'loaded' }});
-Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(bridge_path)} }})).then(
+const impulseEndpointExports = rpc.exports;
+const impulseEndpointResidency = createImpulseResidencyPeer('java', {json.dumps(bridge_path)},
+    () => impulseEndpointExports.state());
+const impulseEndpointArm = Promise.resolve().then(() =>
+    impulseEndpointExports.arm({{ bridgePath: {json.dumps(bridge_path)} }}));
+impulseEndpointArm.then(
     state => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state }}),
-    error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
-);
+    error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }}));
+impulseEndpointExports.init = (_stage, parameters) => impulseEndpointArm.then(state => {{
+    if (parameters && parameters.impulseResidency !== undefined) {{
+        impulseEndpointResidency.init(parameters.impulseResidency);
+    }}
+    return state;
+}});
+impulseEndpointExports.dispose = reason => impulseEndpointResidency.dispose(reason);
 """
 
 
