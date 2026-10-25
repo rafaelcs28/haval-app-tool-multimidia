@@ -572,14 +572,14 @@ object CarPlayPatchManager {
 
         originalPids.forEach { pid ->
             if (!clientRefreshAllowed(reason, verifier)) return
-            sh("kill -TERM $pid 2>/dev/null || true")
+            sh("[ \"\$(tr '\\000' '\\n' < /proc/$pid/cmdline | head -n 1)\" = '$APP_LIST_PACKAGE' ] && kill -TERM $pid 2>/dev/null || true")
         }
         Thread.sleep(PROCESS_RELOAD_GRACE_MS)
         readProcessIds(APP_LIST_PACKAGE)
             .filter { it in originalPids }
             .forEach { pid ->
                 if (!clientRefreshAllowed(reason, verifier)) return
-                sh("kill -KILL $pid 2>/dev/null || true")
+                sh("[ \"\$(tr '\\000' '\\n' < /proc/$pid/cmdline | head -n 1)\" = '$APP_LIST_PACKAGE' ] && kill -KILL $pid 2>/dev/null || true")
             }
 
         val replacementPids = waitForReplacementProcess(APP_LIST_PACKAGE, originalPids)

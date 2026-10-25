@@ -195,7 +195,8 @@ object CarPlayBridgeBootstrapManager {
         val current = safety
         val bootAttempt = id != null && prefs().getString("cpBridgeAttemptBoot", "") == id.boot
         val deadline = prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0)
-        val recovering = id != null && prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&
+        val recovering = id != null && prefs().getString("cpBridgeAttemptPhase", "") == "preparing" &&
+            prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&
             prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&
             deadline - SystemClock.elapsedRealtime() in 1L..330_000L
         val ownsNative = observed.nativeOwner > 0
@@ -239,6 +240,9 @@ object CarPlayBridgeBootstrapManager {
             }
             Policy.Action.COLD_ATTACH, Policy.Action.COLD_RESTART -> attempt(bundle, observed, decision.action)
             Policy.Action.BLOCKED -> {
+                if (observed.mappedPath == null && decision.reason == Policy.Reason.ATTEMPT_BUDGET_EXHAUSTED) {
+                    runCatching { root.run("setprop $GATE ''") }
+                }
                 if (sameImage && decision.reason in listOf(Policy.Reason.PINNED_FAILURE, Policy.Reason.PRIOR_FAILURE,
                         Policy.Reason.OWNERS_NOT_ALIVE, Policy.Reason.ATTEMPT_NOT_IN_PROGRESS)) {
                     prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision).commit()
