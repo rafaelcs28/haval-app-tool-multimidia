@@ -1,3 +1,40 @@
+## ACTIVE — clean boot9055 detected; owner moving, experimental validation deferred
+
+Latestownerrequest: continue/reboot/activatewhileMOVINGwithpassenger; ownerfrustrated
+by5hworkflow. Acknowledgeactualexcessiveanalysis/iterativebuilddelay. Do NOTreboot,
+installoractivateexperimentalbridgewhilemoving; onlylightreadonly/offlinework. Do not
+keeprequestingbriefroadsidestops; userneedsstablePwindowuntilreadiness, ordestination.
+
+CURRENTBOOT9055ddb9-85ac-4648-8105-6e6c1f43a377 (uptime12minat18:21UTC). ThusOLD
+boot79/OEM20459/native20605/Java22512AREPREVIOUSBOOTandNOTcurrentowners. No Root
+rebootcommandeverexecuted. LatestAPK133/source04ee/e531 remainsinstalled+verified.
+CleanbootcurrentOEM4112/start1644, NOBridgeDLL/native-state/owners, Javaunarmed.
+Automaticfirstattemptatbootelapsed~27sfailedBEFOREhostsignal, oldOEM4112unchanged.
+Newfailurestackretrace: Managerattempt429 (guardedwarmrestartrootcommand), notJava.
+MountedTsServiceMD5b61correct, SELinuxPermissive. Budgetcircuitclosedthisrevision.
+
+OwnerconfirmedPtwice; machinefirstP0freshthenlaterD34.7, secondinitialD4.4age12s,
+localwaitobservedP0butFULLamstackreadtimedoutBEFOREretrybroadcast, laterD41.7fresh.
+NOprotectedretrybroadcastwassentthisturnandNOphysicalchanges. Lastmovement41.7D.
+Normalreadonlymetadataworks; fullamstackoutputcan timeout. AtNEXTstableparkedP,
+usebounded/filteredamstackread: captureoutputinremoteshell, returnknownStackmarker
+andprojectionmatchesonly; don'ttransferentireoutput. FreshP0before/aftercheck. Then
+CONFIGURE_CARPLAY_BRIDGE extra_enabled=true extra_retry=true alreadyauthorized,
+onlyifnoBridge/owners (resetmethodenforcesthis). Currentbootisalreadyclean: another
+fullHUrebootnotnecessarilyneeded. Wait15–20swithownerholdingP, readlatestrootstatus
++native/Javafiles; require9pinned/Javaarmed/bothownersbeforeaskingconnectiPhone.
+Ifnewfailure, readpersistentSafetyfailureStack, retraceMini04ee mapping beforeactions.
+NeveroverrideP0/phones/projection/identityguards. NoGWMpowercommands.
+
+Codealreadycomplete/committed/pushed; Sourceworktree /root/projects/haval-impulse-133.
+Functional04ee94e27f50df9c185315172b97ab38cae08c00; installedAPKsha
+ e531c2a1bc4255ef0b704827903ba8c238533299a94327d54823547fdd984811.
+Privateevidence /root/projects/haval-impulse/test-artifacts/install-133-persistent-
+20261025/clean-boot-9055-* includesprefsfailure, noNativepinscurrentboot. Physicalmap
+orlatestJavaARMstillNOTvalidated. Nextteststaysdeferreduntilparked, noactivation
+whileD evenifpassengercoordinates. Userasksnotificationwhenconnect; giveonlyafter
+actualendpointreadyandparked. ExistingfactoryCarPlayseparatefromexperimentaltest.
+
 ## ACTIVE 2026-10-25 — owner DRIVING: read-only until explicit parked P
 
 Latestownersteering: alreadyINMOTIONwithpassengercoordinating; maponotherphone.
