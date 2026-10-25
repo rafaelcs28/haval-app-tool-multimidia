@@ -1,3 +1,10 @@
+## 2026-10-25 — 134 signed APK validated, installation pending
+
+- Mini commit 563123d9: full JVM task and seven new race tests passed; signed Release/R8/lint vital passed in 5m53s (83 tasks).
+- Verified 74134 / 1.0.0.74.134-preview, production certificate, OEM/payload hashes and controller digest. APK SHA-256 3c762663b1da384c17c2e0d9f7bc1d959a12029ec0658d39d0c969e30bad5f5b.
+- Eleven endpoint/assets Python tests passed. Prepared and locally validated a 4,009,451-byte gzip delta that reproduces the exact 81,582,375-byte APK.
+- No vehicle modification in this preparation phase; installed 133 and physical bridge/map validation remain pending. Owner will turn on car after readiness notification.
+
 ## 2026-10-25 — 134 preparation, safety publication races
 
 - Serialize attempt transitions and safety publication; latch cancelled tickets and discard samples for obsolete identities.

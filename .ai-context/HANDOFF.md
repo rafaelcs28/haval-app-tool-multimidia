@@ -1,3 +1,41 @@
+## Current handoff — 134 READY TO INSTALL; owner will turn on car
+
+Owner requested notification when ready, then will turn on the car for installation
+and test. The new APK is now ready and validated. Do not ask them to wait through
+another build. Source worktree: /root/projects/haval-impulse-133, branch
+release/impulse-74134-v9, functional commit 563123d984c3e7284a4501cbaf29c21f971bc73f.
+
+Version 74134 / 1.0.0.74.134-preview. Authorized Mini job
+haval-impulse-133-563123d984c3e728-20261025T184740Z-20158 SUCCESS, 5m53s, 83 tasks.
+Full JVM task passed, including seven new safety race tests; Release/R8/lint vital
+passed. Eleven local asset/endpoint Python tests passed. APK signature, version,
+OEM patch hashes, packaged payload hashes and local controller digest verified.
+APK: /root/projects/haval-impulse/artifacts/impulse-74134-safety-release-mini/
+app_build_outputs_apk_release_app-release.apk (81,582,375 bytes).
+SHA-256: 3c762663b1da384c17c2e0d9f7bc1d959a12029ec0658d39d0c969e30bad5f5b.
+Production certificate unchanged. Payload revision 74134-4585aae86fb8-5715e2d41ca3.
+No OTA/tag/PR publication. Car STILL has 133/e531; 134 NOT INSTALLED OR ROAD TESTED.
+
+Prepared private delta-134-safety: 4,009,451 gzip bytes, 12 chunks, exact full-APK
+reconstruction verified. Guarded install_delta_134.py accepts only validated signed
+134 and current installed 133; --validate-only PASSED with no vehicle/public access.
+Both scripts are under test-artifacts/install-133-persistent-20261025 in the original
+/root/projects/haval-impulse directory. Cached remote baseline remains pinned at
+/data/local/tmp/impulse-74133-reviewed/app.apk (86426a2d...); local corresponding APK
+is artifacts/impulse-74133-persistent-release-mini/app_build_outputs_apk_release_app-release.apk.
+No public blob served yet. Installer handles filtered stack reads to avoid long
+Telnet transfer and rechecks P/0 freshness/no projection before replacement.
+
+Next: owner turns on car; confirm fresh P/0 and no phones, install 134 via prepared
+delta, verify ACTUAL installed base.apk SHA above. Determine current boot/OEM
+identity; preserve any mapped/pinned callbacks. A clean HU boot may be needed if
+previous failed mapping survives sleep. HU reboot has prior authorization while
+parked; do not act while moving. Require native installed-pinned/9, Java armed,
+both exact owners before asking for iPhone connection. Confirm factory D0 CarPlay
+normal before the experimental map test. Do not promise bridge runtime fixed:
+the two source races are proven; observed native eligibility-loss cause remains
+unproven. User can drive AFTER preparation is confirmed, rather than during changes.
+
 ## Current work — version 134 offline preparation (2026-10-25)
 
 Owner now wants notification ONLY AFTER the new APK is ready, then will turn on

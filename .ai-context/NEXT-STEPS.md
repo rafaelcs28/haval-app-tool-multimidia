@@ -1,3 +1,12 @@
+## Current status — 134 ready, not installed (2026-10-25)
+
+Use the current HANDOFF first. Signed 134 passed Mini JVM/Release checks and local
+artifact/transport validation; no additional build is needed. Owner will turn on
+the car for installation. Confirm fresh P/0 and disconnected phones, install and
+verify 134, then prove native+Java readiness before the map test. Physical runtime
+validation and the original eligibility-loss cause remain unresolved. Installed
+car version is still 133. Previous driving/old-boot records below are historical.
+
 ## ACTIVE — clean boot9055 detected; owner moving, experimental validation deferred
 
 Latestownerrequest: continue/reboot/activatewhileMOVINGwithpassenger; ownerfrustrated
