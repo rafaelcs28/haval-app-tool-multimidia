@@ -1,3 +1,10 @@
+## 2026-10-25 — 137 new boot loses preparation owner; read-only diagnosis
+
+- Screenshot retry warning belongs to NEW kernel28c59/OEM7707, not previously validated22c3/OEM15640. Current native state armed0/pinned with no injector or Java owner; failed circuit remains. No P/speed prerequisite restored.
+- Exact137 R8 retrace identifies recovery identity/native-owner check at Manager521. Native owner absence observed independently; termination cause is not proven.
+- Captured bounded kernel, lifecycle and crash buffers privately; no retained cpbridge/LMK/crash explanation. Source and installed APK unchanged; no reboot, retry, injection or installation issued.
+- Asked owner whether the new headunit boot was intentional or spontaneous. Experimental map test remains pending; current session must be preserved.
+
 ## 2026-10-25 — 137 removes gear/speed prerequisites from multimedia preparation
 
 - Owner explicitly requested removal of P and km/h locks, then clarified "Tira do preparo".

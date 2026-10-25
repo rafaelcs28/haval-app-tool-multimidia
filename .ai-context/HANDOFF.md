@@ -1,4 +1,46 @@
-## Current handoff — 137 INSTALLED / bridge READY / real command preflight PASSED
+## Current handoff — NEW BOOT 28c59: 137 NOT READY; owner retry screenshot
+
+Owner sent screenshot "A sessão atual deve terminar antes de repetir o preparo".
+Do NOT interpret this as current137ready or old UI text alone. Current kernel
+28c59c97-f0b7-4338-9b02-17dcebf7c278 differs from validated boot22c3. Current OEM
+7707/start3143 still matches persisted target. Automatic137 remains enabled,
+AttemptPhasefailed and circuit137open. No cpbridge-inject owner in pidof OR whole
+ps PID/PPID/NAME/ARGS search; no Java endpoint. Mapped native137 SO with cold-state
+ARMED/replacements0/pinnedtrue/failurenull. Do not replace/unload this unknown
+mapped session or reset the failure circuit manually. Old22c3 ready records and
+actual command preflight remain HISTORICAL, not proof for this new boot.
+
+Exact137 R8 mapping retrieved read-only from immutable Mini job; map_id matches
+2937e763e2af8c21e6aecce54b27581b6d304bc227876d428fbcd17e246456ac. Exception y10.o473
+retraces to Manager.kt521 check(state.id == identity && state.nativeOwner > 0),
+called from attempt491/recoverAttempt. Current absence supports owner loss; exact
+historical predicate/termination cause still unknown. No P/speed gate returned.
+Retry UI text is generic reset catch; not evidence that clearing it is safe.
+
+Collected read-only private evidence under original workspace
+ test-artifacts/install-133-persistent-20261025/:137-photo-retry-*.txt,
+137-new-boot-*.txt, mapping-137.txt, 137-kernel-private-*.txt (90680bytes),
+137-boot-lifecycle-private-*.txt (102482bytes),137-current-crash-private-*.txt
+(1410bytes). No retained kernel cpbridge/LMK/OOM match; targeted logcat and crash
+buffers no cpbridge/frida hit. This DOES NOT prove no external termination;
+early boot logs may have expired. No cause guessed as a software fix.
+
+Read-only launch/source audit: already nohup+setsid and redirected3stdio; default
+Frida CLI does not watch stdin without-i. No app cleanup targeting cpbridge found.
+Official Shizuku RemoteProcessHolder only destroys short-shell Process; no tree
+kill shown. Shipped server implementation not yet verified. External TERM/KILL,
+LMK or injector native crash remain unproved. Do not add eternalize/reinjection
+or permanent OOM protection based on speculation. Source remains e93a7846/778647fc,
+installed137 unchanged; no new build, install, reboot, process kill or vehicle power
+command this turn. Last telemetry freshP0 (earlierD0); no current road test started.
+
+PENDING OWNER QUESTION via async: "Depois da instalação da137, você reiniciou a
+central ou ela reiniciou sozinha?" Need distinguish intentional reboot/autoboot
+failure from unexpected whole-headunit restart. Owner has not yet answered.
+Do not tell owner to start five-minute test or connect for experimental validation
+while this current boot is unprepared. Preserve existing native mapping/pins.
+
+## Previous handoff — 137 INSTALLED / bridge READY / real command preflight PASSED
 
 Owner explicitly removed P and km/h lock FROM PREPARATION ("Tira do preparo").
 Done in all four bootstrap gates, including initial policy, publication, coherent

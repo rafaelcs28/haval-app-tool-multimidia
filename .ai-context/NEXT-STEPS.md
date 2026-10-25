@@ -1,3 +1,12 @@
+## Current status — 137 NOT READY after another boot (28c59)
+
+Latest screenshot is from a NEW kernel, not the validated22c3 session. Current
+OEM7707/start3143 has armed native137 mapping, replacements0/pinned, but no injector
+or Java owner; recovery failed at Manager521. Do not retry/unload mapped session.
+P/speed removal remains installed. See current HANDOFF/evidence. Waiting for owner
+to clarify intentional vs spontaneous headunit restart; no speculative new build
+or current map success. Older "137ready" notes below refer to boot22c3 only.
+
 ## Current status — 137 installed and bridge ready; phone/map test pending
 
 Owner explicitly removed P and speed from PREPARATION. Implemented and installed
