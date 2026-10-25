@@ -1,5 +1,44 @@
 # Handoff
 
+## COMPLETE — corrected132 installed; GWM shutdown explicitly confirmed
+
+OwneraskedGWMstart/review/install132 andOFFwhenfinished. Workcomplete:
+actualinstalled74132/1.0.0.74.132-preview fromc591cb53a80d89a92eebc79ec7dbbeb9e6e0d8b7.
+Mini jobhaval-impulse-132-c591cb53a80d89a9-20261025T000314Z-1733 success4m48s,
+81tasks,94JVMsuites/864tests=863pass/1skip/0failures/errors,all12newpolicycases.
+GuardfullPASS,6Nodefrontendmodels,9Pythonpatchtests. Actualsignaturematches131,
+manifest/ZIP/queuehashes/OEMassets/embeddedHTMLverified. CorrectedAPK76105795bytes
+SHA6de3d0f410c46a2482dcecbbe9e76fcb92ec3574a197febff72b7999ce731198,
+/root/projects/haval-impulse/artifacts/impulse-74132-overlays-release/impulse-74132.apk.
+
+Devicehashofinstalledbase.apk EXACTmatch; cmdpackageinstall-rSuccess, actualpackage
+132,MainActivitylaunchStatusok,process7836healthy,noappFatalExceptionobserved.
+Minimalistselectionpreserved. Evidence/receipts/screenshots inprivate
+/root/projects/haval-impulse/test-artifacts/gwm-132-session-20261024 andartifact
+validation.json. Before-installcapture131satisfiedbaselinecontract; oldb266132
+candidatearchivedneverinstalled. NewDefaultHTML1974322f...,CSS/XML/geometrysame.
+
+GWMoffexplicitlysent2026-10-25T00:17:20.569Z,acceptedtrue; actualhyEngSts0with
+freshupdateconfirmed00:17:30.756Z; cachedbridgeengine0/P/0kmh. CARLEFT OFF.
+Do notsendanyadditionalpower-on. Installationauthorizationfulfilled; future
+physicalphone/steering/secondarymapteststillrequiresanattendedparkedsession.
+NoOTA/publicrelease,coldOEMrestart,Fridainjection,CPdisplaymove/resizeorAAwork.
+
+Transportnotes: firstcarrootcurlcouldnotreachprivateTailnetHTTPport. Switchedto
+temporaryunlistedHTTPSfileunderexistingCaddy/downloadsroute,NOserviceconfigchange.
+Slowtransferhit120slimit; partialsaved. First15minGWMsessionautostopped. Owner
+saidContinue; renewedcanonicalGWMstart00:14:01,engine1confirmed00:14:11, then
+HTTPRange-resumeddownloadcompleted,hashverifiedbeforeinstall. Temporarystatic
+file+directoryremovedimmediatelyafterdownload; HTTPserverstopped; remoteAPKs/gzip
+removedafterinstall. Onlylogs/rcfilesremainintask-specificremotetmpdirectory.
+
+NoGWMbridgeconfigurationedits. EnvVINlowercaseworksforreadsbecausegetCarInfo
+uppercasesbutmustuseaccount-listcanonicalVINforcommands. Initialtwo551017
+rejectionswereourdirecthelperparameterissue,notanaccountbindingproblem.
+Posthealthinitialassertusedwrongprefkey(currentVirtualClusterTheme); corrected
+readonlychecktoactualvirtualClusterTheme=Minimalist. Appwashealthythroughout.
+Documentation-onlycommitafterc591recordsfinalresult,app/buildsourceunchanged.
+
 ## Latest — GWM on; baseline captured; overlay correction ready for Mini/install/off
 
 Owner authorizedGWMstart,review/install132 andexplicitlyOFFwhenfinished; answered

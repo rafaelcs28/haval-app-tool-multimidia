@@ -1,5 +1,17 @@
 # AI change log
 
+## 2026-10-25 UTC — corrected132 installed and car switched off
+
+- Correctedc591MiniRelease4m48s/81tasks;863JVMpass/1skip,0failures. GuardPASS;
+  actualAPKsignature/manifest/hash/HTML/OEMassetsverified.
+- cmdpackageinstall-rSuccess;actual74132andinstalledbasehash6de3d0f4...confirmed.
+  MainActivityStatusok,processalive,noappfatalobserved,Minimalistpreserved.
+- Temporarytransportremoved. GWMexplicitOFFaccepted00:17:20UTC,actualfresh
+  engine0confirmed00:17:30UTC. CarleftOFF, noOTAorFridahooks.
+- Slowdownloadresumedafterauto15minshutdownandownerContinue. Privateevidencein
+  gwm-132-session-20261024 andimpulse-74132-overlays-release/validation.json.
+- ManualCarPlay/steeringcasesandindependentD3mapremainunproven,nextattendedtest.
+
 ## 2026-10-25 UTC — parked baseline and actual overlay correction
 
 - GWMstartcanonicalaccountVIN succeeded;freshAPK P/0kmh andcentralonline.

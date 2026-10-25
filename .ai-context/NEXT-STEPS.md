@@ -1,5 +1,13 @@
 # Next steps
 
+## Current — corrected132 installed; car OFF, no live task pending
+
+Correctedc591132installedandhealthy,Minimalistpreserved,allfiveguardfindings
+resolvedwithactualpolicy/frontendfixesandtests. GWMexplicitshutdownconfirmed
+00:17:30UTC. Do NOTpoweronautomatically. Nextcoordinatedattendedsessioncanverify
+realCPsteering/neutralcardbehavior,principalD0andtheindependentbridge/D3frame.
+No needreinstalltheolderb266132candidate. Latestartifactinimpulse-74132-overlays-release.
+
 ## Current priority — 74132 candidate, no installation yet
 
 Owner requestedreview/install thenconfirmedcaroff anddeferredlive work. Offline

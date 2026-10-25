@@ -36,6 +36,26 @@ install only the newly validated artifact from this corrected immutable source.
 Manual steering-wheel/CarPlay interaction and a secondary map frame still require
 an attended physical test and are not claimed by these offline/model checks.
 
+The corrected source `c591cb53a80d89a92eebc79ec7dbbeb9e6e0d8b7` completed Mini
+job `haval-impulse-132-c591cb53a80d89a9-20261025T000314Z-1733` in 4m48s with
+81 executed tasks. Its 94 JVM suites contain 864 tests: 863 passed, one skipped,
+zero failures/errors, including all 12 new policy cases. Manifest, signature,
+queue checksums, APK ZIP, unchanged OEM assets and the rebuilt HTML were verified.
+
+This corrected signed APK, SHA-256
+`6de3d0f410c46a2482dcecbbe9e76fcb92ec3574a197febff72b7999ce731198`,
+76,105,795 bytes, was installed over 74131 using `cmd package install -r` while
+fresh vehicle telemetry reported P and 0 km/h. The installed `base.apk` hash
+matches exactly; package manager reports 74132 / `1.0.0.74.132-preview`.
+The app launched successfully, its process remained alive, no app fatal exception
+was observed in the post-install check, and the selected Minimalist theme remained.
+The temporary HTTPS transport and vehicle-side APK transport files were removed.
+
+GWM shutdown was explicitly requested at `2026-10-25T00:17:20Z`, accepted by the
+provider, and confirmed by fresh `hyEngSts=0` at `00:17:30Z`, also reflected by the
+local bridge. The vehicle was left off. No OTA/release publication, cold OEM
+restart, Frida injection or secondary-map activation occurred during installation.
+
 Version: `1.0.0.74.132-preview`, version code `74132`.
 
 The release branch starts at the complete personal 74131 source `a427ddde`,
