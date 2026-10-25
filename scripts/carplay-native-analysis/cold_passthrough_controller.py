@@ -120,6 +120,7 @@ function impulsePublishEndpoint(payload) {{
     instrumented = source.replace("send({", "impulsePublishEndpoint({")
     return publisher + instrumented.rstrip() + f"""
 
+impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'loaded' }});
 Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_BRIDGE)} }})).then(
     state => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state }}),
     error => impulsePublishEndpoint({{ kind: 'impulse-carplay-clean-map-control', state: 'failed', error: String(error) }})
@@ -129,6 +130,24 @@ Promise.resolve().then(() => rpc.exports.arm({{ bridgePath: {json.dumps(REMOTE_B
 
 def endpoint_agent_entry(source: str) -> str:
     return 'import Java from "frida-java-bridge";\n' + endpoint_launcher(source)
+
+
+def validate_endpoint_module(payload: bytes) -> None:
+    # Node16 emits CommonJS for a package without type=module. Gum's archive
+    # loader does not supply exports/require, so that entry never reaches arm().
+    try:
+        header, body = payload.split("✄\n".encode(), 1)
+        match = re.match(rb"\xf0\x9f\x93\xa6\n([0-9]+) /agent\.js\n", header)
+        if not match:
+            raise ValueError("Missing endpoint archive entry")
+        size = int(match.group(1))
+        entry = body[:size].decode("utf-8")
+        if len(body) < size or not re.search(r'(?m)^import Java from [\"\']frida-java-bridge[\"\'];', entry):
+            raise ValueError("Endpoint entry is not an ES module")
+        if re.search(r'\b(?:require\s*\(|Object\.defineProperty\(exports\b)', entry):
+            raise ValueError("CommonJS endpoint entry cannot run in Gum")
+    except (UnicodeError, ValueError) as error:
+        raise ValueError("Invalid endpoint ES module: " + str(error)) from error
 
 
 def read_endpoint_bundle(path: Path) -> str:
@@ -142,6 +161,8 @@ def read_endpoint_bundle(path: Path) -> str:
         "bundleSha256": sha256_bytes(payload),
         "entrySha256": sha256_bytes(endpoint_agent_entry(source).encode()),
         "packageLockSha256": sha256_bytes((root / "agent/package-lock.json").read_bytes()),
+        "packageJsonSha256": sha256_bytes((root / "agent/package.json").read_bytes()),
+        "moduleMode": "esm-node16",
         "javaBridgeVersion": package["dependencies"]["frida-java-bridge"],
         "compilerVersion": package["devDependencies"]["frida-compile"],
         "bridgePath": REMOTE_BRIDGE,
@@ -149,6 +170,7 @@ def read_endpoint_bundle(path: Path) -> str:
     for name, value in expected.items():
         if manifest.get(name) != value:
             raise ValueError("Endpoint bundle is stale or altered: " + name)
+    validate_endpoint_module(payload)
     return payload.decode("utf-8")
 
 

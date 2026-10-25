@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 from cold_passthrough_controller import (
-    REMOTE_BRIDGE, endpoint_agent_entry, read_endpoint_bundle, sha256_bytes,
+    REMOTE_BRIDGE, endpoint_agent_entry, read_endpoint_bundle, sha256_bytes, validate_endpoint_module,
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -19,6 +19,8 @@ def build(output: Path) -> dict:
     if output.exists() or manifest_path.exists():
         raise ValueError("Use a new output path; existing bundles are never overwritten")
     package = json.loads((AGENT / "package.json").read_text())
+    if package.get("type") != "module":
+        raise ValueError("Frida agent package must declare type=module")
     versions = {}
     for name in ("frida-java-bridge", "frida-compile"):
         actual = json.loads((AGENT / "node_modules" / name / "package.json").read_text())["version"]
@@ -32,16 +34,20 @@ def build(output: Path) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".bundle-", dir=AGENT) as temporary:
         (Path(temporary) / "node_modules").symlink_to(AGENT / "node_modules", target_is_directory=True)
+        (Path(temporary) / "package.json").write_text('{"type":"module"}\n')
         entry_path = Path(temporary) / "agent.js"
         entry_path.write_text(entry, encoding="utf-8")
         subprocess.run([str(compiler), str(entry_path), "-S", "-o", str(output)], check=True, cwd=temporary)
     payload = output.read_bytes()
+    validate_endpoint_module(payload)
     manifest = {
         "kind": "impulse-clean-map-frida-agent-v1",
         "bundleSha256": sha256_bytes(payload),
         "bundleBytes": len(payload),
         "entrySha256": sha256_bytes(entry.encode()),
         "packageLockSha256": sha256_bytes((AGENT / "package-lock.json").read_bytes()),
+        "packageJsonSha256": sha256_bytes((AGENT / "package.json").read_bytes()),
+        "moduleMode": "esm-node16",
         "javaBridgeVersion": versions["frida-java-bridge"],
         "compilerVersion": versions["frida-compile"],
         "bridgePath": REMOTE_BRIDGE,

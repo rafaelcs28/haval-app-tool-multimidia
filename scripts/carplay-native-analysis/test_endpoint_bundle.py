@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parent
 class EndpointBundleTest(unittest.TestCase):
     def bundle(self, directory):
         path = Path(directory) / "agent.js"
-        payload = "📦\nfixture module table; do not execute\n".encode()
+        entry = b'import Java from "frida-java-bridge";\n// fixture only; do not execute\n'
+        payload = "📦\n".encode() + str(len(entry)).encode() + b" /agent.js\n" + "✄\n".encode() + entry
         path.write_bytes(payload)
         package = json.loads((ROOT / "agent/package.json").read_text())
         source = (ROOT / "carplay_clean_map_endpoint.js").read_text()
@@ -24,6 +25,8 @@ class EndpointBundleTest(unittest.TestCase):
             "bundleSha256": sha256_bytes(payload),
             "entrySha256": sha256_bytes(endpoint_agent_entry(source).encode()),
             "packageLockSha256": sha256_bytes((ROOT / "agent/package-lock.json").read_bytes()),
+            "packageJsonSha256": sha256_bytes((ROOT / "agent/package.json").read_bytes()),
+            "moduleMode": "esm-node16",
             "javaBridgeVersion": package["dependencies"]["frida-java-bridge"],
             "compilerVersion": package["devDependencies"]["frida-compile"],
             "bridgePath": REMOTE_BRIDGE,
@@ -59,13 +62,24 @@ class EndpointBundleTest(unittest.TestCase):
                 read_endpoint_bundle(path)
 
     def test_stale_source_lock_or_library_binding_is_refused(self):
-        for key in ("entrySha256", "packageLockSha256", "javaBridgeVersion", "compilerVersion", "bridgePath", "kind"):
+        for key in ("entrySha256", "packageLockSha256", "packageJsonSha256", "moduleMode", "javaBridgeVersion", "compilerVersion", "bridgePath", "kind"):
             with self.subTest(field=key), tempfile.TemporaryDirectory() as temporary:
                 path, _, sidecar, manifest = self.bundle(temporary)
                 manifest[key] = "changed"
                 sidecar.write_text(json.dumps(manifest))
                 with self.assertRaisesRegex(ValueError, key):
                     read_endpoint_bundle(path)
+
+    def test_commonjs_archive_is_refused_even_with_matching_bundle_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path, _, sidecar, manifest = self.bundle(temporary)
+            entry = b'Object.defineProperty(exports, "__esModule", {value:true});\nconst Java = require("frida-java-bridge");\n'
+            payload = "📦\n".encode() + str(len(entry)).encode() + b" /agent.js\n" + "✄\n".encode() + entry
+            path.write_bytes(payload)
+            manifest["bundleSha256"] = sha256_bytes(payload)
+            sidecar.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "ES module"):
+                read_endpoint_bundle(path)
 
     @unittest.skipUnless((ROOT / "agent/node_modules/.bin/frida-compile").exists(), "npm ci required for real bundle integration")
     def test_real_java_bundle_is_reproducible_and_has_a_valid_receipt(self):

@@ -25,6 +25,12 @@ source maps, and refuses to overwrite an existing bundle. Select another
 `--output` path when preserving a previous result.
 
 The result is a complete Frida module archive and a `.manifest.json` sidecar.
+The package and isolated compiler directory explicitly declare `type: module`.
+Without it, the compiler's Node16 mode emits an entry that references CommonJS
+`exports`/`require`; Gum does not provide these globals and the endpoint never
+starts. The builder and controller now reject that entry format and pin the
+package metadata and ESM mode in the receipt. A durable `loaded` event separates
+successful module evaluation from the later Java `armed` acknowledgement.
 The controller verifies the exact bytes, generated entry, dependency lock,
 versions, and remote native-library path before staging. It uploads the complete
 archive unchanged; prepending a plaintext launcher would invalidate its format.
