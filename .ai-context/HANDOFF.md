@@ -1,3 +1,63 @@
+## Current handoff — 139 published and independently verified; owner free to leave
+
+Owner is leaving for home. Told him to use normal CarPlay and leave the experimental
+test off. No remote install, reboot, service kill or vehicle power command was
+issued during this follow-up. He will install when convenient; do not ask him to
+wait at the car or repeat another roadside preparation attempt.
+
+Release 1.0.0.74.139-preview is PUBLIC and the fixed preview OTA now points to 139:
+https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.139-preview
+Release ID 423702178; APK asset 676301027. GitHub SHA-256 and a complete independent
+unauthenticated HTTP download match the signed Mini artifact. The fixed
+app-latest/app-preview.json was updated LAST and its public bytes match the local
+checked manifest. Stable channel unchanged. APK/checksum/build metadata only were
+published to the public distribution repository; source remains PRIVATE.
+
+Exact built source b663935a906929f65456e5fced70ddde2122f278, private source branch
+release/impulse-74139-v9. Signed Mac Mini job:
+haval-impulse-133-b663935a906929f6-20261025T222402Z-10596
+Full JVM suite (including ten residency proof tests), Release/R8/lint and production
+signing passed in 6m9s, 83 tasks. APK code 74139 / 1.0.0.74.139-preview,
+81,615,171 bytes, SHA-256:
+8be913d17a86dae010ab277366bfa6e76f006d90421d99344c56c2257a267716
+Production certificate unchanged: 5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Payload revision 74139-57570b56ed98-2d6479ac8ae2. Exact controller and payload hashes
+checked against reviewed source. Five real Linux supervisor fixtures passed,
+including immediate child exit and delayed parent capture. Shared peer unchanged;
+previous real Frida callback/trampoline/dispose checks still apply, not Android JNI.
+
+139 replaces the missing launch-receipt race with a pre-exec birth barrier. It
+records actual child PID/start and a root-owned atomic receipt before releasing the
+exact command to exec, retaining PID/start. Both receipts require declared command
+evidence and the exact generated supervisor SHA. Existing fresh post-exit resident
+proofs and dispose rejection remain mandatory; P/speed are still absent from prep.
+
+Private artifacts/evidence, relative to /root/projects/haval-impulse:
+- artifacts/impulse-74139-birth-release-mini-fetch2/ (APK, validation.json, build log,
+  release metadata and verified queue checksums). First fetch destination was empty;
+  retry into a new directory completed successfully. Never reuse an existing fetch dir.
+- test-artifacts/publish-74139-20261025/ (full public APK download, before/after OTA,
+  published-release.json recording both independent checks, checksums and build info).
+- test-artifacts/install-133-persistent-20261025/validate_139.py.
+
+Car still last confirmed on owner-installed 138. Actual 139 boot, Android JNI and
+secondary map/frame remain PENDING. The 138 current waiting guard cause is still
+unidentified; USB showed only root hubs, no phone USB. Historical missing receipt
+belongs to boot a83e95b3, not the later waiting boot 24f1efa0. Do not infer a connected
+phone from UI alone or call an old persisted failure a new attempt.
+
+Next field session: owner installs 139, restarts the whole headunit with phones
+disconnected, opens Impulse with automatic prep on and waits for "Bridge preparada
+para esta sessão". Only then connect iPhone USB, confirm normal primary display 0
+CarPlay, choose a route and run the five-minute experimental test. If not ready,
+collect current boot/target/receipt evidence before proposing another build. External
+injectors normally exit in 138/139; old 137 PID-owner criteria are invalid. Read app
+challenges passively; never overwrite them during manager work. No map success claimed.
+
+Commands: mac-mini-build fetch JOB NEW_DIR; validate_139.py APK --source-commit SHA
+--release; gh release create/edit/upload using notes file; independent curl downloads;
+Python SHA/size/certificate/source and manifest comparisons. No coordinator Android build.
+
 ## Current handoff — 139 fixes missing birth receipt; owner leaving, no car wait
 
 Ownerinstalled138 HIMSELF and manuallyrebooted. Firstphotoafterrestart showedfailed;

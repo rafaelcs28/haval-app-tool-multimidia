@@ -1,3 +1,10 @@
+## 2026-10-25 — 139 signed, published and OTA verified
+
+- Immutable source b663935a: full Mini JVM suite, ten residency proof tests, Release/R8/lint and signing passed in 6m9s / 83 tasks. Five real host supervisor fixtures also passed; no coordinator Android build.
+- Verified version 74139, production certificate, controller/payload digests and APK SHA-256 8be913d17a86dae010ab277366bfa6e76f006d90421d99344c56c2257a267716 (81,615,171 bytes).
+- Published authorized public prerelease with APK/checksum/build metadata. Verified GitHub digest and complete unauthenticated APK download, then updated fixed preview manifest to 139 and independently compared exact public bytes. Private source remains private; stable channel untouched.
+- Owner needs to leave. No vehicle modification, remote install/reboot or vehicle power operation. Owner can install through Informações → Buscar Atualizações later. Physical 139 boot/JNI/map validation remains pending.
+
 ## 2026-10-25 — 139 birth-receipt barrier after 138 field evidence
 
 - Owner installed138 and rebooted; captured actualCLI exit0/armed but missing launchreceipt/starttime0. Currentnextboot iswaitingforprojectionabsence after explicitretry; noPhoneUSB. No claim a current phone connection is proved.

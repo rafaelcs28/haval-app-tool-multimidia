@@ -1,3 +1,18 @@
+## Current status — 139 ready in preview updater; owner installs later
+
+Public prerelease and fixed OTA 139 are independently verified. No further build,
+remote installation, headunit reboot or vehicle power command is needed now.
+Owner is leaving for home; normal CarPlay can be used with the experimental test off.
+
+Next convenient field session: install 139 via Informações → Buscar Atualizações,
+restart the headunit with phones disconnected, enable automatic preparation and
+wait for "Bridge preparada para esta sessão". Then connect iPhone USB, verify
+normal primary display 0 CarPlay, choose a route and start the five-minute test.
+Collect actual current-boot receipt/resident proof evidence if readiness fails;
+do not propose a speculative new version. Physical boot/JNI/map success is pending.
+See current HANDOFF for immutable build, public verification and artifact paths.
+Older status entries below are historical.
+
 ## Current status — 138 published/OTA verified, owner installing himself
 
 Finalef26864f signedMini/JVM/Release checks pass; APK e702d2d7... independently

@@ -1,3 +1,16 @@
+## Current status — 139 published; physical validation pending
+
+139 is signed and publicly available through the preview updater; complete public
+APK SHA and fixed OTA bytes were independently verified. It addresses the observed
+138 missing-launch-receipt/start-zero failure with a pre-exec birth barrier. Ten
+JVM residency tests and five host shell fixtures passed, plus full Mini release
+checks. Actual 139 boot, Android JNI and map video remain unverified.
+
+The later 138 WAITING state had no phone USB; the remaining projection-quiescence
+blocker is unidentified. Do not assert that a phone is connected from that text.
+Owner is leaving and will install later. Use current HANDOFF for evidence and next
+session; no more vehicle commands now. Older status entries below are historical.
+
 ## Current status — 138 published/OTA verified, owner installing himself
 
 Finalef26864f signedMini/JVM/Release checks pass; APK e702d2d7... independently
