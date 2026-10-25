@@ -7,9 +7,12 @@ or device operation is performed.
 
 from pathlib import Path
 import json
+import errno
+import os
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -21,6 +24,8 @@ FRIDA = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/utils/FridaUt
 BOOTSTRAP = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt"
 QUIESCENCE = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeQuiescence.kt"
 BLUETOOTH = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBluetoothQuiescence.kt"
+INTERCEPTOR = ROOT / "scripts/carplay-native-analysis/cold_oem_interceptor.js"
+PROFILE = ROOT / "scripts/carplay-native-analysis/testdata/oem-cold-profile-v3.json"
 
 
 def function_source(source, name):
@@ -78,6 +83,146 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
                         body.index("sh(bridgeMappingProbe)"))
         self.assertIn('"automatic_bootstrap_owner"', body)
         self.assertIn('else -> "bridge_state_unknown"', body)
+
+    def parent_dac_commands(self, parents):
+        install = function_source(self.bootstrap, "installPayload")
+        commands = re.findall(
+            r'"((?:mkdir -p|chown 0:0|chmod 711) \$traversalParents \|\| exit 1; )"', install)
+        self.assertEqual(commands, ["mkdir -p $traversalParents || exit 1; ",
+                                    "chown 0:0 $traversalParents || exit 1; ",
+                                    "chmod 711 $traversalParents || exit 1; "])
+        return "".join(commands).replace("$traversalParents", " ".join(shlex.quote(str(p)) for p in parents))
+
+    def test_all_runtime_and_version_parents_are_root_owned_traversable_before_reuse(self):
+        install = function_source(self.bootstrap, "installPayload")
+        self.assertIn('val traversalParents = listOf(ROOT, "$ROOT/versions", "$ROOT/runtime")'
+                      '.joinToString(" ") { q(it) }', install)
+        for command in ("mkdir -p", "chown 0:0", "chmod 711"):
+            self.assertLess(install.index(command + " $traversalParents || exit 1"),
+                            install.index("if [ -d ${q(bundle.directory)} ]"))
+        self.parent_dac_commands([Path("/fixture")])
+        self.assertIn("chmod 500 ${q(temporary)}", install)
+        self.assertIn("chmod 400 ${q(temporary)}/*", install)
+
+    @unittest.skipUnless(hasattr(os, "setuid") and os.geteuid() == 0,
+                         "UID1000 DAC fixture requires Linux/POSIX root privileges")
+    def test_system_uid_can_traverse_protected_parents_without_listing_or_mutating_them(self):
+        def demote(uid):
+            def apply():
+                os.setgroups([])
+                os.setgid(uid)
+                os.setuid(uid)
+            return apply
+
+        probe = textwrap.dedent("""
+            import errno, json, os, pathlib, sys
+            bridge, state, parent = map(pathlib.Path, sys.argv[1:])
+            result = {'uid': os.geteuid()}
+            for name, operation in (
+                ('readBridge', lambda: bridge.read_bytes()),
+                ('writeState', lambda: state.write_text('fixture-state')),
+                ('listParent', lambda: list(parent.iterdir())),
+                ('writeParent', lambda: (parent / 'foreign').write_text('denied'))):
+                try:
+                    operation()
+                    result[name] = 0
+                except OSError as error:
+                    result[name] = error.errno
+            print(json.dumps(result))
+        """)
+        with tempfile.TemporaryDirectory(prefix="impulse-parent-dac-") as directory:
+            fixture = Path(directory)
+            fixture.chmod(0o711)
+            root = fixture / "impulse-carplay"
+            versions, runtime = root / "versions", root / "runtime"
+            revision, epoch = versions / "revision", runtime / "epoch"
+            previous_umask = os.umask(0o077)
+            try:
+                revision.mkdir(parents=True)
+                epoch.mkdir(parents=True)
+                bridge = revision / "libcarplay_video_bridge.so"
+                bridge.write_bytes(b"fixture-ELF")
+            finally:
+                os.umask(previous_umask)
+            for item in (revision, epoch, bridge):
+                os.chown(item, 1000, 1000)
+            revision.chmod(0o500)
+            epoch.chmod(0o700)
+            bridge.chmod(0o400)
+            state = epoch / "cold-state.json"
+
+            def run(uid=1000):
+                result = subprocess.run(
+                    [sys.executable, "-c", probe, str(bridge), str(state), str(versions)],
+                    cwd=directory, preexec_fn=demote(uid), capture_output=True, text=True,
+                    timeout=5, check=True)
+                return json.loads(result.stdout)
+
+            denied = run()
+            self.assertEqual(denied['uid'], 1000)
+            self.assertEqual((denied['readBridge'], denied['writeState']), (errno.EACCES, errno.EACCES))
+            root.chmod(0o711)
+            self.assertEqual(run()['readBridge'], errno.EACCES, "Every ancestor needs traversal")
+            versions.chmod(0o711)
+            partial = run()
+            self.assertEqual(partial['readBridge'], 0)
+            self.assertEqual(partial['writeState'], errno.EACCES, "Runtime parent also needs traversal")
+            # Execute the actual three installer commands, with only paths redirected.
+            subprocess.run(["sh", "-c", self.parent_dac_commands((root, versions, runtime))],
+                           capture_output=True, text=True, timeout=5, check=True)
+            permitted = run()
+            self.assertEqual((permitted['readBridge'], permitted['writeState']), (0, 0))
+            self.assertEqual((permitted['listParent'], permitted['writeParent']),
+                             (errno.EACCES, errno.EACCES))
+            for parent in (root, versions, runtime):
+                self.assertEqual((parent.stat().st_uid, parent.stat().st_mode & 0o777), (0, 0o711))
+            foreign = run(1001)
+            self.assertEqual((foreign['readBridge'], foreign['writeState']), (errno.EACCES, errno.EACCES))
+
+    def test_bridge_file_denial_precedes_module_load_and_every_callback_publication(self):
+        source = INTERCEPTOR.read_text()
+        arm = source.split("    function arm(input, options) {", 1)[1]
+        preflight = arm.index("const bytes = fileBytes(options.bridgePath")
+        loaded = arm.index("const bridge = Module.load(options.bridgePath)")
+        self.assertLess(preflight, loaded)
+        for publication in ("Script.pin()", "Interceptor.attach(", "Interceptor.replaceFast(",
+                            "Process.attachModuleObserver("):
+            self.assertLess(loaded, arm.index(publication))
+        self.assertNotRegex(arm[:preflight], r"(?:Interceptor\.(?:attach|replaceFast)|Script\.pin)\s*\(")
+        script = r"""
+            const assert = require('assert');
+            const crypto = require('crypto');
+            const fs = require('fs');
+            const create = require(process.argv[1]).createColdOemInterceptor;
+            const profile = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+            const calls = { load: 0, attach: 0, replace: 0, observer: 0, pin: 0, native: 0, bridgeOpen: 0 };
+            const bridgePath = '/data/local/tmp/impulse-carplay/versions/fixture/libcarplay_video_bridge.so';
+            class MockFile {
+                constructor(path) {
+                    if (path === bridgePath) { calls.bridgeOpen++; throw Error('EACCES fixture bridge'); }
+                    assert.strictEqual(path, '/proc/self/cmdline');
+                }
+                readBytes() { return Uint8Array.from(Buffer.from('com.ts.carplay\0')).buffer; }
+                close() {}
+            }
+            const installer = create({
+                Process: { arch: 'arm64', pointerSize: 8, id: 22287, enumerateModules: () => [],
+                    attachModuleObserver() { calls.observer++; }, getCurrentThreadId() { return 1; } },
+                File: MockFile, Module: { load() { calls.load++; } },
+                Memory: { queryProtection() { return 'r-x'; } },
+                Checksum: { compute(kind, value) { return crypto.createHash(kind).update(value).digest('hex'); } },
+                NativeFunction: function() { calls.native++; },
+                Interceptor: { attach() { calls.attach++; }, replaceFast() { calls.replace++; } },
+                Script: { pin() { calls.pin++; }, unpin() {} }
+            });
+            assert.throws(() => installer.arm(profile, { enabled: true, expectedPid: 22287,
+                principalUuid: 'fixture', bridgePath, bridgeSize: 64, bridgeSha256: '0'.repeat(64) }), /EACCES/);
+            assert.strictEqual(calls.bridgeOpen, 1);
+            for (const key of ['load', 'attach', 'replace', 'observer', 'pin', 'native']) assert.strictEqual(calls[key], 0);
+            assert.deepStrictEqual(installer.status(), { phase: 'idle', replacements: 0, pinned: false, failure: null });
+        """
+        subprocess.run(["node", "-e", script, str(INTERCEPTOR), str(PROFILE)],
+                       text=True, capture_output=True, check=True, timeout=10)
 
     def test_reload_defers_before_visual_or_host_actions(self):
         body = function_source(self.manager, "reloadCarPlayProcessesAfterPatchMount")
