@@ -1,3 +1,14 @@
+## Current status — 137 installed and bridge ready; phone/map test pending
+
+Owner explicitly removed P and speed from PREPARATION. Implemented and installed
+74137; all Mini JVM/Release and44 Python checks pass. Real Android command receiver
+preflight passed without phone; current OEM15640/native15779/Java17517 preserved,
+new boot22c3, native9pinned/Javaarmed. Use current HANDOFF for exact hashes/evidence.
+Connect only iPhone USB and verify primary CarPlay on D0 before combined map test.
+Actual secondary frame/type111 remains unproven. No further build/install/reboot
+needed. Installer wrapper timeout was superseded by PM Success, actual package
+registry/version and installed APK hash; never relaunch137 installation blindly.
+
 ## Current status — 136 READY, waiting for owner parked notice
 
 Installed135 has a proven Android receiver descriptor bug; the test killed OEM11951.

@@ -4,7 +4,9 @@
 - Removed vehicle telemetry reads/fields from local bootstrap and policy; eligibility publication, coherent warm-host restart check and client refresh no longer depend on gear/speed.
 - Keep fresh projection-absence observations, physical Bluetooth/DCM proof, process identity, revision/attempt circuit and preservation of published callback owners.
 - Updated waiting messages and regression tests: shell packets without vehicle fields or with legacy D/45 km/h are accepted; stale, revoked, active/unknown projection and mismatched identities remain blocked.
-- Default version advanced to 74137 / 1.0.0.74.137-preview. Nineteen Python endpoint/assets regression tests passed; Mini JVM/Release validation pending. No vehicle action or successful map claim.
+- Mini source778647fc passed full JVM/Release/R8/lint/signing in 5m33s/83 tasks; 19 endpoint/assets and 25 lifecycle Python checks passed. Exact signed APK/controller digest verified.
+- Installed74137 while fresh P0/no phones; PM Success, package registry74137 and actual installed APK SHA e851f4993aab3f9885e3b1c2324ebe763f572f9a5f599bc268a568f58b1be9d6 independently verified. Wrapper missed terminal rc after success; no relaunch. Public transport files removed.
+- New observed boot22c3/OEM15640 automatically prepared native9pinned and Javaarmed with owners15779/17517. Real REVOKE/REQUEST/REVOKE callback dispatch passed without phone and unchanged OEM identity; gear/speed absent from runtime eligibility. No root-issued reboot, vehicle power or actual map-frame claim.
 
 ## 2026-10-25 — 136 signed APK ready; parked installation pending
 

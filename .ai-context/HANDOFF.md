@@ -1,4 +1,48 @@
-## Current handoff — 137 preparation change; owner explicitly removes P/speed dependency
+## Current handoff — 137 INSTALLED / bridge READY / real command preflight PASSED
+
+Owner explicitly removed P and km/h lock FROM PREPARATION ("Tira do preparo").
+Done in all four bootstrap gates, including initial policy, publication, coherent
+idle-host restart check and client refresh. No gear/speed reads or packet fields.
+Projection absence/freshness, current process identity, attempt circuit, ticket
+revocation and preservation of callback owners remain. Waiting text updated.
+
+Installed74137 / 1.0.0.74.137-preview, source778647fc906a749d61549b8a3c1a7a856af59e77,
+branch release/impulse-74137-v9. Mini job
+haval-impulse-133-778647fc906a749d-20261025T205147Z-31853 SUCCESS5m33s /83tasks,
+full JVM/Release/R8/lint and signing passed. Nineteen endpoint/assets +25 lifecycle
+Python checks passed. Actual installed base.apk SHA
+ e851f4993aab3f9885e3b1c2324ebe763f572f9a5f599bc268a568f58b1be9d6
+size81582383, production cert unchanged. Packaged source digest verified against
+reviewed controller; revision74137-237aeef69c42-77685850fb91.
+
+NEW kernel22c3cdf4-507f-4b3a-ba39-5baba9c400b7 observed during build; ROOT DID NOT
+issue a reboot. FreshP0/noProjection/noPhoneUSB verified before installation.
+Exact APK reconstructed via4,009,406-byte gzip /12chunks; temporary public blob
+AND script archive removed. PM reported Success and package registry74137 plus
+actual installed APK hash/size independently verified. Installer wrapper timed
+out waiting for absent install.rc AFTER success; DO NOT relaunch install. This
+wrapper receipt failure is superseded by actual package/hash/runtime evidence.
+Private run delta-install-20261025T205856Z-9c1ff5e16736; build-137-queue.json.
+
+Automatic prep137 TRUE and READY. Live OEM15640/start14946, native15779, Java17517.
+Current runtime uses kernel+PID+start above: native installed-pinned9 /pinnedtrue /
+nofailure; Javaarmed, both owner starttime/argv exact and verified AFTER preflight.
+Real Android REVOKE/REQUEST/REVOKE dispatched with no phone while parked; SAME OEM
+identity remained alive and native9pinned. New safety packet has NO gear/speed.
+This validates BroadcastReceiver dispatch that crashed135; no ServiceConnection
+Binder offer, map firstframe or type111 success claimed (phone absent).
+
+Next: owner connects ONLY iPhone USB, verifies primary CarPlay normal on DISPLAY0.
+Then controlled combined five-minute test with AppleMaps route. Preserve all live
+pins; no hot replacement or additional reboot needed for137. Test does not require
+P/zero; initial on-car map validation still pending. Do not move principal toD3.
+No new PR/OTA/tag/public release or GWM/vehicle-power action. Artifact:
+/root/projects/haval-impulse/artifacts/impulse-74137-preparation-release-mini/
+app_build_outputs_apk_release_app-release.apk, validation.json adjacent.
+Private diagnostics/inspect/preflight receipt under original workspace
+ test-artifacts/install-133-persistent-20261025/137-*.json and build-137-queue.json.
+
+## Previous handoff — 137 preparation change; owner explicitly removes P/speed dependency
 
 Owner: "Tira essa trava de P e km/h", clarified "Tira do preparo". Preparing137.
 All four vehicle-state gates removed: bootstrap policy, publisher, coherent shell
