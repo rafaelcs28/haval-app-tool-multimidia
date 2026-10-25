@@ -1,28 +1,43 @@
-## Current handoff — 134 installed; waiting for phone disconnection (2026-10-25)
+## Current handoff — 135 test CRASH PROVEN; 136 callback fix preparing
 
-Owner turned car on. Fresh P/0 confirmed; new boot
-55bda7d0-84fd-43fd-9d5c-2c4cf39debc8, OEM 3749/start 1380. Guarded delta installer
-completed and verified ACTUAL installed base.apk SHA-256
-3c762663b1da384c17c2e0d9f7bc1d959a12029ec0658d39d0c969e30bad5f5b, version74134.
-Temporary public blob was removed. No HU reboot or injector command sent by root.
+Owner started 5min test: no map and bootstrap awaitingP. Car is DRIVING (last fresh
+D/27.9), so ONLY read-only diagnostics/offline work; no reboot/install/injection.
+Do not ask them to wait parked through compilation. Owner asked how to restart;
+root explained restart135 would repeat the fault, will notify when136ready.
 
-Initial 134 inspection: native {}, Java unarmed, no owners. Automatic option TRUE.
-Fresh safety packets show P/0, enabled true, inFlight false, quiescent FALSE;
-preparation waiting. The failure phase/identity in preferences is historical133
-(boot9055), not a new134 failure. New134 attempt has NOT started. Root sent the
-protected enabled=true configuration broadcast (success), without retry/reset.
+Same kernelbootb6ab, oldREADY OEM11951 DIED, currentOEM28661; no cpbridge owners.
+Old11951 runtimeJSON9/pinned is STALE, not live. Exact crash19:28:45UTC:
+com.ts.carplay PID11951 java.lang.AbstractMethodError on abstract
+BroadcastReceiver.onReceive(Context,Intent), LoadedApk ReceiverDispatcher.
+No matching native tombstone. Endpoint REQUEST receiver used shorthand callback;
+pinned frida-java-bridge7.0.13 infers only INTERFACES, not superclass methods, so
+it emitted onReceive()V and left Android's required abstract method unimplemented.
+Thus boot readiness was real but did not validate command dispatch. Test command
+then crashed that host. Do not call this a BLE/gear fault or map-native crash.
 
-Async question now pending: disconnect phones also from Bluetooth and wireless
-CarPlay, keep in P; options "Já desconectei tudo" / "Não há telefone conectado".
-Wait for answer while checking live local preparation. Do not request connection
-to iPhone until native9/pinned, Java armed and both owners verified. Do not weaken
-quiescence guards if owner says none: inspect exact current service evidence.
+Controller commit c20b7d5f fixes exact callback types for receiver and four service
+callbacks. 12 Node lifecycle scenarios plus ACTUAL pinned registerClass+mkdex
+emitted DEX-descriptor regression PASS; old broken descriptor reproduced. Source
+135 pairedONLINE fix retained. Root136version defaults pending commit. No new
+Android build yet; submit audited immutable136 release to Mini only.
 
-Installer private receipt: delta-install-20261025T185739Z-ec1c8ad77bc6. Inspection files installed134-boot55bd-* and
-installed134-waiting-status.txt under private install-133-persistent-20261025.
-Helper inspect_134.py accepts latest134 validation.json and stores readiness
-receipts; prior inspect_133.py is intentionally unchanged. Latest source remains
-563123d9, signed Mini134 validated; no new build is needed.
+Plan136: build/validate first while owner can drive. When parkedP0, stop obsolete
+135 automatic preparation BEFORE phone disconnection to avoid preparing old
+payload during install; install136 with no phones, verify exactAPK, enable136,
+require native9/Java/owners. PRE-FLIGHT actual receiver REVOKE/REQUEST dispatch
+while parked before asking roadtest. Do not unload pinned callbacks; if old135
+mapped preserve until controlled HU boot. REQUEST with app experimentdisabled
+must not grantSurface; inspect endpoint and PIDs. For service-offer preflight,
+phone may need principal epoch>0; keep app map gate disabled then REQUEST/REVOKE.
+No Map/frame success claimed; type111 negotiation still needs live evidence.
+
+Private evidence originalproject test-artifacts/install-133-persistent-20261025/
+135-test-no-change-state.txt and135-test-crash-evidence.txt (largecrashbuffer; read
+only matching com.ts.carplay block nearEND; many unrelatedOEMlighting crashes at
+boot). Testevent retrieval timedout; do not print entire file again. Missing
+AttemptBoot/Phase plusoldReadyIdentity means explicit UI retry AFTER hostdeath;
+only resetFailureCircuit clears those keys, and does not kill host. No rootretry
+broadcast sent this test. Kernel has NOTrebooted sinceb6ab. No GWM power action.
 
 ## Current handoff — 134 READY TO INSTALL; owner will turn on car
 

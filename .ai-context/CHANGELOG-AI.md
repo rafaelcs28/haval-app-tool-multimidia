@@ -1,3 +1,10 @@
+## 2026-10-25 — 135 field command failure and 136 callback correction
+
+- 135 installed, exact APK verified, and full HU reboot automatically restored native9/Java/owners; source paired ONLINE classification fix worked.
+- Starting the field test then crashed the OEM host with AbstractMethodError on BroadcastReceiver.onReceive(Context,Intent). Old runtime files did not describe the replacement process.
+- Confirmed pinned Java bridge generated ()V for shorthand superclass callback. Explicit callback signatures now tested against actual registerClass/mkdex DEX output and twelve lifecycle scenarios.
+- 136 packaging pending authorized Mini. No changes to vehicle while driving; no visual map/frame success claimed.
+
 ## 2026-10-25 — 134 installed and verified on the car
 
 - Confirmed new boot55bd, fresh P/0 and no visual projection; reconstructed and installed the exact signed 134.

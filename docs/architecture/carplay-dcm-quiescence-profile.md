@@ -59,6 +59,14 @@ desconectados e o agregado vazio antes/depois. Isso demonstrou o bloqueio indevi
 da exigência anterior de OFFLINE. A classificação corrigida mantém a prova física
 independente e todas as demais restrições.
 
+No APK DCM de SHA-256 fixado acima, as evidências REA
+`ev_ba63834a809a7e3f5641635dd8877830aa29ec1fcc02baaeb1dbceec116b2ded`
+e `ev_9e04ff0d43eb5172bc6442995051481ee8ba723fbc5338282ca0746d798c273d`
+mostram os caminhos que atribuem READY ao pareamento. A evidência
+`ev_688baa0902118d2aa1b623f1936e57838a6a4c6143eaf1a4170f433ecc89bc94`
+mostra a promoção a ONLINE e a retenção desse estado. Isso é evidência estática;
+a ausência física foi confirmada separadamente pelas leituras Binder descritas.
+
 Somente essa assinatura é candidata: capacidades disponível/ativa zero, mapa de
 estados ativos vazio, endereço Bluetooth válido, modo USB device desativado e os
 três nodes nativos USB HID/IAP/NCM ausentes. Qualquer outro tipo, estado, conexão,
