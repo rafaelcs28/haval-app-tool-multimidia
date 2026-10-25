@@ -1,63 +1,43 @@
-## Current handoff — 136 READY; owner will notify when parked
+## Current handoff — 136 INSTALLED; owner defers physical steps until later
 
-Owner explicitly answered "Vou avisar quando estacionar" to the136 installation
-question. Last fresh telemetry D/73.9; no vehicle mutations while moving. Do not
-keep polling or ask them to stop now. Wait for owner parkedP/noPhone/CarPlayclosed,
-then act promptly; every offline preparation/build check is ALREADY DONE.
+Latest owner: "Não vou ao carro agora. Me fala passo a passo que faço daqui a pouco".
+Give concise instructions for later; no further on-car changes now. 136 actualAPK
+verified installed SHA ddf7fb8c1407ef66b4cc02f3bdd23935f7ddf06171cd1babe9b819f1ee8fce1f.
+Do NOT repeat install/build. Automatic option136 TRUE (DUMP enableack received).
+Current preparation WAITING, P0 confirmed, quiescent=false, no136attempt/owners yet.
 
-Source /root/projects/haval-impulse-133, branch release/impulse-74136-v9, functional
-acc346afa4db146bb5b0a71ca0a7fa318dc16cd8. Endpoint callback fix c20b7d5f. Mini job
-haval-impulse-133-acc346afa4db146b-20261025T193754Z-23579 SUCCESS5m17/83tasks,
-fullJVM/Release/R8/lint PASS. 12 Node lifecycle scenarios include ACTUAL pinned
-frida registerClass+mkdex DEX descriptor tests;11Python endpoint/assets PASS.
+Blocker identified DIRECTLY: USB2-1 vendor04e8/product6860 manufacturerSAMSUNG,
+productSAMSUNG_Android still attached after iPhone removal. AndroidAutoAapActivity
+was initially visible, then disappeared. BLElights are not the identified blocker.
+Owner should later disconnect Samsung/Android data USB and all phone projections
+from central, keeping lights BLE as is; leave PrepararCarPlayaoligar ON and wait
+Bridgepreparadaparuestasessão. If Samsung providesinternet, linkmaydrop but local
+bootstrap136doesnotneedVPS. Notify root whenready BEFOREtest: actual136 broadcast
+callback preflight still REQUIRED; unit/DEX tests passed, physicaldispatchpending.
 
-136 APK ready artifacts/impulse-74136-callback-release-mini/
-app_build_outputs_apk_release_app-release.apk, size81582379. SHA
- ddf7fb8c1407ef66b4cc02f3bdd23935f7ddf06171cd1babe9b819f1ee8fce1f.
-Prod cert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
-Payload74136-b8c26f1a60e1-803a3d40d033; controller digest/asset hashes verified.
-Private delta-136-callback:4,009,641gzip bytes/12chunks, exactAPK reconstruction
-and install_delta_136.py --validate-only PASS. Uses pinned cached133 baseline86426
-at /data/local/tmp/impulse-74133-reviewed/app.apk, local baseline artifact133
-persistent-release-mini. Installer expects CURRENT135 ->TARGET136; no public blob
-served yet. validate_136.py/inspect_136.py prepared. No extra build is needed.
+Transport firsttwoattempts failed BEFOREapply/install (mkdir thenrawTelnetupload
+posthash). Their artifacts were NOTinstalled. Firstpublicfolder e286... removed.
+Secondattempt recovered SAFELY through HTTPS tar of exact3scripts using existing
+foldera9b...; reconstruction+PMsuccess+actualbase.apkSHAmatch verified. All second
+publicfiles removed after verification. Private run delta-install-20261025T195122Z-a9b31f83a752,
+resume-https.jsonl; launcher local
+/tmp/resume-haval136-https.py. It also rechecked freshP0/noProjection/current135
+before PMinstall. No136reboot/injection/preflightperformedyet.
 
-Car STILL135. Same bootb6ab050a-4e1c-4360-a947-78eb32c06319 currentOEM28661 (last
-read); old11951/native12108/Java14297 are DEAD previoussession. Their old JSON9pinned
-is STALE. USB/currentstockCarPlay works; no bridge in replacementOEM. AttemptBoot/Phase were cleared, matching the explicit retry path; sender not
-established. OldReadyIdentity11951 persists. Do not treat as
-new/currentREADY or kill reused oldPIDnumbers.
+Kernel lastknown b6ab050a-4e1c-4360-a947-78eb32c06319, OEM28661 uninstrumented.
+Ownapp136PID7483. Old135sessionOEM11951/native12108/Java14297 DEAD; oldruntimeJSON9
+pinned STALE. Preserve any newlydetected actualpins; never kill recycledPIDs.
+Old135autoprep was DISABLED beforeupgrade; new136enabledafterverifiedinstall.
 
-Cause proven: first135 test capture started epoch1792956525487, OEM11951 crashed
-10ms later on abstract BroadcastReceiver.onReceive(Context,Intent). Actualpinned
-Java bridge infers shorthand ONLY from interfaces, generated onReceive()V for
-superclass override. 136 explicitly types receiver+fourServiceConnectioncallbacks.
-Firstcapture aborted32ms with subscription_error; secondcapture64s later collected
-214guidance/211candidate/0errors over256s, manuallystopped. No image/frame success.
-Complete751387byte capture fetched privately and checksum verified; source logs
-also contain old sessions, so filter by session/epoch. field135-before136/
-latest-sessions-summary.json contains only the two relevant sessions, no route data.
-
-NEXT PARKED: freshP0; disable OLD135 automatic option before phone disconnection
-if still connected (protected CONFIGURE action extra_enabled=false preserves all
-callbacks), to avoid oldpayload starting during upgrade. If alreadydisconnected,
-inspect mapping/owners first; never unload livepins. Install136 with prepared
-helper and verify actualbase.apk SHA. Enable new136 via protectedconfigure true.
-If old135 pinned map persists, use authorized HU reboot whileP, then require new
-kernelID + automatic native9/pinned/Javaarmed/bothowners. No GWMpower action.
-
-CRITICAL136 preflight BEFORE another roadtest: actual Android broadcast REVOKE
-withready136 agent must NOTkillOEM. Then REQUEST while app mapexperimentdisabled;
-withnoPhone epoch0 justretries; withprincipalCP0 epoch>0 itcanofferBinder but App
-mustnotgrantSurface becauseexperimentdisabled. Verify sameOEM/native+Javaowners
-survive, receiver/servicecallback logs, then REVOKE/retire and allow >5s for any
-stale offer TTL. Only then letownerstarttestparked. Do not equate armed/SurfaceReady
-with firstframe/type111advertisement; realmap still needs proof. PrincipalCP stays
-D0; sendingprimaryCarPlaytoD3 would violate experimentalhostpolicy.
-
-All private helpers/evidence under originalproject test-artifacts/
-install-133-persistent-20261025. No vehicle code, reboot, injector or radio mutation
-performed while driving. Ready136 notinstalled yet; wait for parked notice.
+Remaining sequence when owner returns: freshP0+nophone+noproject; inspect_136.py
+(requireNative9/pinned +Javaarmed +both exactowners). If cannotprep, inspectactual
+current device evidence; do NOT ask repeated genericdisconnection or newbuild.
+Once136ready, REVOKE/REQUEST/REVOKE real Android receiver preflight while app map
+experimentdisabled, preservingOEMidentity/owners. Withphoneabsent epoch0 retries;
+withphoneCP0 epoch>0 canvalidateoffer beforeMapgrant. Allow>5s offerTTLcleanup.
+Onlythenask owner tostartmaptestparked; principalCarPlay staysD0 and AppleMapsroute.
+Mapfirstframe/type111 NOTvalidated. Sourceacc346af/release/impulse-74136-v9;
+all signedMini/JVM/Node12/Python11checks PASS, no newcodebuildrequired.
 
 ## Current handoff — 134 READY TO INSTALL; owner will turn on car
 
