@@ -1,4 +1,45 @@
-## Current handoff — 136 INSTALLED; owner defers physical steps until later
+## Current handoff — 137 preparation change; owner explicitly removes P/speed dependency
+
+Owner: "Tira essa trava de P e km/h", clarified "Tira do preparo". Preparing137.
+All four vehicle-state gates removed: bootstrap policy, publisher, coherent shell
+check before idle-host restart, postbootstrap clients. Manager no longer reads
+ServiceManager gear/speed or serializes them. Policy freshness renamed observation
+age because it dates projection quiescence, not vehicle telemetry. Preserve fresh
+phone/projection absence, firmware hashes, current boot/PID/start, attempt budget,
+terminal ticket cancellation and all live published owners. Native interceptor
+still validates eligible/identity/ticket/freshness; no change needed there.
+UI waiting text no longer asks for P/zero. Five-minute test already had no gear gate.
+Version74137 / 1.0.0.74.137-preview; build/physical validation pending. No car
+mutation, reset, reboot, power command or installation performed in this change.
+Current mapped failed136 remains untouched; see exact evidence below. Its precise
+rejected field is unknown: removal of vehicle prerequisites is requested behavior,
+not evidence that gear or speed caused that failure. Do not repeat136install.
+
+## Previous handoff — 136 preparation FAILED; photo received, do not start map test
+
+Owner sent photo showing "Preparo pausado após uma falha; sessão atual preservada".
+Read-only collection at device 2026-10-25 17:48 -03 confirmed current OEM31530,
+start458316, kernel b6ab050a-4e1c-4360-a947-78eb32c06319. Current136 runtime
+cold-state.json: phase failed, replacements0, pinnedfalse, failure
+"Automatic eligibility lost before native preparation". Native injector31707
+is still alive with exact136 launcher argv; bridge SO mapped, noJavaendpoint.
+cpBridgeLastFailure says Native preparation failed; circuit136 open and phasefailed.
+Do not reset/reinject this mapped session or treat old135ready record as current.
+All phone USB descriptors absent at observation (only root hubs). No new install,
+reboot, broadcast, retry, process kill or vehicle power action was issued.
+
+Precise rejected eligibility field NOT recorded, so do not claim owner shifted
+gear or reconnected a phone. Last safety packet P0/quiescentnull/failed was stale
+(17:45:53 vs read17:48); publisher intentionally skips blocked/failed terminal state.
+Do not use it as fresh parking proof for remote reboot. Recovery instructions:
+parkP, disconnect phone projections/dataUSB, full Android headunit restart,
+then explicit UI retry if paused (circuit survivesboot), wait136ready and notify
+before test. Never confuse screenoff with Androidrestart. Physical136 callback
+REVOKE/REQUEST/REVOKE preflight still REQUIRED after recovery; no map proven.
+Private evidence: original workspace test-artifacts/install-133-persistent-20261025/
+photo136-{failure,native,fresh}-*.txt. Source and installed136 unchanged.
+
+## Previous handoff — 136 INSTALLED; owner defers physical steps until later
 
 Latest owner: "Não vou ao carro agora. Me fala passo a passo que faço daqui a pouco".
 Give concise instructions for later; no further on-car changes now. 136 actualAPK

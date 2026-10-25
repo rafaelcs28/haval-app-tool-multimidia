@@ -1,4 +1,4 @@
-# Preparo CarPlay local — versões 133 a 135
+# Preparo CarPlay local — versões 133 a 137
 
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote
@@ -15,8 +15,15 @@ nome dedicado, desligados do terminal e da vida da Activity, mantêm os callback
 nativo e Java vivos. Atualizar o APK não sobrescreve a biblioteca de uma sessão
 existente. Não matar, descarregar ou substituir callbacks publicados.
 
-A preparação exige P e velocidade zero consultados no serviço veicular, ausência
-de tasks visuais CarPlay/AA e respostas DCM recentes e sustentadas sem dispositivos
+A partir da versão 137, a preparação não consulta câmbio nem velocidade e não
+depende de P ou de 0 km/h. A remoção foi solicitada explicitamente pelo proprietário
+e cobre decisão inicial, publicação de elegibilidade, conferência anterior ao
+reinício do host ocioso e atualização dos clientes. O pacote local de elegibilidade
+não contém mais os campos de câmbio e velocidade; a idade da observação continua
+limitando as evidências dos serviços de projeção.
+
+A preparação exige ausência de tasks visuais CarPlay/AA e respostas DCM recentes
+e sustentadas sem dispositivos
 online nem projeções ativas. Desconexão apenas visual não basta. Binder indisponível,
 resposta nula/malformada, processo ambíguo e dados antigos deixam o preparo pendente.
 O DCM não expõe um sinal comprovado de inicialização concluída; aplicam-se espera
@@ -46,6 +53,10 @@ A preparação arma somente o passthrough e o endpoint de controle. Não persist
 lease de teste, Surface Binder, decoder, envio type111, vídeo no display 3 ou opção
 de mapa. O teste de cinco minutos continua sendo iniciado pelo usuário. Não altera
 resolução, layout, WebView, tema escolhido, Android Auto ou controles do veículo.
+
+O teste já não tinha bloqueio de câmbio ou velocidade. A versão 137 modifica apenas
+as condições do preparo da multimídia. Um telefone conectado ou um estado de
+projeção desconhecido continua impedindo uma nova preparação.
 
 Se o telefone conectar antes das condições de preparação, o CarPlay original
 continua disponível e o preparo aguarda a desconexão. A versão não promete que um

@@ -13,7 +13,7 @@ class CarPlayBridgeBootstrapPolicyTest {
         enabled = true, rootReady = true, assetsVerified = true,
         bootIdentityKnown = true, processPresent = true, processIdentityMatches = true,
         phase = Phase.NONE, ownersAlive = false, hasBridgeMapping = false,
-        coldModulesAbsent = true, gear = "P", speedKmh = 0f, telemetryAgeMs = 0L,
+        coldModulesAbsent = true, observationAgeMs = 0L,
         carPlayActive = false, androidAutoActive = false, attemptsThisBoot = 0,
         failureCircuitOpen = false, revisionMatches = true
     )
@@ -39,25 +39,11 @@ class CarPlayBridgeBootstrapPolicyTest {
         assertEquals(Action.WAIT_PROCESS, action(idle().copy(coldModulesAbsent = null)))
     }
 
-    @Test fun freshTelemetryHasAnInclusiveBoundAndRejectsUnknownOrFutureData() {
-        val limit = CarPlayBridgeBootstrapPolicy.MAX_TELEMETRY_AGE_MS
-        assertEquals(Action.COLD_ATTACH, action(idle().copy(telemetryAgeMs = limit)))
+    @Test fun freshProjectionObservationHasAnInclusiveBoundAndRejectsUnknownOrFutureData() {
+        val limit = CarPlayBridgeBootstrapPolicy.MAX_OBSERVATION_AGE_MS
+        assertEquals(Action.COLD_ATTACH, action(idle().copy(observationAgeMs = limit)))
         for (age in listOf(null, -1L, limit + 1L, Long.MAX_VALUE)) {
-            assertEquals(Reason.TELEMETRY_NOT_FRESH, decide(idle().copy(telemetryAgeMs = age)).reason)
-        }
-    }
-
-    @Test fun neutralOrStoppedInDriveIsNotParked() {
-        for (gear in listOf(null, "", "--", "N", "D", "R", "p")) {
-            assertEquals(Action.WAIT_SAFE, action(idle().copy(gear = gear)))
-        }
-    }
-
-    @Test fun motionInvalidNumbersAndMissingSpeedNeverAuthorizePreparation() {
-        for (speed in listOf(null, 0.1f, -0.1f, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
-            for (cold in listOf(true, false)) {
-                assertEquals(Action.WAIT_SAFE, action(idle().copy(speedKmh = speed, coldModulesAbsent = cold)))
-            }
+            assertEquals(Reason.OBSERVATION_NOT_FRESH, decide(idle().copy(observationAgeMs = age)).reason)
         }
     }
 
@@ -76,8 +62,8 @@ class CarPlayBridgeBootstrapPolicyTest {
         val ready = idle().copy(phase = Phase.READY, hasBridgeMapping = true, ownersAlive = true)
         assertEquals(Action.PRESERVE_READY, action(ready))
         val afterAppRestart = ready.copy(rootReady = false, assetsVerified = false,
-            revisionMatches = false, attemptsThisBoot = 1, gear = "D", speedKmh = 45f,
-            carPlayActive = true, androidAutoActive = null, telemetryAgeMs = null)
+            revisionMatches = false, attemptsThisBoot = 1,
+            carPlayActive = true, androidAutoActive = null, observationAgeMs = null)
         assertEquals(Action.PRESERVE_READY, action(afterAppRestart))
         assertEquals(Reason.READY_PREVIOUS_REVISION, decide(afterAppRestart).reason)
     }

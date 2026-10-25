@@ -58,7 +58,7 @@ class CarPlaySafetyPublicationGateTest {
         assertEquals(Decision.DENY, decide(gate, key, key))
     }
 
-    private fun packet(elapsed: Long = 99_900) = """{"eligible":true,"enabled":true,"inFlight":true,"attemptPhase":"preparing","gear":"P","speedKmh":0,"quiescent":true,"bootId":"${key.boot}","ticket":"${key.ticket}","targetPid":${key.pid},"targetStartTime":${key.start},"elapsedMs":$elapsed}"""
+    private fun packet(elapsed: Long = 99_900) = """{"eligible":true,"enabled":true,"inFlight":true,"attemptPhase":"preparing","quiescent":true,"bootId":"${key.boot}","ticket":"${key.ticket}","targetPid":${key.pid},"targetStartTime":${key.start},"elapsedMs":$elapsed}"""
     private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
 
     private fun shellCheck(packet: String, replacement: String? = null): Boolean {
@@ -98,7 +98,13 @@ class CarPlaySafetyPublicationGateTest {
 
     @Test fun warmKillUsesOneFreshCoherentPacket() {
         assertTrue(shellCheck(packet()))
-        assertTrue(shellCheck(packet().replace("\"speedKmh\":0", "\"speedKmh\":-0.0")))
+    }
+
+    @Test fun warmKillDoesNotRequireVehicleTelemetryOrInterpretLegacyGearAndSpeed() {
+        for (legacy in listOf("\"gear\":\"D\",\"speedKmh\":45",
+                "\"gear\":\"N\",\"speedKmh\":0", "\"gear\":null,\"speedKmh\":null")) {
+            assertTrue(legacy, shellCheck(packet().dropLast(1) + "," + legacy + "}"))
+        }
     }
 
     @Test fun warmKillRejectsEachLostPredicateAndWrongIdentity() {
@@ -107,8 +113,6 @@ class CarPlaySafetyPublicationGateTest {
             "\"enabled\":true" to "\"enabled\":false",
             "\"inFlight\":true" to "\"inFlight\":false",
             "\"attemptPhase\":\"preparing\"" to "\"attemptPhase\":\"failed\"",
-            "\"gear\":\"P\"" to "\"gear\":\"D\"",
-            "\"speedKmh\":0" to "\"speedKmh\":1",
             "\"quiescent\":true" to "\"quiescent\":false",
             key.boot to "12345678-abcd-4abc-8def-123456789abd",
             key.ticket to "abcdef01-2345-4678-8abc-123456789abd",

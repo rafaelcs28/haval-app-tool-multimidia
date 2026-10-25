@@ -24,7 +24,7 @@ internal class CarPlaySafetyPublicationGate {
             require(key.boot.matches(Regex("[a-f0-9-]{36}")) && key.ticket.matches(Regex("[a-f0-9-]{36}")))
             val checks = listOf(
                 "\"eligible\":true", "\"enabled\":true", "\"inFlight\":true",
-                "\"attemptPhase\":\"preparing\"", "\"gear\":\"P\"", "\"quiescent\":true",
+                "\"attemptPhase\":\"preparing\"", "\"quiescent\":true",
                 "\"bootId\":\"${key.boot}\"", "\"ticket\":\"${key.ticket}\""
             ).joinToString("\n") { "printf '%s\\n' \"\$cpb_safety\" | grep -Fq ${quote(it)} || exit 1" }
             return """
@@ -32,7 +32,6 @@ internal class CarPlaySafetyPublicationGate {
                 $checks
                 printf '%s\n' "§cpb_safety" | grep -Eq '"targetPid":${key.pid}([,}])' || exit 1
                 printf '%s\n' "§cpb_safety" | grep -Eq '"targetStartTime":${key.start}([,}])' || exit 1
-                printf '%s\n' "§cpb_safety" | grep -Eq '"speedKmh":-?0([.]0+)?([,}])' || exit 1
                 cpb_stamp=§(printf '%s\n' "§cpb_safety" | sed -n 's/.*"elapsedMs":\([0-9]*\).*/\1/p')
                 case "§cpb_stamp" in ''|*[!0-9]*) exit 1;; esac
                 test "§cpb_stamp" -gt 0 || exit 1

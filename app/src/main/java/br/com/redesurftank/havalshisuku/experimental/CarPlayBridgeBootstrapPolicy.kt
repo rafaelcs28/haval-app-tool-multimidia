@@ -2,7 +2,7 @@ package br.com.redesurftank.havalshisuku.experimental
 
 /** Decisions only: this policy never starts, stops, injects or unloads a process. */
 object CarPlayBridgeBootstrapPolicy {
-    const val MAX_TELEMETRY_AGE_MS = 15_000L
+    const val MAX_OBSERVATION_AGE_MS = 15_000L
     const val MAX_ATTEMPTS_PER_BOOT = 1
 
     enum class Phase { NONE, ARMED, INSTALLED, READY, FAILED, FAILED_PINNED, UNKNOWN }
@@ -19,8 +19,8 @@ object CarPlayBridgeBootstrapPolicy {
         OWNERS_NOT_ALIVE, ATTEMPT_NOT_IN_PROGRESS, PRIOR_FAILURE, FAILURE_CIRCUIT_OPEN,
         INVALID_ATTEMPT_COUNT, ATTEMPT_BUDGET_EXHAUSTED, ROOT_UNAVAILABLE,
         ASSETS_UNVERIFIED, BOOT_IDENTITY_UNKNOWN, PROCESS_ABSENT,
-        PROCESS_IDENTITY_UNTRUSTED, COLD_STATE_UNKNOWN, TELEMETRY_NOT_FRESH,
-        NOT_PARKED, CARPLAY_NOT_KNOWN_INACTIVE, ANDROID_AUTO_NOT_KNOWN_INACTIVE,
+        PROCESS_IDENTITY_UNTRUSTED, COLD_STATE_UNKNOWN, OBSERVATION_NOT_FRESH,
+        CARPLAY_NOT_KNOWN_INACTIVE, ANDROID_AUTO_NOT_KNOWN_INACTIVE,
         COLD_PROCESS, SAFE_IDLE_RESTART
     }
 
@@ -44,9 +44,7 @@ object CarPlayBridgeBootstrapPolicy {
         val ownersAlive: Boolean,
         val hasBridgeMapping: Boolean,
         val coldModulesAbsent: Boolean?,
-        val gear: String?,
-        val speedKmh: Float?,
-        val telemetryAgeMs: Long?,
+        val observationAgeMs: Long?,
         val carPlayActive: Boolean?,
         val androidAutoActive: Boolean?,
         val attemptsThisBoot: Int,
@@ -90,11 +88,8 @@ object CarPlayBridgeBootstrapPolicy {
             if (!processPresent) return decide(Action.WAIT_PROCESS, Reason.PROCESS_ABSENT)
             if (!processIdentityMatches) return decide(Action.WAIT_PROCESS, Reason.PROCESS_IDENTITY_UNTRUSTED)
             if (coldModulesAbsent == null) return decide(Action.WAIT_PROCESS, Reason.COLD_STATE_UNKNOWN)
-            if (telemetryAgeMs == null || telemetryAgeMs !in 0L..MAX_TELEMETRY_AGE_MS) {
-                return decide(Action.WAIT_SAFE, Reason.TELEMETRY_NOT_FRESH)
-            }
-            if (gear != "P" || speedKmh == null || !speedKmh.isFinite() || speedKmh != 0f) {
-                return decide(Action.WAIT_SAFE, Reason.NOT_PARKED)
+            if (observationAgeMs == null || observationAgeMs !in 0L..MAX_OBSERVATION_AGE_MS) {
+                return decide(Action.WAIT_SAFE, Reason.OBSERVATION_NOT_FRESH)
             }
             if (carPlayActive != false) return decide(Action.WAIT_SAFE, Reason.CARPLAY_NOT_KNOWN_INACTIVE)
             if (androidAutoActive != false) return decide(Action.WAIT_SAFE, Reason.ANDROID_AUTO_NOT_KNOWN_INACTIVE)

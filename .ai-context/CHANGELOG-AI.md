@@ -1,3 +1,11 @@
+## 2026-10-25 — 137 removes gear/speed prerequisites from multimedia preparation
+
+- Owner explicitly requested removal of P and km/h locks, then clarified "Tira do preparo".
+- Removed vehicle telemetry reads/fields from local bootstrap and policy; eligibility publication, coherent warm-host restart check and client refresh no longer depend on gear/speed.
+- Keep fresh projection-absence observations, physical Bluetooth/DCM proof, process identity, revision/attempt circuit and preservation of published callback owners.
+- Updated waiting messages and regression tests: shell packets without vehicle fields or with legacy D/45 km/h are accepted; stale, revoked, active/unknown projection and mismatched identities remain blocked.
+- Default version advanced to 74137 / 1.0.0.74.137-preview. Nineteen Python endpoint/assets regression tests passed; Mini JVM/Release validation pending. No vehicle action or successful map claim.
+
 ## 2026-10-25 — 136 signed APK ready; parked installation pending
 
 - Mini acc346af passed full JVM, signed Release/R8/lint in 5m17s (83 tasks). Twelve Node lifecycle/real DEX-signature scenarios and eleven Python endpoint/assets checks passed.

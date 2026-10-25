@@ -11,7 +11,6 @@ import br.com.redesurftank.havalshisuku.R
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeBootstrapPolicy as Policy
-import br.com.redesurftank.havalshisuku.models.CarConstants
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
@@ -56,8 +55,8 @@ object CarPlayBridgeBootstrapManager {
         val key get() = "$boot-$pid-$start"
         val directory get() = "$ROOT/runtime/$key"
     }
-    private data class Safety(val gear: String? = null, val speed: Float? = null,
-        val wall: Long = 0, val elapsed: Long = 0, val quiescent: Boolean? = null)
+    private data class Safety(val wall: Long = 0, val elapsed: Long = 0,
+        val quiescent: Boolean? = null)
     private data class Payload(val revision: String, val directory: String,
         val manifest: JSONObject, val source: File) {
         val bridge get() = "$directory/libcarplay_video_bridge.so"
@@ -124,7 +123,7 @@ object CarPlayBridgeBootstrapManager {
                 .remove("cpBridgeAttemptPhase").commit())
             nextReadyCheckAt = 0
             safety = Safety()
-            report("waiting", "Aguardando P, velocidade zero e telefone desconectado")
+            report("waiting", "Aguardando telefone desconectado e serviços de projeção livres")
             } catch (error: Exception) {
                 Log.w(TAG, "Failure reset deferred; current session is preserved", error)
                 report("blocked", "A sessão atual deve terminar antes de repetir o preparo")
@@ -141,25 +140,17 @@ object CarPlayBridgeBootstrapManager {
         if (!inFlight.get() && mutableStatus.value.state in setOf("ready", "blocked", "failed")) return
         val beginWall = System.currentTimeMillis()
         val beginElapsed = SystemClock.elapsedRealtime()
-        val services = ServiceManager.getInstance()
-        val gear = when (services.getUpdatedData(CarConstants.CAR_BASIC_GEAR_STATUS.value)?.trim()) {
-            "3", "P" -> "P"; else -> null
-        }
-        val speed = services.getUpdatedData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)?.toFloatOrNull()
         val quiet = CarPlayBridgeQuiescence.read(requireNotNull(context))
-        safety = Safety(gear, speed, beginWall, beginElapsed, quiet)
+        safety = Safety(beginWall, beginElapsed, quiet)
         val attempt = activeAttempt
         val identity = attempt?.identity
-        val eligible = isAutomaticEnabled() && inFlight.get() && identity != null && gear == "P" &&
-            speed != null && speed.isFinite() && speed == 0f && quiet == true &&
+        val eligible = isAutomaticEnabled() && inFlight.get() && identity != null && quiet == true &&
             System.currentTimeMillis() - beginWall in 0..2500 &&
             SystemClock.elapsedRealtime() - beginElapsed in 0..2500
         val packet = JSONObject().put("bootId", identity?.boot ?: "")
             .put("wallMs", beginWall).put("elapsedMs", beginElapsed)
             .put("targetPid", identity?.pid ?: 0).put("targetStartTime", identity?.start ?: 0)
             .put("ticket", attempt?.ticket ?: "").put("eligible", eligible)
-            .put("gear", gear ?: JSONObject.NULL)
-            .put("speedKmh", speed ?: JSONObject.NULL)
             .put("quiescent", quiet ?: JSONObject.NULL)
             .put("preparationState", mutableStatus.value.state)
         synchronized(safetyWriteLock) {
@@ -236,8 +227,7 @@ object CarPlayBridgeBootstrapManager {
                 (observed.mappedPath == null || sameImage), phase = phase,
             ownersAlive = ownsNative && (phase != Policy.Phase.READY || ownsJava),
             hasBridgeMapping = observed.mappedPath != null, coldModulesAbsent = observed.cold,
-            gear = current.gear, speedKmh = current.speed,
-            telemetryAgeMs = if (current.elapsed > 0) SystemClock.elapsedRealtime() - current.elapsed else null,
+            observationAgeMs = if (current.elapsed > 0) SystemClock.elapsedRealtime() - current.elapsed else null,
             carPlayActive = if (observed.cpVisual) true else current.quiescent?.not(),
             androidAutoActive = if (observed.aaVisual) true else current.quiescent?.not(),
             attemptsThisBoot = if (bootAttempt) 1 else 0,
@@ -275,7 +265,7 @@ object CarPlayBridgeBootstrapManager {
                 })
                 nextReadyCheckAt = SystemClock.elapsedRealtime() + 30_000
             }
-            Policy.Action.WAIT_SAFE -> report("waiting", "Aguardando P, velocidade zero e telefone desconectado")
+            Policy.Action.WAIT_SAFE -> report("waiting", "Aguardando telefone desconectado e serviços de projeção livres")
             Policy.Action.WAIT_PROCESS -> report("waiting", "Aguardando os serviços do CarPlay")
             else -> report("waiting", "Aguardando os serviços locais da central")
         }
@@ -590,8 +580,7 @@ object CarPlayBridgeBootstrapManager {
             CarPlayPatchManager.postBootstrapClientRefresh {
                 fun safeNow(): Boolean {
                     val sample = safety
-                    return isAutomaticEnabled() && sample.gear == "P" && sample.speed == 0f &&
-                        sample.quiescent == true && sample.elapsed > 0 &&
+                    return isAutomaticEnabled() && sample.quiescent == true && sample.elapsed > 0 &&
                         SystemClock.elapsedRealtime() - sample.elapsed in 0..2500
                 }
                 if (!safeNow()) false else {
@@ -642,7 +631,7 @@ object CarPlayBridgeBootstrapManager {
                 SystemClock.elapsedRealtime() - packet.optLong("elapsedMs") in 0..2500) return
             Thread.sleep(50)
         }
-        error("Fresh parked eligibility unavailable")
+        error("Fresh projection quiescence unavailable")
     }
 
     private fun fields(text: String): Map<String, String> = text.lineSequence().mapNotNull {
