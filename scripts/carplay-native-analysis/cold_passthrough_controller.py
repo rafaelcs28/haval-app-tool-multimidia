@@ -121,15 +121,20 @@ def endpoint_launcher(source: str, *, bridge_path: str = REMOTE_BRIDGE,
     status_expression = json.dumps(REMOTE_ENDPOINT_STATUS)
     if status_mode == ENDPOINT_STATUS_PROCESS:
         status_setup = r"""const impulseEndpointStatusPath = (() => {
-    const read = path => {
+    const read = (path, max) => {
         const file = new File(path, 'r');
-        try { return file.readText(); } finally { file.close(); }
+        try {
+            // procfs reports stat_size=0; implicit readText() can return empty.
+            const text = file.readText(max + 1);
+            if (typeof text !== 'string' || text.length > max) throw new Error('Kernel identity input exceeds bound');
+            return text;
+        } finally { try { file.close(); } catch (_) {} }
     };
-    const boot = read('/proc/sys/kernel/random/boot_id').trim().toLowerCase();
+    const boot = read('/proc/sys/kernel/random/boot_id', 128).trim().toLowerCase();
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)) {
         throw new Error('Invalid kernel boot identity');
     }
-    const stat = read('/proc/self/stat').trim();
+    const stat = read('/proc/self/stat', 4096).trim();
     const end = stat.lastIndexOf(') ');
     const fields = end >= 0 ? stat.slice(end + 2).split(/\s+/) : [];
     const start = fields[19];
