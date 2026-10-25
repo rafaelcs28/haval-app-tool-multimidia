@@ -1,3 +1,18 @@
+## 2026-10-25 — 134 preparation, safety publication races
+
+- Serialize attempt transitions and safety publication; latch cancelled tickets and discard samples for obsolete identities.
+- Preserve the failure diagnostic in private preferences independently of the periodic safety packet.
+- Read one coherent packet after expensive checks, immediately before the guarded OEM restart; add seven JVM regression tests including deterministic packet replacement.
+- Include local bootstrap controller source in asset revision hashing and Gradle inputs; advance build defaults to 74134 / 1.0.0.74.134-preview.
+- Eleven endpoint/assets Python tests and diff checks passed; JVM/release validation pending Mini. Actual native eligibility-loss cause and physical map test remain unproven.
+
+## 2026-10-25 — pharmacy window, read-only runtime diagnosis
+
+- Confirmed current boot/OEM identity and native failed state with zero replacements and no pin; Java endpoint remains unarmed.
+- Runtime timestamps place the failure before the five-minute parked window. The later frozen safety packet does not establish the failure cause.
+- No retry, process change, reboot, installation, vehicle power operation or build was performed. Experimental map test remains pending.
+- Private diagnostic files were retained outside Git; handoff updated. No source change or new test result is claimed.
+
 ## ACTIVE — clean boot9055 detected; owner moving, experimental validation deferred
 
 Latestownerrequest: continue/reboot/activatewhileMOVINGwithpassenger; ownerfrustrated

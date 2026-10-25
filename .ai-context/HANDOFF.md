@@ -1,3 +1,50 @@
+## Current work — version 134 offline preparation (2026-10-25)
+
+Owner now wants notification ONLY AFTER the new APK is ready, then will turn on
+the car for installation followed by a test. Do not wait on or assume a parked
+car now. Prepare and validate offline; no vehicle modification in this phase.
+
+Version 134 adds cancelled-ticket publication protection, a coherent single
+warm-restart safety snapshot, and a separate persistent failure diagnostic.
+Functional manager/helper/tests commit: 23b4e3d74576e938486f5da2f1f2e545b4600961.
+Root also includes local controller source in the bundle revision digest and
+Gradle asset inputs, so controller repairs receive a new failure-circuit revision.
+Version defaults/build target: 74134 / 1.0.0.74.134-preview. No OTA/tag/PR update.
+Eleven asset/endpoint Python tests passed. Seven new JVM tests await the authorized
+Mini release job. Do not claim runtime cause identified or physical bridge fixed.
+Installed car APK is STILL 133/e531; experimental bridge remains unready.
+
+## Current handoff — 2026-10-25, pharmacy window ended; bridge not ready
+
+The owner's five-minute window started around 18:32:53 UTC and has ended. Tell the
+owner plainly that experimental preparation did not complete; do not keep them
+parked or imply an experimental CarPlay/map test is ready. No new retry, install,
+HU reboot, injector action or vehicle power command was sent during this window.
+Only bounded read-only diagnostics were collected. Do not resume physical changes
+on the assumption that the owner is still parked after the window.
+
+Installed APK remains version 74133, source 04ee94e27f50df9c185315172b97ab38cae08c00,
+SHA-256 e531c2a1bc4255ef0b704827903ba8c238533299a94327d54823547fdd984811.
+Current boot is 9055ddb9-85ac-4648-8105-6e6c1f43a377; OEM PID 21258/start 130473;
+native owner 21405 remains alive with the exact bundled bridge mapped. Native
+cold-state is failed, replacements=0, pinned=false, failure "Automatic eligibility
+lost before native preparation". Java endpoint is not armed. Do not confuse this
+with the previous boot's successfully pinned nine replacements.
+
+Timeline: launcher 18:30:42 UTC, native failure 18:31:10, final safety packet
+18:32:27 (all before the pharmacy window). That packet has P/0 but unknown
+quiescence and empty attempt identity; it is frozen and cannot diagnose the
+conditions at native failure. Root did not establish which eligibility predicate
+failed. Do not weaken guards or claim a software cause without evidence. The
+mapped failed session prevents the current built-in reset; cleanup/restart needs
+explicit proof and current safe conditions, never blanket process killing.
+
+Evidence: private test-artifacts/install-133-persistent-20261025/pharmacy-window-
+native-status.txt, pharmacy-final-readonly.txt and pharmacy-final-timeline.txt in
+/root/projects/haval-impulse. No Android/native build or additional map validation
+was performed during this window. Latest Netseek v9 remains incorporated; the
+unresolved item is runtime bridge preparation and subsequent physical map test.
+
 ## ACTIVE — clean boot9055 detected; owner moving, experimental validation deferred
 
 Latestownerrequest: continue/reboot/activatewhileMOVINGwithpassenger; ownerfrustrated

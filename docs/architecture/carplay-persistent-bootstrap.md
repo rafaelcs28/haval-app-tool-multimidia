@@ -1,4 +1,4 @@
-# Preparo CarPlay local — versão 133
+# Preparo CarPlay local — versões 133 e 134
 
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote
@@ -28,6 +28,14 @@ O interceptor nunca instala hooks em bibliotecas OEM já carregadas. Antes de
 publicar hooks, relê um arquivo de elegibilidade recente, ligado ao boot, PID,
 starttime e tentativa. Mudança ou expiração aborta a preparação. A perda do
 controlador não pode deixar a inicialização OEM presa indefinidamente.
+
+Na versão 134, a publicação de elegibilidade e a revogação compartilham um lock. Uma amostra
+concluída depois da troca de identidade ou do encerramento da tentativa não pode
+reautorizar o ticket antigo. O diagnóstico de falha fica separado do arquivo
+renovado pelo publisher. Na renovação do host, todas as condições vêm de uma única
+versão do pacote, lida após as verificações de tasks e processo e conferida antes
+do sinal. A revisão também cobre o código do controlador local; uma correção nele
+não reutiliza silenciosamente a revisão cujo circuito de falha está aberto.
 
 Falha abre um circuito por revisão; não há repetição automática ilimitada nem
 remoção de hooks em estado incerto. Reinício do app reconhece os injectors e

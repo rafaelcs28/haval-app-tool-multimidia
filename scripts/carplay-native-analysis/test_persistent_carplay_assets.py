@@ -77,7 +77,12 @@ process.stdout.write(JSON.stringify(results));
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(name)
-            with patch.object(assets, 'ROOT', root):
+            project = root / 'project'
+            for name in assets.BOOTSTRAP_SOURCE_FILES:
+                path = project / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            with patch.object(assets, 'ROOT', root), patch.object(assets, 'PROJECT_ROOT', project):
                 first = assets.source_sha256('a' * 64)
                 self.assertEqual(first, assets.source_sha256('a' * 64))
                 self.assertNotEqual(first, assets.source_sha256('b' * 64))
@@ -85,6 +90,12 @@ process.stdout.write(JSON.stringify(results));
                     path = root / name
                     original = path.read_bytes()
                     path.write_bytes(original + b'changed')
+                    self.assertNotEqual(first, assets.source_sha256('a' * 64), name)
+                    path.write_bytes(original)
+                for name in assets.BOOTSTRAP_SOURCE_FILES:
+                    path = project / name
+                    original = path.read_bytes()
+                    path.write_bytes(original + b'controller repair')
                     self.assertNotEqual(first, assets.source_sha256('a' * 64), name)
                     path.write_bytes(original)
 
@@ -125,8 +136,8 @@ process.stdout.write(JSON.stringify(results));
             self.assertEqual(assets.file_sha256(assets.INJECTOR), first['injectorSha256'])
             self.assertEqual(assets.INJECTOR.stat().st_size, first['injectorSize'])
             self.assertEqual(1, first['schema'])
-            self.assertEqual(74133, first['versionCode'])
-            self.assertEqual(f"74133-{assets.file_sha256(MINI_NATIVE)[:12]}-{first['sourceSha256'][:12]}", first['revision'])
+            self.assertEqual(74134, first['versionCode'])
+            self.assertEqual(f"74134-{assets.file_sha256(MINI_NATIVE)[:12]}-{first['sourceSha256'][:12]}", first['revision'])
             launcher = (directory / 'cold-launcher-template.js').read_text()
             self.assertEqual(1, launcher.count('"expectedPid":1234567890'))
             self.assertEqual(1, launcher.count('BOOT_PROCESS_PLACEHOLDER'))

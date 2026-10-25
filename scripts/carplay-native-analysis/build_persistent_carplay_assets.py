@@ -32,6 +32,14 @@ SOURCE_FILES = (
     "agent/package.json",
     "agent/package-lock.json",
 )
+BOOTSTRAP_SOURCE_FILES = (
+    "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeQuiescence.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBluetoothQuiescence.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBootstrapRoot.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBridgeBootstrapPolicy.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlaySafetyPublicationGate.kt",
+)
 ASSET_FILES = (
     "libcarplay_video_bridge.so",
     "cold-launcher-template.js",
@@ -49,9 +57,10 @@ def file_sha256(path: Path) -> str:
 
 
 def source_sha256(injector_sha256: str) -> str:
-    # Include generators as well as all emitted program/profile inputs so a
-    # changed generation rule cannot silently reuse a previous remote revision.
+    # The failure circuit belongs to both the payload and its local controller.
+    # A controller repair must not silently reuse the failed controller's revision.
     files = {name: file_sha256(ROOT / name) for name in SOURCE_FILES}
+    files.update({name: file_sha256(PROJECT_ROOT / name) for name in BOOTSTRAP_SOURCE_FILES})
     files["app/src/main/res/raw/fridainject"] = injector_sha256
     encoded = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
     return sha256_bytes(encoded)
@@ -66,7 +75,7 @@ def read_native_library(path: Path) -> bytes:
     return payload
 
 
-def build(native_lib: Path, output: Path, version_code: int = 74133) -> dict:
+def build(native_lib: Path, output: Path, version_code: int = 74134) -> dict:
     if isinstance(version_code, bool) or not isinstance(version_code, int) or not 0 < version_code <= 2_147_483_647:
         raise ValueError("Invalid Android version code")
     destination = output / "carplay_bridge"
@@ -121,7 +130,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native-lib", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--version-code", type=int, default=74133)
+    parser.add_argument("--version-code", type=int, default=74134)
     args = parser.parse_args()
     print(json.dumps(build(args.native_lib.resolve(), args.output.resolve(), args.version_code), indent=2))
 
