@@ -1,4 +1,4 @@
-# Preparo CarPlay local — versões 133 e 134
+# Preparo CarPlay local — versões 133 a 135
 
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote

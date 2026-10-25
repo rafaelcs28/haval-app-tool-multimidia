@@ -75,7 +75,7 @@ def read_native_library(path: Path) -> bytes:
     return payload
 
 
-def build(native_lib: Path, output: Path, version_code: int = 74134) -> dict:
+def build(native_lib: Path, output: Path, version_code: int = 74135) -> dict:
     if isinstance(version_code, bool) or not isinstance(version_code, int) or not 0 < version_code <= 2_147_483_647:
         raise ValueError("Invalid Android version code")
     destination = output / "carplay_bridge"
@@ -130,7 +130,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native-lib", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--version-code", type=int, default=74134)
+    parser.add_argument("--version-code", type=int, default=74135)
     args = parser.parse_args()
     print(json.dumps(build(args.native_lib.resolve(), args.output.resolve(), args.version_code), indent=2))
 

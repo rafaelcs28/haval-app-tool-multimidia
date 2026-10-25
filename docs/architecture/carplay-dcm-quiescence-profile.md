@@ -45,11 +45,19 @@ política conservadora, não esse sinal.
 ## Registro pareado retido e prova Bluetooth independente
 
 O DCM pode conservar um Android/iPhone aceito (`type=1/2`, `accepted=1`), estado
-global OFFLINE `0` e mapa de conexão exatamente `{BT=2: READY=3}`, mesmo quando
+global OFFLINE `0` ou ONLINE retido `1` e mapa de conexão exatamente `{BT=2: READY=3}`, mesmo quando
 não há telefone conectado. `BtConnection.Disconnected` e `Detecting` atribuem
-READY também a dispositivos apenas pareados. O estado global OFFLINE, por sua vez,
+READY também a dispositivos apenas pareados. `Device.updateDevice()` pode promover
+READY a ONLINE e conservar esse estado após a desconexão dos perfis. O estado global OFFLINE, por sua vez,
 força capacidades disponíveis/ativas para zero: esses zeros não provam ausência
 física. Mapa de perfis vazio também não equivale a perfis desconectados.
+
+Na versão 135, os estados globais `0/1` são apenas candidatos; nenhum prova ausência
+física. Uma leitura real da 134 encontrou ONLINE `1`, BT READY, capacidades zero e
+nenhuma projeção, enquanto o serviço Bluetooth confirmou os cinco perfis
+desconectados e o agregado vazio antes/depois. Isso demonstrou o bloqueio indevido
+da exigência anterior de OFFLINE. A classificação corrigida mantém a prova física
+independente e todas as demais restrições.
 
 Somente essa assinatura é candidata: capacidades disponível/ativa zero, mapa de
 estados ativos vazio, endereço Bluetooth válido, modo USB device desativado e os
