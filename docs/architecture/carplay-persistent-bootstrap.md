@@ -1,4 +1,4 @@
-# Preparo CarPlay local — versões 133 a 138
+# Preparo CarPlay local — versões 133 a 139
 
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote
@@ -101,3 +101,30 @@ residentes. O caso negativo de detach comum com pin invalidou a prova e rejeitou
 outro desafio. Esses testes não executam Java/JNI ou os hooks OEM do Android.
 O build e a validação de reinício, comandos Java e mapa na central permanecem
 etapas separadas; a 137 instalada não é convertida por uma edição de arquivo.
+
+
+## Registro de nascimento antes do exec — 139
+
+Na primeira tentativa da 138 no veículo, o cliente retornou código zero e o agente
+registrou `armed`, mas faltou `native-launch.json`; o recibo final tinha starttime
+zero. A confirmação foi recusada. A leitura do argv do cliente enquanto ele ainda
+estava vivo não produziu a evidência esperada. O motivo exato da janela perdida
+não foi demonstrado; a correção remove essa dependência temporal.
+
+O filho agora espera numa barreira antes de executar o CLI. O supervisor registra
+PID e starttime e publica o recibo atômico com dono root e modo 400. Só depois cria
+o arquivo exclusivo que libera o `exec`. O `exec` conserva a identidade capturada,
+mesmo que o CLI termine imediatamente. A saída continua vindo do `wait` desse filho.
+
+O hash dos argumentos passa a ser explicitamente declarado, com
+`commandEvidence=declared-before-exec-v1`, e vinculado ao hash real do supervisor,
+comparado com o programa gerado esperado. O script da função também é verificado
+antes do fork. O injector de 52 MiB já é validado por `installPayload` antes da
+janela fria; não se repete essa leitura dentro do gate. Um recibo ausente ou de
+outro programa continua sendo recusado.
+
+A barreira não substitui a prova posterior de residência: desafio novo após saída,
+duas amostras frescas, dispose irreversível, nove hooks pinados e Java armado seguem
+obrigatórios. Fixtures de shell comprovaram o caso de saída imediata e um atraso
+artificial do supervisor; falhas de hash e de gravação impedem o exec. O preparo
+real da versão 139 após boot continua dependendo da validação na central.

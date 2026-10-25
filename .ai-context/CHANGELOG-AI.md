@@ -1,3 +1,10 @@
+## 2026-10-25 — 139 birth-receipt barrier after 138 field evidence
+
+- Owner installed138 and rebooted; captured actualCLI exit0/armed but missing launchreceipt/starttime0. Currentnextboot iswaitingforprojectionabsence after explicitretry; noPhoneUSB. No claim a current phone connection is proved.
+- Replace fragile liveargv sampling with pre-exec barrier and root400 birthreceipt before exacttypedexec. Bind declaredarguments to reviewed supervisorSHA; preserve strict postexit/resident/dispose proofs.
+- Avoid duplicate52MiBCLIhash work inside coldgate (payload alreadyattestedbeforegate). Five realhostshellfixtures passed, including immediateexit and delayedparent; tenJVMtests await Mini.
+- User needs to go home. Experimental test remains off; no reinstall/reboot/servicekill requested. Build139 will proceed offline and publication follows existing authorizedpreview flow after artifactchecks.
+
 ## 2026-10-25 — 138 signed, published and verified; owner downloading
 
 - Finalef26864f Mini fullJVM/Release/R8/lint/signing passed5m33s/83tasks; exactAPK/controller/payload validated. Code74138, size81615171, SHA e702d2d788ca0b5ae1aba846f1ef9c11f782c8c7c5cd35c5e6ce1986a6e9db9e, production certificate unchanged.

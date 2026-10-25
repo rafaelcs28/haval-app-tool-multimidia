@@ -1,3 +1,44 @@
+## Current handoff — 139 fixes missing birth receipt; owner leaving, no car wait
+
+Ownerinstalled138 HIMSELF and manuallyrebooted. Firstphotoafterrestart showedfailed;
+hepressedretry, secondphotoWAITINGphone/projectionfree. Latest "Vamos rápido ...
+preciso ir embora pra casa". Told himGOHOMEusingnormalCarPlay, experimentaltestOFF;
+wecollectedneededlogs andcontinueOFFLINE. Do NOT askanotherstop orremoteinstall/reboot.
+No furthercarops planned; no criticalservice/HUpower mutations issued thisepisode.
+
+Confirmedinstalled74138 bypackageXML. Currentkernel24f1efa0-6751-43b4-9b40-7a7016ec8806,
+OEM4203, noexternalclients(expected138), currentquiescentFALSE/WAITING andresetcleared
+AttemptPhase/AttemptBoot/circuit. USBONLYroot hubs: noPhoneUSB. Thus donotblameUSB
+orclaimBluetoothlightsprovedconnected; remainingprojectionguardcauseunidentified.
+PersistentLastFailure belongs to PREVIOUSboota83e95b3-4645-47ca-bebe-70b5917cb1ef,
+target18139/start20735. Exact138runtime native-launch.json ABSENT; native-exit.json
+root400 haschild18332/start0/exit0/exitElapsed209300, ARMED0/pinned nativefile andlog.
+This provesreceiptadmissionfailed, notthatCLI-e orJNIfailed. Neveradoptzero-start.
+CARreadonlyprocFILE/stdin/pipeSHA matched89c4..., disprovingstat0checksumhypothesis.
+Private138-first-owner-boot/usb-and-package/launch-failure/proc-hash*.txt retained
+originalworkspace test-artifacts/install-133-persistent-20261025/.
+
+139 replacesliveargvscanwithpreEXECbirthbarrier: capturechildPID/startwhilewaiting,
+atomicROOT400launchreceipt, thenROOT400uniqueinstancereleasefile, THENexec exacttyped
+CLIcommand (samePID/start), wait/exitatomicreceipt. commandEvidence=declared-before-
+exec-v1 plus actualSupervisorSHA mustmatchexpectedgeneratedsource BOTHreceipts;
+roleScriptSHAcheckedbeforefork. Heavy52MiBCLIhash isALREADYverifiedinstallPayload
+BEFOREcoldwindow, notduplicatedinside. Allpostexitnonce/dispose/native9/Javaarmed
+proofs unchanged. P/speedremainremoved; phone/projectionguardkept. No newerbridge
+script/helper/nativeAPIchange. Nativeclientmissing isNORMALafter-e, noterror.
+
+Mapper/controller/QA reviewcomplete; decisive5hostshellfixturespassed including
+immediate/bin/true andparent200msdelaybeforestat(oldpatternlosesPID), missingroleSHA
+andfailedbirthwriteneverreleaseexec. TenJVMtests prepared forMiniONLY. SharedJSpeer
+unchangedfrozenfc5f06aa... andrealFrida17.5.2/nativecallback/trampoline/send/dispose4
+cases from138 remainvalid. NoVPSAndroidbuild. Sourceworktree133,branchrelease/
+impulse-74139-v9; defaults74139/1.0.0.74.139-preview. Needfinalimmutableaudit+single
+signedMini139build, validate/cert/source digest. Currentpublicpreview138stillpublished
+andmatchingchecksum; ownerhasstanding"Pode publicar que instalo". Once139validated,
+publishversionedpublicprereleaseAPK/checksum/info toPUBLICapp-toolrepo, independently
+verifypublicAPK, thenupdatefixedpreviewmanifest LAST. KeepCODEinPRIVATEhaval-impulse;
+no privatecodepushpublic. Ownerinstalls/rebootslater; do notholdhimoncarforbuild.
+
 ## Current handoff — 138 PUBLISHED/OTA VERIFIED; owner downloading on car
 
 Latest owner: "já tô baixando aqui pelo carro ... abrirPulse, esperarpreparar,

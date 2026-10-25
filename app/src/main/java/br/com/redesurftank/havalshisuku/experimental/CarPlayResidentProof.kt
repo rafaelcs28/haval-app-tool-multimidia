@@ -11,7 +11,8 @@ internal object CarPlayResidentProof {
         val scriptPath get() = if (role == "native") "$runtimeDirectory/cold-launcher.js" else "$payloadDirectory/endpoint.js"
     }
     data class Receipt(val binding: Binding, val childPid: Int, val childStartTime: Long,
-        val commandSha256: String, val exitCode: Int? = null, val exitElapsedMs: Long? = null)
+        val commandSha256: String, val exitCode: Int? = null, val exitElapsedMs: Long? = null,
+        val commandEvidence: String = "", val supervisorSha256: String = "")
     data class Challenge(val instance: String, val nonce: String, val issuedElapsedMs: Long)
     data class Sample(val sequence: Long, val elapsedMs: Long, val wallMs: Long,
         val phase: String = "", val replacements: Int = -1, val pinned: Boolean = false,
@@ -47,7 +48,11 @@ internal object CarPlayResidentProof {
         require(launch.binding == expected && exit.binding == expected) { "Residency launch identity mismatch" }
         require(launch.childPid > 0 && launch.childStartTime >= expected.targetStartTime &&
             launch.childPid == exit.childPid && launch.childStartTime == exit.childStartTime) { "Residency child identity mismatch" }
-        require(launch.commandSha256 == commandSha256(expected) && exit.commandSha256 == launch.commandSha256) { "Residency CLI arguments mismatch" }
+        require(launch.commandSha256 == commandSha256(expected) && exit.commandSha256 == launch.commandSha256) { "Residency declared CLI arguments mismatch" }
+        require(launch.commandEvidence == "declared-before-exec-v1" && exit.commandEvidence == launch.commandEvidence &&
+            launch.supervisorSha256 == supervisorSha256(expected) && exit.supervisorSha256 == launch.supervisorSha256) {
+            "Residency pre-exec supervisor evidence mismatch"
+        }
         require(exit.exitCode == 0 && (exit.exitElapsedMs ?: 0) > 0) { "Residency CLI did not exit successfully" }
     }
 
@@ -77,7 +82,12 @@ internal object CarPlayResidentProof {
     fun nativeArmed(sample: Sample) = sample.phase == "armed" && sample.replacements == 0 && sample.pinned && sample.failureAbsent
     fun nativeInstalled(sample: Sample) = sample.phase == "installed-pinned" && sample.replacements == 9 && sample.pinned && sample.failureAbsent
 
-    /** The detached shell observes exactly one child; it never retries or owns hooks. */
+    fun supervisorSha256(binding: Binding) = sha256(supervisor(binding).toByteArray(Charsets.UTF_8))
+
+    /** A pre-exec barrier makes birth observable even when the CLI returns immediately.
+     * commandSha256 declares the exact exec arguments; it is NOT a live argv observation.
+     * The immutable supervisor source and payload hashes bind that declaration.
+     */
     fun supervisor(binding: Binding): String {
         val args = arguments(binding, "${binding.payloadDirectory}/cpbridge-inject").joinToString(" ", transform = ::quote)
         val run = binding.runtimeDirectory
@@ -86,35 +96,47 @@ internal object CarPlayResidentProof {
         val hash = commandSha256(binding)
         val start = "$run/$role-launch.json"
         val end = "$run/$role-exit.json"
+        val release = "$run/$role-exec-${binding.instance}.release"
+        // installPayload attests the immutable injector hash and size before the cold gate.
         return """
             #!/system/bin/sh
             umask 077
-            test ! -e ${quote(start)} && test ! -e ${quote(end)} || exit 91
-            $args > ${quote("$run/$role-injector.log")} 2>&1 < /dev/null &
+            test ! -e ${quote(start)} && test ! -e ${quote(end)} && test ! -e ${quote(release)} || exit 91
+            cpb_supervisor_sha=§(sha256sum "§0" | cut -d' ' -f1)
+            test "§{#cpb_supervisor_sha}" = 64 || exit 93
+            test "§(sha256sum ${quote(binding.scriptPath)} | cut -d' ' -f1)" = ${quote(binding.scriptSha256)} || exit 95
+            (
+              cpb_wait=0
+              while [ ! -f ${quote(release)} ]; do
+                cpb_wait=§((cpb_wait+1))
+                test "§cpb_wait" -le 200 || exit 92
+                sleep 0.01
+              done
+              test "§(stat -c %u ${quote(release)})" = 0 && test "§(stat -c %a ${quote(release)})" = 400 || exit 96
+              test "§(cat ${quote(release)})" = ${quote(binding.instance)} || exit 97
+              exec $args
+            ) > ${quote("$run/$role-injector.log")} 2>&1 < /dev/null &
             cpb_child=§!
             cpb_start=0
-            cpb_verified=
-            cpb_round=0
-            while [ "§cpb_round" -lt 50 ]; do
-              cpb_round=§((cpb_round+1))
-              cpb_stat=§(cat /proc/§cpb_child/stat 2>/dev/null) || break
-              cpb_tail=§{cpb_stat##*) }; set -- §cpb_tail
-              case "§1" in Z|X|x) break;; esac
+            cpb_stat=§(cat /proc/§cpb_child/stat 2>/dev/null)
+            cpb_tail=§{cpb_stat##*) }; set -- §cpb_tail
+            cpb_alive=yes
+            case "§1" in ''|Z|X|x) cpb_alive=;; esac
+            if [ "§#" -ge 20 ] && [ "§cpb_alive" = yes ]; then
               shift 19; cpb_start=§1
-              cpb_hash=§(sha256sum /proc/§cpb_child/cmdline 2>/dev/null | cut -d' ' -f1)
-              if [ "§cpb_hash" = ${quote(hash)} ]; then cpb_verified=yes; break; fi
-              sleep 0.01
-            done
-            if [ "§cpb_verified" = yes ]; then
-              printf '%s,"childPid":%s,"childStartTime":%s,"commandSha256":"%s"}\n' ${quote(base)} "§cpb_child" "§cpb_start" ${quote(hash)} > ${quote("$start.next")} &&
-              chmod 400 ${quote("$start.next")} && chown 0:0 ${quote("$start.next")} && mv ${quote("$start.next")} ${quote(start)}
-            else
-              cpb_start=0
+              case "§cpb_start" in ''|*[!0-9]*) cpb_start=0;; esac
+            fi
+            if [ "§cpb_start" -gt 0 ]; then
+              if printf '%s,"childPid":%s,"childStartTime":%s,"commandSha256":"%s","commandEvidence":"declared-before-exec-v1","supervisorSha256":"%s"}\n' ${quote(base)} "§cpb_child" "§cpb_start" ${quote(hash)} "§cpb_supervisor_sha" > ${quote("$start.next")} &&
+                  chmod 400 ${quote("$start.next")} && chown 0:0 ${quote("$start.next")} && mv ${quote("$start.next")} ${quote(start)}; then
+                printf '%s\n' ${quote(binding.instance)} > ${quote("$release.next")} &&
+                  chmod 400 ${quote("$release.next")} && chown 0:0 ${quote("$release.next")} && mv ${quote("$release.next")} ${quote(release)}
+              fi
             fi
             wait "§cpb_child"
             cpb_exit=§?
             cpb_elapsed=§(awk '{print int(§1*1000)}' /proc/uptime)
-            printf '%s,"childPid":%s,"childStartTime":%s,"commandSha256":"%s","exitCode":%s,"exitElapsedMs":%s}\n' ${quote(base)} "§cpb_child" "§cpb_start" ${quote(hash)} "§cpb_exit" "§cpb_elapsed" > ${quote("$end.next")} &&
+            printf '%s,"childPid":%s,"childStartTime":%s,"commandSha256":"%s","commandEvidence":"declared-before-exec-v1","supervisorSha256":"%s","exitCode":%s,"exitElapsedMs":%s}\n' ${quote(base)} "§cpb_child" "§cpb_start" ${quote(hash)} "§cpb_supervisor_sha" "§cpb_exit" "§cpb_elapsed" > ${quote("$end.next")} &&
             chmod 400 ${quote("$end.next")} && chown 0:0 ${quote("$end.next")} && mv ${quote("$end.next")} ${quote(end)}
         """.trimIndent().replace('§', '$') + "\n"
     }

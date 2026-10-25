@@ -665,7 +665,8 @@ object CarPlayBridgeBootstrapManager {
         parseBinding(value), strictPid(value, "childPid"), strictLong(value, "childStartTime"),
         strictString(value, "commandSha256"),
         if (exited) strictLong(value, "exitCode").also { check(it in 0..255) }.toInt() else null,
-        if (exited) strictLong(value, "exitElapsedMs") else null)
+        if (exited) strictLong(value, "exitElapsedMs") else null,
+        strictString(value, "commandEvidence"), strictString(value, "supervisorSha256"))
 
     private fun parseResidentResponse(value: JSONObject): CarPlayResidentProof.Response {
         val samples = value.getJSONArray("samples")

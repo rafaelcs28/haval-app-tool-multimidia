@@ -12,7 +12,8 @@ class CarPlayResidentProofTest {
         ticket, instance, "a".repeat(64), "/data/local/tmp/impulse-carplay/runtime/$boot-1234-5678",
         "/data/local/tmp/impulse-carplay/versions/74138-123456789abc-abcdef012345")
     private fun launch(b: CarPlayResidentProof.Binding = binding) =
-        CarPlayResidentProof.Receipt(b, 2345, 6000, CarPlayResidentProof.commandSha256(b))
+        CarPlayResidentProof.Receipt(b, 2345, 6000, CarPlayResidentProof.commandSha256(b),
+            commandEvidence = "declared-before-exec-v1", supervisorSha256 = CarPlayResidentProof.supervisorSha256(b))
     private fun exit(b: CarPlayResidentProof.Binding = binding) = launch(b).copy(exitCode = 0, exitElapsedMs = 10_000)
     private fun challenge() = CarPlayResidentProof.Challenge(instance, nonce, 10_100)
     private fun sample(sequence: Long, elapsed: Long) = CarPlayResidentProof.Sample(sequence, elapsed,
@@ -63,6 +64,14 @@ class CarPlayResidentProofTest {
         rejects { verify(start = launch().copy(childStartTime = 5677), end = exit().copy(childStartTime = 5677)) }
         rejects { verify(challenge = challenge().copy(issuedElapsedMs = 9999)) }
         rejects { verify(challenge = challenge().copy(issuedElapsedMs = 10_501)) }
+    }
+
+    @Test fun birthEvidenceMustBeExplicitAndBindTheReviewedSupervisor() {
+        for (bad in listOf(launch().copy(commandEvidence = ""), launch().copy(commandEvidence = "observed-argv"),
+            launch().copy(supervisorSha256 = "0".repeat(64)))) rejects { verify(start = bad) }
+        for (bad in listOf(exit().copy(commandEvidence = ""), exit().copy(supervisorSha256 = "0".repeat(64)))) {
+            rejects { verify(end = bad) }
+        }
     }
 
     @Test fun replayDisposedOrIncompleteResponseNeverProvesResidence() {
@@ -117,7 +126,11 @@ class CarPlayResidentProofTest {
         assertEquals("{\"impulseResidency\":" + CarPlayResidentProof.bindingJson(binding) + "}", arguments.last())
         val shell = CarPlayResidentProof.supervisor(binding)
         assertTrue(shell.contains("wait \"\$cpb_child\""))
-        assertTrue(shell.contains("sha256sum /proc/\$cpb_child/cmdline"))
+        assertFalse(shell.contains("/proc/\$cpb_child/cmdline"))
+        assertTrue(shell.contains("declared-before-exec-v1"))
+        assertTrue(shell.contains("exec "))
+        assertTrue(shell.indexOf("mv '" + binding.runtimeDirectory + "/native-launch.json.next'") <
+            shell.indexOf("mv '" + binding.runtimeDirectory + "/native-exec-"))
         assertTrue(shell.contains("childStartTime"))
         assertTrue(shell.contains("exitElapsedMs"))
         assertFalse(shell.contains("kill "))
