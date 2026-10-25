@@ -142,10 +142,10 @@ android {
     sourceSets {
         getByName("debug") {
             java.srcDir("src/internalDebug/java")
-            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/debug"))
+            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/debug").get().asFile)
         }
         getByName("release") {
-            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/release"))
+            assets.srcDir(layout.buildDirectory.dir("generated/carplayBridgeAssets/release").get().asFile)
         }
         getByName("leanDebug") {
             java.srcDir("src/internalDebug/java")
