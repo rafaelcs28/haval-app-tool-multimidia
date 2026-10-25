@@ -51,6 +51,7 @@ function runtime(fault = {}) {
     let loaderComplete = false;
     let loaderLocked = false;
     let currentThread = 77;
+    let firstTrampoline = null;
 
     class Pointer {
         constructor(value, region, label = null) { this.value = BigInt(value); this.region = region; this.label = label; }
@@ -58,6 +59,7 @@ function runtime(fault = {}) {
         compare(other) { return this.value < other.value ? -1 : this.value > other.value ? 1 : 0; }
         equals(other) { return this.value === other.value; }
         isNull() { return this.value === 0n; }
+        toString() { return '0x' + this.value.toString(16); }
         readByteArray(size) {
             const offset = Number(this.value - this.region.base.value);
             assert.ok(offset >= 0 && offset + size <= this.region.memory.length);
@@ -112,7 +114,7 @@ function runtime(fault = {}) {
             arch: 'arm64', pointerSize: 8, id: 1234,
             getCurrentThreadId: () => currentThread,
             enumerateModules: () => modules.slice(),
-            findRangeByAddress(address) { return regions.find(item => address.compare(item.base) >= 0 && address.compare(item.base.add(item.size)) < 0) || null; },
+            findRangeByAddress(address) { return regions.find(item => !item.hidden && address.compare(item.base) >= 0 && address.compare(item.base.add(item.size)) < 0) || null; },
             attachModuleObserver(observer) {
                 callback = observer;
                 if (fault.registrationRace) loadOem(0);
@@ -138,9 +140,16 @@ function runtime(fault = {}) {
         } },
         File,
         Memory: {
+            queryProtection(address) {
+                if (fault.protectionQuery) throw Error('Protection query failed');
+                const found = regions.find(item => address.compare(item.base) >= 0 && address.compare(item.base.add(item.size)) < 0);
+                if (!found) throw Error('Unmapped trampoline');
+                return found.protection;
+            },
             alloc(size) { return region(Buffer.alloc(size)).base; },
             allocUtf8String(value) { return region(Buffer.from(value + '\0')).base; }
         },
+        Cloak: { hasRangeContaining(address) { return !!address.region.cloaked; } },
         Checksum: { compute(algorithm, value) { assert.equal(algorithm, 'sha256'); return checksum(value); } },
         NativeFunction: function(address) {
             if (address.label === 'dlerror') return () => ({
@@ -192,7 +201,16 @@ function runtime(fault = {}) {
                 patched.set(target.value, { target, offset, byte: target.region.memory[offset] });
                 target.region.memory[offset] ^= 0xff;
                 if (fault.replaceAt === patched.size) throw new Error('failure after replacement');
-                return fault.trampoline ? target : region(Buffer.alloc(64)).base;
+                if (fault.trampoline) return target;
+                if (fault.duplicateTrampoline && firstTrampoline) return firstTrampoline;
+                const code = region(Buffer.alloc(64));
+                if (fault.cloakedTrampoline || fault.unownedTrampoline) code.hidden = true;
+                if (fault.cloakedTrampoline) code.cloaked = true;
+                if (fault.kernelNoX || fault.trampolineNeedsFlush) code.protection = 'rw-';
+                if (fault.trampolineRWX) code.protection = 'rwx';
+                if (fault.trampolineNeedsFlush) code.needsFlush = true;
+                if (!firstTrampoline) firstTrampoline = code.base;
+                return fault.misalignedTrampoline ? code.base.add(1) : code.base;
             },
             revert(target) {
                 operations.push('revert');
@@ -200,7 +218,10 @@ function runtime(fault = {}) {
                 const patch = patched.get(target.value);
                 if (patch) { target.region.memory[patch.offset] = patch.byte; patched.delete(target.value); }
             },
-            flush() { operations.push('flush'); if (pendingLoaderListener) loaderListener = pendingLoaderListener; }
+            flush() {
+                operations.push('flush'); if (pendingLoaderListener) loaderListener = pendingLoaderListener;
+                for (const item of regions) if (item.needsFlush) { item.protection = 'r-x'; item.needsFlush = false; }
+            }
         },
         Script: { pin() { pins++; }, unpin() { pins--; assert.ok(pins >= 0); } },
         setTimeout(fn, delay) { timer = fn; timerDelay = delay; return 1; }, clearTimeout() { timer = null; }
@@ -317,6 +338,28 @@ test('native NOLOAD reentry cannot trigger a second installation', () => {
     assert.equal(env.operations.filter(operation => operation === 'pin-modules').length, 1);
     assert.equal(env.operations.filter(operation => operation === 'replace').length, 9);
     assert.ok(env.operations.includes('nested-noload'));
+});
+for (const fault of ['cloakedTrampoline', 'trampolineNeedsFlush', 'trampolineRWX']) test('valid executable original accepted: ' + fault, () => {
+    const env = runtime({ [fault]: true }); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+    assert.equal(env.patched.size, 9);
+});
+for (const fault of [
+    { cloakedTrampoline: true, kernelNoX: true }, { unownedTrampoline: true },
+    { duplicateTrampoline: true }, { misalignedTrampoline: true }, { protectionQuery: true }
+]) test('unsafe original refuses bootstrap and rolls back: ' + JSON.stringify(fault), () => {
+    const env = runtime(fault); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.patched.size, 0);
+    assert.equal(env.metrics().pins, 0);
+    assert.ok(!env.operations.includes('bootstrap'));
+});
+test('missing actual page-protection API refuses before arming', () => {
+    const env = runtime(); delete env.api.Memory.queryProtection;
+    assert.throws(() => createColdOemInterceptor(env.api).arm(profile, env.options), /Unsupported Frida runtime/);
+    assert.equal(env.metrics().pins, 0);
 });
 test('failed loader return refuses native preparation', () => {
     const env = runtime(); const installer = createColdOemInterceptor(env.api);

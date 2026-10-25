@@ -154,6 +154,7 @@ function createColdOemInterceptor(api) {
             options.bridgePath.split('/').includes('..')) throw new Error('Invalid explicit bridge settings');
         if (typeof Process.attachModuleObserver !== 'function' || typeof Interceptor.replaceFast !== 'function' ||
             typeof Interceptor.attach !== 'function' || typeof Process.getCurrentThreadId !== 'function' ||
+            typeof Memory.queryProtection !== 'function' ||
             typeof Script.pin !== 'function' || typeof Script.unpin !== 'function') throw new Error('Unsupported Frida runtime');
         const absent = () => profile.modules.every(expected => !Process.enumerateModules().some(module => module.name === expected.name));
         if (!absent()) throw new Error('Existing OEM modules: warm interception forbidden');
@@ -237,13 +238,26 @@ function createColdOemInterceptor(api) {
                     const target = addresses[label];
                     changed.push(target);
                     const original = Interceptor.replaceFast(target, replacement[label]);
-                    const range = Process.findRangeByAddress(original);
-                    if (original.isNull() || original.equals(target) || !range || !range.protection.includes('x') ||
-                        Object.values(originals).some(value => value.equals(original))) throw new Error('Invalid original trampoline');
+                    if (original.isNull() || original.equals(target) || BigInt(original.toString()) % 4n !== 0n ||
+                        Object.values(originals).some(value => value.equals(original))) {
+                        throw new Error('Invalid original trampoline identity: ' + label);
+                    }
                     originals[label] = original;
                 }
-                video.forEach((label, index) => table.add(index * 8).writePointer(originals[label]));
                 Interceptor.flush();
+                // Gum-owned trampolines are intentionally hidden from Process
+                // range enumeration. Query actual page permissions after flush
+                // (code pages may remain RW until commit), without uncloaking.
+                for (const [label, original] of Object.entries(originals)) {
+                    const range = Process.findRangeByAddress(original);
+                    const owned = range || (api.Cloak && typeof api.Cloak.hasRangeContaining === 'function' &&
+                        api.Cloak.hasRangeContaining(original));
+                    if (!owned || !Memory.queryProtection(original).includes('x') ||
+                        !Memory.queryProtection(original.add(3)).includes('x')) {
+                        throw new Error('Original trampoline is not verified executable: ' + label);
+                    }
+                }
+                video.forEach((label, index) => table.add(index * 8).writePointer(originals[label]));
                 attempted = true;
                 const result = bootstrap(table, originals.session, originals.displays, addresses.getLength,
                     addresses.copyString, addresses.retain, addresses.release, uuid, options.principalUuid.length);
@@ -368,5 +382,5 @@ function createColdOemInterceptor(api) {
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { createColdOemInterceptor };
 else rpc.exports = createColdOemInterceptor({ Process, Module, File, Memory, Checksum, NativeFunction,
-    Interceptor, Script, setTimeout, clearTimeout,
+    Interceptor, Script, Cloak, setTimeout, clearTimeout,
     coldLoadProfile: typeof impulseColdLoadProfile === 'undefined' ? null : impulseColdLoadProfile });

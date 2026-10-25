@@ -108,7 +108,15 @@ phone session. A second loaded-code attestation runs after these pins are held,
 before any replacement; addresses are taken from that second check.
 
 The script calls Interceptor.replaceFast for each target and retains its returned
-original trampoline. It validates executable/distinct/non-self originals and
+original trampoline. It validates null/self/duplicate/alignment guards immediately,
+commits all code changes with `Interceptor.flush()`, then checks actual page
+permissions with `Memory.queryProtection()` before bootstrap. Gum code pages are
+cloaked and can be absent from `Process.findRangeByAddress()`; an absent range is
+accepted only with explicit Cloak ownership and an executable kernel-backed
+protection query. Resources remain cloaked. Query errors or non-executable pages
+follow the same rollback, and RWX pages are not newly forbidden on this Android 9
+host. The isolated ARM64 probe observed a cloaked trampoline with `rwx` protection
+and restored its disposable target after inspection. The script
 passes the seven-slot table plus session/getter trampolines and four CF helper
 addresses to the native bootstrap. No custom ARM64 instruction relocator is used.
 Native preparation confirms the helper addresses against dlsym from the pinned
