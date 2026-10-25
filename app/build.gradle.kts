@@ -295,5 +295,10 @@ mapOf("Debug" to "Debug", "Release" to "RelWithDebInfo").forEach { (buildType, n
                 "--version-code", appVersionCode.get().toString())
         }
     }
-    tasks.matching { it.name == "merge${buildType}Assets" }.configureEach { dependsOn(generate) }
+    // Lint models read the same asset directories as mergeAssets. Declare the
+    // producer for every variant lint consumer as well, including vital reports.
+    tasks.matching {
+        it.name == "merge${buildType}Assets" ||
+            (it.name.contains(buildType) && it.name.contains("lint", ignoreCase = true))
+    }.configureEach { dependsOn(generate) }
 }
