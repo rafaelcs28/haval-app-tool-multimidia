@@ -1,3 +1,38 @@
+## 2026-10-25 — Read-only review of upstream PRs 165 and 166
+
+Owner asked to look at bobaoapae/haval-app-tool-multimidia PRs 165 and 166. Reviewed
+metadata, changed-file patches, discussions and exact-head fork CI via GitHub
+connector. Both OPEN/DRAFT, individually mergeable against upstream preview
+2d4e32e6be039d6e741c5f764bf72ab34b92ede4. No discussion comments returned.
+
+- 165 head 688b99571a327f5cf33d00db64c25beda24fc75f preserves live OEM button choices
+  when short is DEFAULT, even with custom double/long. Requires successful synchronous
+  backup commit before capture, rereads before writes, confirms writes. Limitation:
+  custom double/long can still trigger OEM actions; a missing original backup cannot
+  reconstruct a choice already overwritten by 99. Settings still has no atomic CAS.
+- 166 head 1228f84c2e134a22a284545bfd3e9b7824c6ffeb adds optional bridge 1.0.2 methods
+  for the existing global AC focus preference. Restores before component setup;
+  telemetry/power changes no longer reset focus. Adds compatible Default, Minimalist,
+  ApexGT packages; restore/save does not itself issue HVAC commands. apply() acceptance
+  is not a synchronous durable-write guarantee. Dynamic theme packages also need update.
+- Exact-head fork CI VERIFIED success, both theme regressions and Android debug build/
+  JVM test job steps: runs 40232996153 and 40233024618. No local tests or Android builds
+  were run for this review, and historical hardware claims were not independently tested.
+- Neither correction is present in 139 (host bridge remains 1.0.1; current button policy
+  still captures for any configured gesture). Neither addresses CarPlay preparation.
+- Read-only git apply --check of selected production patches found real integration
+  differences: PR165 BasicSettingsScreen; PR166 Default/Minimalist manifests. Our
+  Default is already 1.4.46 (PR1.4.44), Minimalist1.0.6 (PR1.0.5). Port logic while
+  retaining local changes and advance theme versions, never replace with older packages.
+  Checks covered 4 production files for165 and16 for166, not missing generated HTML.
+- No merge, source changes, new release, installation or car command authorized or made
+  by this review. Recommended candidates for a future integrated version. On integration,
+  preserve local AI docs, build policy and CarPlay source; review external CI workflow
+  separately rather than importing the GitHub Ubuntu Android build path implicitly.
+
+139 remains published and independently verified, with physical boot/JNI/map validation
+pending as detailed below. Source tree was clean before documentation-only review entry.
+
 ## Current handoff — 139 published and independently verified; owner free to leave
 
 Owner is leaving for home. Told him to use normal CarPlay and leave the experimental

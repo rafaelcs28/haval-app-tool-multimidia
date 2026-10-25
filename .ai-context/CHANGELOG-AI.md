@@ -1,3 +1,9 @@
+## 2026-10-25 — Review upstream PRs #165 / #166 (no integration)
+
+- Reviewed code and verified successful exact-head fork CI for steering OEM preservation (688b9957) and global AC focus persistence (1228f84c); both remain draft/open.
+- Confirmed neither is included in 139 or fixes CarPlay bootstrap. Identified local settings UI and theme-manifest differences; our Default/Minimalist versions are newer, so port logic without downgrading packages.
+- Documented OEM double/long overlap, missing-backup limit and Android-host plus OTA-theme requirements. No local tests/build, merge, release or vehicle action. Current handoff retains exact evidence and integration constraints.
+
 ## 2026-10-25 — 139 signed, published and OTA verified
 
 - Immutable source b663935a: full Mini JVM suite, ten residency proof tests, Release/R8/lint and signing passed in 6m9s / 83 tasks. Five real host supervisor fixtures also passed; no coordinator Android build.
