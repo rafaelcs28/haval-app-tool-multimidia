@@ -6,6 +6,7 @@ or device operation is performed.
 """
 
 from pathlib import Path
+import json
 import re
 import shlex
 import subprocess
@@ -17,6 +18,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 MANAGER = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayPatchManager.kt"
 FRIDA = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/utils/FridaUtils.java"
+BOOTSTRAP = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt"
 
 
 def function_source(source, name):
@@ -31,6 +33,7 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
     def setUpClass(cls):
         cls.manager = MANAGER.read_text()
         cls.frida = FRIDA.read_text()
+        cls.bootstrap = BOOTSTRAP.read_text()
         match = re.search(r'private val bridgeMappingProbe = """(.*?)"""\.trimIndent\(\)',
                           cls.manager, re.S)
         if not match:
@@ -104,9 +107,61 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
 
     def test_client_signals_recheck_verifier_immediately(self):
         body = function_source(self.manager, "refreshAppListCarPlayManager")
+        guarded_commands = re.findall(
+            r'if \(!clientRefreshAllowed\(reason, verifier\)\) return\s+'
+            r'sh\("((?:\\.|[^"\\])*)"\)', body)
         for signal in ("TERM", "KILL"):
-            self.assertRegex(body, r"if \(!clientRefreshAllowed\(reason, verifier\)\) return\s+"
-                             r'sh\("kill -' + signal)
+            matches = [command for command in guarded_commands if f"kill -{signal} $pid" in command]
+            self.assertEqual(len(matches), 1, f"{signal} requires an immediate verifier")
+            command = matches[0]
+            self.assertTrue(command.startswith(r'[ \"\$(tr '))
+            self.assertIn("/proc/$pid/cmdline | head -n 1)", command)
+            self.assertIn(r'''\" = '$APP_LIST_PACKAGE' ] && kill -''' + signal + " $pid", command)
+
+    def test_client_signal_shell_rejects_reused_foreign_pid(self):
+        body = function_source(self.manager, "refreshAppListCarPlayManager")
+        commands = re.findall(r'sh\("((?:\\.|[^"\\])*)"\)', body)
+        for signal in ("TERM", "KILL"):
+            command = next(command for command in commands if f"kill -{signal} $pid" in command)
+            # Kotlin quoted strings use JSON escapes plus \$ for a literal dollar.
+            command = json.loads('"' + command.replace(r"\$", "$") + '"')
+            for identity, expected in (("com.beantechs.applist", f"-{signal} 1234"),
+                                       ("com.ts.carplay", ""), (None, "")):
+                with self.subTest(signal=signal, identity=identity), tempfile.TemporaryDirectory() as directory:
+                    fixture = Path(directory) / "1234"
+                    fixture.mkdir()
+                    if identity is not None:
+                        (fixture / "cmdline").write_bytes(identity.encode() + b"\0argument\0")
+                    script = command.replace("$pid", "1234").replace(
+                        "$APP_LIST_PACKAGE", "com.beantechs.applist").replace("/proc/", directory + "/")
+                    # Override the shell builtin: the fixture never signals a real process.
+                    script = "kill() { printf '%s\\n' \"$*\"; }; " + script
+                    result = subprocess.run(["sh", "-c", script], capture_output=True,
+                                            text=True, timeout=5, check=True)
+                    self.assertEqual(result.stdout.strip(), expected)
+
+    def test_failed_attempt_cannot_be_adopted_as_in_progress(self):
+        tick = function_source(self.bootstrap, "tick")
+        recovering = tick.split("val recovering =", 1)[1].split("val ownsNative", 1)[0]
+        self.assertIn('prefs().getString("cpBridgeAttemptPhase", "") == "preparing" &&', recovering)
+        self.assertIn('prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&', recovering)
+        self.assertIn('prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&', recovering)
+        self.assertIn("deadline - SystemClock.elapsedRealtime() in 1L..330_000L", recovering)
+        self.assertIn("attemptInProgress = recovering", tick)
+        failure = function_source(self.bootstrap, "failAttempt")
+        self.assertIn('.putString("cpBridgeAttemptPhase", "failed")', failure)
+
+    def test_exhausted_boot_budget_clears_gate_without_allowing_a_retry(self):
+        tick = function_source(self.bootstrap, "tick")
+        blocked = tick.split("Policy.Action.BLOCKED -> {", 1)[1]
+        match = re.search(
+            r'if \(observed\.mappedPath == null && decision\.reason == '
+            r'Policy\.Reason\.ATTEMPT_BUDGET_EXHAUSTED\) \{([^}]+)\}', blocked)
+        self.assertIsNotNone(match, "Only an unmapped, budget-exhausted process releases the stale gate")
+        self.assertIn('root.run("setprop $GATE \'\'")', match.group(1))
+        self.assertNotIn('.remove(', match.group(1))
+        self.assertNotIn("attempt(", match.group(1))
+        self.assertIn("attemptsThisBoot = if (bootAttempt) 1 else 0", tick)
 
     def test_absent_host_is_clear(self):
         self.assertEqual(self.run_probe("", {}, pidof_status=1), "bridge-map-clear")
