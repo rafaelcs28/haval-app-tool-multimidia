@@ -9,6 +9,7 @@ import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.R
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
+import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeBootstrapPolicy as Policy
 import br.com.redesurftank.havalshisuku.models.CarConstants
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,11 +37,14 @@ object CarPlayBridgeBootstrapManager {
     private val started = AtomicBoolean()
     private val inFlight = AtomicBoolean()
     private val safetyWriteLock = Any()
+    private val publicationGate = CarPlaySafetyPublicationGate()
     private val worker = Executors.newSingleThreadScheduledExecutor { Thread(it, "carplay-local-bootstrap") }
     private val publisher = Executors.newSingleThreadScheduledExecutor { Thread(it, "carplay-bootstrap-safety") }
     private val root = CarPlayBootstrapRoot()
     @Volatile private var context: Context? = null
-    private data class ActiveAttempt(val identity: Identity, val ticket: String)
+    private data class ActiveAttempt(val identity: Identity, val ticket: String) {
+        fun publicationKey() = CarPlaySafetyPublicationGate.Key(identity.boot, identity.pid, identity.start, ticket)
+    }
     @Volatile private var activeAttempt: ActiveAttempt? = null
     @Volatile private var safety = Safety()
     private var payload: Payload? = null
@@ -158,11 +162,24 @@ object CarPlayBridgeBootstrapManager {
             .put("speedKmh", speed ?: JSONObject.NULL)
             .put("quiescent", quiet ?: JSONObject.NULL)
             .put("preparationState", mutableStatus.value.state)
-        writeSafetyPacket(packet)
+        synchronized(safetyWriteLock) {
+            val enabled = isAutomaticEnabled()
+            val phase = prefs().getString("cpBridgeAttemptPhase", "").orEmpty()
+            val decision = publicationGate.decide(attempt?.publicationKey(), activeAttempt?.publicationKey(),
+                eligible, enabled, inFlight.get(), phase)
+            if (decision == CarPlaySafetyPublicationGate.Decision.DROP) return@synchronized
+            packet.put("eligible", decision == CarPlaySafetyPublicationGate.Decision.ALLOW)
+                .put("enabled", enabled).put("inFlight", inFlight.get()).put("attemptPhase", phase)
+            writeSafetyPacketLocked(packet)
+        }
     }
 
     private fun writeSafetyPacket(packet: JSONObject) = synchronized(safetyWriteLock) {
-        if (!isAutomaticEnabled()) packet.put("eligible", false)
+        publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
+        writeSafetyPacketLocked(packet.put("eligible", false))
+    }
+
+    private fun writeSafetyPacketLocked(packet: JSONObject) {
         val temporary = File(INPUT, "safety.next")
         temporary.writeText(packet.toString())
         check(temporary.setReadable(true, false))
@@ -399,9 +416,11 @@ object CarPlayBridgeBootstrapManager {
 
     private fun attempt(bundle: Payload, before: Observation, action: Policy.Action) {
         val original = before.id ?: return
-        if (!inFlight.compareAndSet(false, true)) return
         val attemptTicket = UUID.randomUUID().toString()
-        activeAttempt = ActiveAttempt(original, attemptTicket)
+        synchronized(safetyWriteLock) {
+            if (!inFlight.compareAndSet(false, true)) return
+            activeAttempt = ActiveAttempt(original, attemptTicket)
+        }
         try {
             check(isAutomaticEnabled())
             check(prefs().edit().putString("cpBridgeAttemptBoot", original.boot)
@@ -429,8 +448,6 @@ object CarPlayBridgeBootstrapManager {
                 root.run(script("""
                     test "§(cat /proc/sys/kernel/random/boot_id)" = ${q(original.boot)} || exit 1
                     test "§(pidof com.ts.carplay)" = ${original.pid} || exit 1
-                    grep -q '"eligible":true' ${q("$INPUT/safety.json")} || exit 1
-                    grep -q ${q("\"ticket\":\"$attemptTicket\"")} ${q("$INPUT/safety.json")} || exit 1
                     cpb_stacks=§(am stack list 2>/dev/null) || exit 1
                     printf '%s\n' "§cpb_stacks" | grep -q 'Stack id=' || exit 1
                     if printf '%s\n' "§cpb_stacks" | grep -q -e com.ts.carplay.app -e com.google.android.projection.gearhead -e com.ts.androidauto; then exit 1; fi
@@ -440,11 +457,9 @@ object CarPlayBridgeBootstrapManager {
                     cpb_stat=§(cat /proc/${original.pid}/stat) || exit 1
                     cpb_tail=§{cpb_stat##*) }; set -- §cpb_tail; shift 19
                     test "§1" = ${original.start} || exit 1
-                    cpb_stamp=§(sed -n 's/.*"elapsedMs":\([0-9]*\).*/\1/p' ${q("$INPUT/safety.json")})
-                    cpb_now=§(awk '{print int(§1*1000)}' /proc/uptime)
-                    test -n "§cpb_stamp" && test §((cpb_now-cpb_stamp)) -ge -30 && test §((cpb_now-cpb_stamp)) -le 3000 || exit 1
-                    kill -15 ${original.pid}
-                """))
+                """) + "\n" + CarPlaySafetyPublicationGate.warmKillCheck(
+                    CarPlaySafetyPublicationGate.Key(original.boot, original.pid, original.start, attemptTicket),
+                    "$INPUT/safety.json") + "kill -15 ${original.pid}\n")
             }
             val waitUntil = SystemClock.elapsedRealtime() + 5_000
             var current = before
@@ -455,7 +470,7 @@ object CarPlayBridgeBootstrapManager {
             }
             val identity = requireNotNull(current.id)
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
-            activeAttempt = ActiveAttempt(identity, attemptTicket)
+            synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
             check(prefs().edit().putString("cpBridgeAttemptIdentity", identity.key).commit())
             val run = identity.directory
             val template = File(bundle.source, "cold-launcher-template.js").readText()
@@ -494,19 +509,21 @@ object CarPlayBridgeBootstrapManager {
         } catch (error: Exception) {
             failAttempt(bundle, error)
         } finally {
-            inFlight.set(false)
-            activeAttempt = null
+            synchronized(safetyWriteLock) {
+                inFlight.set(false)
+                activeAttempt = null
+            }
         }
     }
 
     private fun recoverAttempt(bundle: Payload, initial: Observation) {
         val identity = initial.id ?: return
-        val adopted = inFlight.compareAndSet(false, true)
+        val adopted = synchronized(safetyWriteLock) { inFlight.compareAndSet(false, true) }
         try {
         val attemptTicket = prefs().getString("cpBridgeAttemptTicket", "").orEmpty()
         check(attemptTicket.matches(Regex("[a-f0-9-]{36}")))
         check(prefs().getString("cpBridgeAttemptIdentity", "") == identity.key)
-        activeAttempt = ActiveAttempt(identity, attemptTicket)
+        synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
         val deadline = prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0)
         check(deadline - SystemClock.elapsedRealtime() in 1L..330_000L)
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -536,7 +553,7 @@ object CarPlayBridgeBootstrapManager {
         }
         error("Local preparation timed out")
         } finally {
-            if (adopted) {
+            if (adopted) synchronized(safetyWriteLock) {
                 inFlight.set(false)
                 activeAttempt = null
             }
@@ -545,15 +562,18 @@ object CarPlayBridgeBootstrapManager {
 
     private fun failAttempt(bundle: Payload, error: Exception) {
         Log.e(TAG, "Automatic preparation stopped; published owners are preserved", error)
-        prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
-            .putString("cpBridgeAttemptPhase", "failed").commit()
-        runCatching {
-            val trace = org.json.JSONArray()
-            error.stackTrace.take(12).forEach { trace.put(it.toString()) }
-            writeSafetyPacket(JSONObject().put("eligible", false)
-                .put("failureType", error.javaClass.simpleName)
-                .put("failureMessage", error.message ?: "")
-                .put("failureStack", trace))
+        val trace = org.json.JSONArray()
+        error.stackTrace.take(12).forEach { trace.put(it.toString()) }
+        val failure = JSONObject().put("eligible", false)
+            .put("failureType", error.javaClass.simpleName)
+            .put("failureMessage", error.message ?: "").put("failureStack", trace)
+        synchronized(safetyWriteLock) {
+            publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
+            // Keep the failure separate: a late diagnostic sample may replace safety.json.
+            prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
+                .putString("cpBridgeAttemptPhase", "failed")
+                .putString("cpBridgeLastFailure", failure.toString()).commit()
+            runCatching { writeSafetyPacketLocked(failure) }
         }
         runCatching { root.run("setprop $GATE ''") }
         report("failed", "O preparo foi interrompido; sessão atual preservada")
