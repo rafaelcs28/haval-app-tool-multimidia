@@ -492,7 +492,9 @@ object CarPlayBridgeBootstrapManager {
             requireFreshSafety(identity)
             launch(bundle, identity, "$run/cold-launcher.js", "$run/native-injector.log")
             val proof = awaitResident(bundle, identity, "native", SystemClock.elapsedRealtime() + 4_000)
-            check(CarPlayResidentProof.nativeArmed(proof)) { "Native resident peer not armed before gate release" }
+            check(CarPlayResidentProof.nativeArmed(proof) || CarPlayResidentProof.nativeInstalled(proof)) {
+                "Native resident peer not prepared before gate release"
+            }
             // Only a fresh response produced after the exact CLI exited can release the gate.
             root.run(identityGuard(identity) + "setprop $GATE " + UUID.randomUUID().toString().replace("-", ""))
             recoverAttempt(bundle, observe(bundle, minimal = true))
