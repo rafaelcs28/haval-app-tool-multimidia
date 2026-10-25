@@ -97,29 +97,45 @@ function attemptOffer() {
             name: 'com.ts.carplay.ImpulseCleanMapConnection' + String(++state.nextBindingId),
             implements: [ServiceConnection],
             methods: {
-                onServiceConnected(name, binder) {
-                    try {
-                        if (!current() || !state.binding || state.pendingEndpoint !== endpoint) return;
-                        requireValue(Number(state.bridge.epoch()) === generation, 'Principal generation changed before offer');
-                        const remote = state.bridgeStub.asInterface(binder);
-                        requireValue(remote !== null, 'Impulse bridge returned null interface');
-                        remote.offerEndpoint(endpoint, token, generation);
-                        if (!current()) return;
-                        state.endpoint = endpoint;
-                        state.pendingEndpoint = null;
-                        state.binding = false;
-                        state.generation = generation;
-                        clearBytes(token);
-                        state.token = null;
-                        send({ type: 'clean-map-endpoint', state: 'offered', generation: generation });
-                    } catch (error) {
-                        send({ type: 'clean-map-endpoint', state: 'offer-failed', error: String(error) });
-                        if (current()) retire();
+                onServiceConnected: {
+                    returnType: 'void',
+                    argumentTypes: ['android.content.ComponentName', 'android.os.IBinder'],
+                    implementation(name, binder) {
+                        try {
+                            if (!current() || !state.binding || state.pendingEndpoint !== endpoint) return;
+                            requireValue(Number(state.bridge.epoch()) === generation, 'Principal generation changed before offer');
+                            const remote = state.bridgeStub.asInterface(binder);
+                            requireValue(remote !== null, 'Impulse bridge returned null interface');
+                            remote.offerEndpoint(endpoint, token, generation);
+                            if (!current()) return;
+                            state.endpoint = endpoint;
+                            state.pendingEndpoint = null;
+                            state.binding = false;
+                            state.generation = generation;
+                            clearBytes(token);
+                            state.token = null;
+                            send({ type: 'clean-map-endpoint', state: 'offered', generation: generation });
+                        } catch (error) {
+                            send({ type: 'clean-map-endpoint', state: 'offer-failed', error: String(error) });
+                            if (current()) retire();
+                        }
                     }
                 },
-                onServiceDisconnected: disconnected,
-                onBindingDied: disconnected,
-                onNullBinding: disconnected
+                onServiceDisconnected: {
+                    returnType: 'void',
+                    argumentTypes: ['android.content.ComponentName'],
+                    implementation: disconnected
+                },
+                onBindingDied: {
+                    returnType: 'void',
+                    argumentTypes: ['android.content.ComponentName'],
+                    implementation: disconnected
+                },
+                onNullBinding: {
+                    returnType: 'void',
+                    argumentTypes: ['android.content.ComponentName'],
+                    implementation: disconnected
+                }
             }
         }).$new();
         state.binding = true;
@@ -173,13 +189,19 @@ rpc.exports = {
                     name: 'com.ts.carplay.ImpulseCleanMapReceiver',
                     superClass: BroadcastReceiver,
                     methods: {
-                        onReceive(context, intent) {
-                            const action = String(intent.getAction());
-                            if (action === 'br.com.redesurftank.havalshisuku.CARPLAY_CLEAN_MAP_REQUEST') {
-                                state.requested = true;
-                                attemptOffer();
-                            } else if (action === 'br.com.redesurftank.havalshisuku.CARPLAY_CLEAN_MAP_REVOKE') {
-                                retire();
+                        // registerClass only infers signatures from interfaces,
+                        // never from BroadcastReceiver's abstract superclass.
+                        onReceive: {
+                            returnType: 'void',
+                            argumentTypes: ['android.content.Context', 'android.content.Intent'],
+                            implementation(context, intent) {
+                                const action = String(intent.getAction());
+                                if (action === 'br.com.redesurftank.havalshisuku.CARPLAY_CLEAN_MAP_REQUEST') {
+                                    state.requested = true;
+                                    attemptOffer();
+                                } else if (action === 'br.com.redesurftank.havalshisuku.CARPLAY_CLEAN_MAP_REVOKE') {
+                                    retire();
+                                }
                             }
                         }
                     }

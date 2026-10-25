@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {validateCallbacks} = require('./test_java_callback_signatures');
 const source = fs.readFileSync(path.join(__dirname, 'carplay_clean_map_endpoint.js'), 'utf8');
 const bridgePath = '/data/local/tmp/impulse-carplay/passthrough-v1/libcarplay_video_bridge.so';
 const request = 'br.com.redesurftank.havalshisuku.CARPLAY_CLEAN_MAP_REQUEST';
@@ -59,7 +60,8 @@ function environment(fault = {}) {
             throw new Error('Unexpected APK class ' + name);
         }}; }},
         registerClass(definition) {
-            return {$new() { return { javaId: ++serial, methods: definition.methods }; }};
+            const methods = validateCallbacks(definition);
+            return {$new() { return { javaId: ++serial, methods }; }};
         },
         use(name) {
             if (name === 'android.app.ActivityThread') return {currentApplication() { return app; }};
@@ -89,7 +91,9 @@ function environment(fault = {}) {
             // Frida may supply another JS wrapper for the same Java object.
             connection.methods.onServiceConnected.call({javaId: connection.javaId}, null, {});
         },
-        disconnect(connection) { connection.methods.onServiceDisconnected.call({javaId: connection.javaId}, null); }
+        disconnect(connection, method = 'onServiceDisconnected') {
+            connection.methods[method].call({javaId: connection.javaId}, null);
+        }
     };
 }
 
@@ -143,9 +147,23 @@ async function test(name, action) { await action(); passed++; process.stdout.wri
         env.broadcast(request); assert.equal(env.timers.size, 1); assert.equal(env.endpoints.length, 0);
         env.broadcast(revoke); assert.equal(env.timers.size, 0);
     });
+    for (const method of ['onServiceDisconnected', 'onBindingDied', 'onNullBinding']) {
+        await test('typed Android callback retires active request: ' + method, async () => {
+            const env = environment(); await env.api.arm({bridgePath});
+            env.broadcast(request); env.connect();
+            assert.equal(env.api.state().offered, true);
+            env.disconnect(env.connections[0], method);
+            assert.equal(env.api.state().requested, false);
+            assert.equal(env.api.state().offered, false);
+            assert.equal(env.endpoints[0].closeCount, 1);
+            assert.equal(env.unbound.length, 1);
+            env.broadcast(revoke);
+            assert.equal(env.endpoints[0].closeCount, 1, 'revoke after disconnect is idempotent');
+        });
+    }
     await test('missing Java bridge fails with an actionable error', async () => {
         const env = environment({noJava: true});
         await assert.rejects(async () => env.api.arm({bridgePath}), /Java bridge unavailable/);
     });
-    process.stdout.write(passed + ' endpoint lifecycle model scenarios passed; no Android/Binder execution\n');
+    process.stdout.write(passed + ' endpoint lifecycle scenarios passed with pinned registerClass/DEX signature checks; no Android/Binder execution\n');
 })().catch(error => { process.stderr.write(String(error.stack) + '\n'); process.exitCode = 1; });
