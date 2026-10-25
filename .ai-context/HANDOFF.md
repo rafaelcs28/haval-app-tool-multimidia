@@ -1,3 +1,254 @@
+## COMPLETE 2026-10-25 11:11 — bridge ready; owner confirms current principalD0
+
+Latestresultsupersedesallactivefailure/investigationnotesbelow. UserCorrija
+completedsource+fieldbootstrap. OEM5629/starttime476590 isLIVE installed-pinned,
+9entries,pinnedtrue,failureNULL. Nativeinjector5909 MUSTremainalive. NewESMJava
+agent injector9338 reportsloaded+armed; receiverregistered. OwnerreconnectediPhone AFTER
+thisactivationandconfirmedprincipalCarPlaynormal. No5minteststartedthisturn,
+noBinderSurface/type111/firstD3frameyet; doNOTclaimcleanmapworking.
+
+Sourcee55014b1 pushedoriginrelease/impulse-74132-v9, withmainfix7e1f249d,
+loaderflush ecff75e5, reviewedC++/MFIclosure3338b812, kerneltrampfix2763e827,
+ESMpackaginge55014b1. Native/AndroidappinputsUNCHANGEDfromMini7eDebugsuccess
+2m21s/47tasksincludingARM64JNIandunitstask; downloadedAPK/log/checksumsverified,
+notinstalled(Debugcert). CurrentproductionAPKremains74132fromc591; bridge.so
+stillMini2f793449d9, separatelystaged. No neednewAPK/versionforJSfieldfix.
+54NodemodelPASS;49Pythontests=48pass1optionalconverterskip;fullregressionguardPASS.
+
+ExactC++capture7,812,664bytesSHAd25fdec8..., REAiostreamroot/helper/imbueaudit,
+pluspriorPlatformMediaidleworkerreview admitted9extraOEMdeps withnewlinkerprofile
+digest5501d81df03cb9e7baf5dbc37d594ce973ae708e13390a4330d3dde5be977ae8.
+ActualGumtrampprobed: ProcessrangeNULL,Cloaktrue,Memory.queryProtectionrwx.
+KernelpermissionscheckedAFTERflush, null/self/duplicate/alignmentguardspreserved.
+Priorfailedattemptsrollbackzero/unpinned verifiedbeforeidlemanualcoldrestarts;
+nofailedpinnedkill/retry/unload. LastsuccessfulnativeprocessNOTrestarted.
+
+EndpointrootcausewasCJSexportsbeforeJavaimport. BarearchiveisolatedReferenceError
+reproduced; ESMtype=moduleisolatedarchiveexecuted. Newagentartifact
+/root/projects/haval-impulse/artifacts/carplay-endpoint-agent-esm-132/clean-map-agent.js
+SHA bfe37072bd70faa7399451d247508b077830208d1a688776079050df7c4d0cb9,
+540424bytes; manifestpinsmetadata/moduleMode+entry+lock. Builder/readerrejectCJS.
+Old1a429e6dendpointartifactINVALIDforruntime—nowrejectedasstale. Itsinjector7437
+remainsidlewithuninitializedscript; firstCJSentrycannotreachJava/receiver and
+receiverabsencewasverifiedbeforeloadingnewagent. DoNOTkillnative5909ornewESM
+agent. No needalteroldidleclientduringphysicaltest; allfreedwithOEMexit.
+
+Private evidence bridge-132-trampoline-fixed-20261025 includesendpoint-esm-result,
+safetyproof, finalbridge-ready, commonJS/ESMisolatedprobes. Earlierattempts dirs
+bridge-132-fixed-20261025T132412Z, bridge-132-fixed-cxx-20261025. Currentartifact
+carplay-loader-fix-7e1f249d/validation.json hasfinalruntime +Mini receipts. Manifest
+androidRuntimeValidatedtrueSCOPEmodule/JavaarmONLY; Binder/mapstagesnotvalidated.
+
+Nextuserstep: AppleMapsroute, ImpulseRecursos->TesteCarPlaycaptura+HUD->Iniciarteste
+CarPlay(5min), then pullprivatecaptures/cluster/endpointlogswhilecentralonline.
+PrincipalD0normalalreadyconfirmedcurrentPID. CarPlay/AAisolation, safety/native
+panels and leaseguardsremain. Nevermove/resize/restartprincipal orenableAA.
+Ifcaroff/OEMdies, gateempty meansstockboot; newattendedP0/disconnectedcoldprep
+needed. Userstartedcarthissession; earlierGWMshutdownrequestalreadyfulfilled.
+NOvehiclepowercommands/APKinstalls/displaymoves/AAchangesinthiscorrection.
+
+## ACTIVE 2026-10-25 10:52 — FIRST REAL installed-pinned; preserve live injectors
+
+CRITICAL: OEM5629 now installed-pinned,replacements9,pinnedtrue,failureNULL.
+Nativeinjector5909 MUST stayalive forcallbacks. Endpointinjector7437 alsoalive,
+unknowninitialization; DO NOTkill/restart/unload either orOEM whileinvestigating.
+Controllerlocalexec24546 finished1 ONLYbecauseendpoint8s timeout; finallycleared
+coldgate/releasefile. Nativehooksremainvalid, notrolledback. No secondarySurface/
+mapteststarted. CarPlayphysicalprincipal stillneedsconfirmationforcurrentPID;
+useransweredearlierattemptprincipalnormal, lastaskedCanIdisconnect; toldYES.
+FreshP/noCPtasksobservedbeforethisactualattempt. Vehiclepowerownercontrolled.
+
+CurrentcodeHEAD2763e827 after3338b812(c++MFIallowlist),ecff75e5(flush),7e1f249d
+(loader/PIDfix). 2763notyetpushed;3338pushed. Native/Androidappinputsunchangedfrom
+Mini7e success2m21/47tasks. 54Node+48Python47pass1skipaftertrampfix.
+ActualisolatedreplaceFastprobe provedProcess.findRange(original)==null,
+Cloaktrue,kernel/rwx, Memory.queryProtection(original and+3)=='rwx'.
+Sourcefixcollects9distinct/nonself/alignedoriginals, flushes, verifies actualkernel
+protection+Cloakownershipbeforebootstrap. NoCloakunhide/noXbypass. Actualsuccess
+nowconfirmedcurrentcold-stateJSONunderstagedroot.
+
+Privateattemptdir bridge-132-trampoline-fixed-20261025 hascontrollerlog,
+activation-failure(endpointtimeout), installed-pinned-endpoint-check. Rootcurrently
+runsbarefrida-compile18archiveprobein35sdisposablesleep: execsession... seeactive
+sessions. Probeisolatesarchiveformat (noJava) fromstaticJavaimporthang. Newendpoint
+archive540920bytesSHA1a429e6d compiledwithfrida-compile18/javaBridge7.0.13; stdout
+log0 andnoendpointstatefile >60s. NOproofagentboot orJavaarmed. Plaincoldscript
+works. Needpreserveunknownendpointscript; no duplicate receiver/rearm blindly.
+Read-onlyagentcontroller_pid_fix investigatesdurablebootprogress/importJava/
+performNow; noedits/caraccess. Rootisolatedarchiveprobewritesprivatearchive-probe
+result; DO NOT touchliveOEMforformatprobe. Ifarchiveloaderworks, usepreludemodule
+beforeJavaimport tolocalizeJavaRuntimeconstructorhang.
+
+Remaining: Java control readiness thenfreshprincipalD0confirmation, explicit5min
+capture andfirstD3frame onlyafteractualbridgeendpointarmed. Do notclaimcleanmap.
+Userstillparked/connectedconditioncanchange; keepfreshP0beforeanyliveactions.
+NoAPKinstalledthissession; production132stillactive, nativeexcludedfromAPK.
+
+## ACTIVE 2026-10-25 10:34 — loader crash avoided; reviewing missing C++ dependency
+
+Corrected live attempt24265 DID NOTcrash. It safely failed before nativepins/entries:
+phasefailed,replacements0,pinnedfalse, failureUnreviewedcold-loaddependency
+/vendor/app/TsCarPlayService/lib/arm64/libc++_shared.so. Controllerexited1, finally
+clearedgate/releasefile. PID24265alive; injector24480attached butno OEMentryhooks,
+scriptunpinned, nativebootstrapnevercalled onthisfailurepath. Noendpointstarted.
+OwnerconnectedCarPlayandconfirmedprincipalD0normal, thenexplicitlyTireiCarPlay
+(disconnectedagain). NeedcurrentP0+noCP/AA beforeanothercoldattempt afteraudit.
+
+Read-onlyreviewagent bridge_crash_review nowfetches exactlibc++7,812,664bytes,
+SHA d25fdec80cb2ab3b4ca02b189d909bc90a6378411bbf3d3a36a09512f2798638,
+private bridge-132-libcxx-review-20261025. Partialfetchresumed afterchunk timeout,
+now4.78MB; do NOTconcurrentlargeTelnetcaptures. ELFpreliminary1initentry0x91824,
+needs libc+libdl only. AgentwillREAconstructorafterfullhashverified. Addonlyafter
+review; also admitpreviouslyreviewedinitfree libmfiinterface.so actualstockmaps.
+Currentallowlist7depomittedbothC++andMFI, doNOTwaive unknownlibs.
+
+SourceHEADecff75e5 (JSflush) after7e1f249d (mainfix); ecffnotyetpushed.
+Mini7eSUCCESS2m21s/47tasksJNI+unit; exactAndroid/native inputs unchangedinecff.
+45NodePASS and48Python47pass1optionalskip; fullguardPASS. Finalisolatedprobe
+PASS: directloader/trapsall/cooperative sawapprovedinternalenter/leave andnested
+NOLOADsuccess underreviewedcompleteboundary. Firsttwo globaldlopenprobeshadno
+hookevents, wereNOT successes. All3probesdisposable35ssleepprocessesnowexited.
+Evidencefixedsession bridge-132-fixed-20261025T132412Z (includesactivation-failure).
+Needupdateprofiledigest+NodefixturesincludeC++/MFI whenauditcomplete, commit,
+restageupdatedlauncher. Oldmappedbridge/injector mayremain fromknownunmodified
+failed attempt; wrapperpreflightmustdistinguishverifiedfailed0/unpinned vsunknown
+orfailedpinned. Noautomatickill/retry/unload forfailedpinned/livecallbacks.
+
+## ACTIVE 2026-10-25 10:30 — corrected cold attempt armed, awaiting iPhone
+
+Owner explicitly says Corrija and confirmed stillparkedP/disconnected (Sim).
+Sourcefix7e1f249d pushed; MiniDebug jobhaval-impulse-132-7e1f249d000595e5-20261025T132305Z-29383
+SUCCESS2m21s/47tasks, JNIARM64 andtestDebugUnitTest. NativeCpp unchanged. Fetched
+APK/log/checksums verified artifacts/carplay-loader-fix-7e1f249d/mini-debug; doNOT
+installDebug APKoverproduction132. Additional runtimeJSflush commitecff75e5
+ensuresloader listener activebeforestartuprelease; testmodelrequiresflush too.
+Android/native sources identical to Mini-tested7e; no needcompileJavaforJSflush.
+
+Three disposable35s sleep-process probes; firsttwo globaldlopen calls didn'thit
+boundary (not successes), finaldirectpublicloader/trapsall/cooperative probePASS:
+linkerfound,3bodyhashesexact, targetPatchedtrue, callerapproved, rootNOLOADsuccess,
+nestedNOLOADfrominternalonLeave success. Evidence private bridge-132-fixed-20261025T132412Z.
+NoOEMrestart inprobes; disposableprocessesautoexit35s, no retainedsessionhooks.
+Thenoneactualcorrectedcoldattempt via privateactivate.py using exacthashreuse
+forunchangednative793449d9 andendpoint1a429e6d; NEWlauncherfromecffsource.
+FreshP/0 andCP/AAtasks0,noexistingOEMinstrumentation. OldOEM24700->24265,
+absentmoduleschecked, boundPID/starttimecontroller armed. Startup released.
+Running execsession82413observesup to5min, newlivePIDchecks preventstalestate.
+Asked ownerconnectiPhone andconfirmCarPlayD0 normal; answerpending. KeepP and
+no5mintest untilinstalled-pinned+endpointarmed+principalconfirmed. NoAPKinstall,
+noAA/display/resolution/powerchange. Nativecode/production132remainunchanged.
+Mustfinishobserving/pullstatus; neverkill/unload a livepinnedprocess onfailure.
+Controllerfinallyclearsgate+releasefile. Native/endpointinjectorsmustremainalive
+on success. Do notdeclaremapworkingwithoutsecondary111/firstD3frameevidence.
+
+## 2026-10-25 — loader abort corrected in source; device validation pending
+
+User explicitly requested correcting the failed attended bridge attempt. The
+native bridge and installed132 APK are unchanged. The cold JS interceptor now
+records module additions and pins/installs only on the attested internal
+Android9 do_dlopen outermost successful return, before its public caller unlocks
+the recursive loader mutex. It rejects incomplete/nested-failed groups, callers
+outside the two verified wrapper sites, untracked threads and unknown new images.
+New testdata/android9-linker-profile.json pins the real central linker and seven
+reviewed OEM dependencies; existing module identity includes path/base/name/size.
+New dependencies require exact file and executable hashes; baseline system libs
+are reused, new unknown ones reject. PlatformMedia initializer has an idle worker,
+not no worker: REA confirms empty queue, wake semaphore0, wait-before-dispatch.
+No asynchronous installation/timing workaround; native module ownership and all
+nine entries remain unchanged. Endpoint bundle remains1a429e6d and native remains
+793449d9; updated launcher is required (old staged launcher must NOT be reused).
+
+Controller status now bound to original live PID + stat starttime + cmdline and
+bracketed reads. Old armed/installed/endpoint files after process death cannot
+acknowledge a replacement/reused process. No additional cold-window roundtrips;
+cleanup and no automatic retry/kill/unload remain. Code review addressed baseline
+identity, cloned boundary manifest, explicit dependency errors and nestedNOLOAD.
+Source tests:45Node interception scenarios;48Python tests(47pass,1optional skip),
+including22controller and5launcher. Finalfullguard/Mini result follow below.
+
+Read-only linker capture1741640bytes SHA63556e8d8a90ccfbff156c3330a75a2fd0e5955d87000ea77fad1e77c0def06b
+is private under test-artifacts/linker-fix-20261025T130532Z. REA genuine dossiers:
+loader wrapper ev_457e61e48dc02e84f00b991721b778a32db560ed07c40f409b7adbcf1a0ff6c1;
+extwrapper ev_01b06092793110d59a04d344a1dc2a7e4d1340d2ffd94ee4f811d238660b4b66;
+internaldo_dlopen ev_89e3ff5462e8e11b6ffa62e3514f4ab7bf716128e77db0f74c3a079559238077.
+PlatformMedia4REA dossiers and closure manifest in private
+bridge-132-platformmedia-review-20261025. Existing REA CLI6.7.0 used invocation-only
+existing Ghidra12.1.4/Java21; no installation or client configuration edits.
+No further live restart/injection/installation/power action after failed attempt.
+Asked whether owner still parkedP/disconnected; current availability answer
+pending. Do not retry merely from online telemetry; new source/build then fresh
+coordinated P/0/no projection preflight required. Native map success still unproven.
+
+## 2026-10-25 10:00 - attended cold bridge attempt FAILED; OEM recovered, no retry
+
+Owner said Pronto, initially telemetryN/0; requestedP. Owner confirmedP and two
+freshP/0 snapshots plus repeated final gate allowed one reviewed cold attempt.
+Staged exact793449d9 native +1a429e6d bundledendpoint +969d2494 launcher reverified.
+Private wrapper reused hash-verifiedstage; first pre-mutation wrapper check falsely
+classified Telnet greeting as instrumentation (NO mutation); corrected marker-based
+guard then one actualrestart6125->23426. Cold absentmodules confirmed, interceptor
+armed and startupreleased. Asked owner to connect iPhone, keepP, nofive-minute yet.
+
+OEM23426 then SIGABRT while loading modules. Injector.log actual abort:
+linker_phdr.cpp170 Load CHECK did_read_ false; stack __loader_dlopen ->
+NativeModulePins+656 (ELF0x127964, sourceinitial_entry_bootstrap.cpp66),
+prepareInitialEntries -> namespacepreparation. Synchronous lastonAdded enters
+install()/modulepinning while linkerloadunfinished. Nativeprepare precedesnine
+replaceFast calls, so no completedentryinstallation/installed-pinned/endpoint.
+Existing cold-state.json STALE armed/replacements0/pinnedtrue reflects Script.pin,
+NOT healthy bridge. Do not trust status file without matchinglivePID.
+
+Androidauto-recreatedOEM24700; app3260unchanged, no injector/bridge mappings in
+newOEM. LocallySIGINTobserver after detectingPIDchange; controllerfinallycleared
+optinpropertyandremovedreleasefile. No retry/kill/unload ofpinnedlivecallbacks,
+noAPK/config/display/AA/powerchanges. Vehicleownerstartedthissession; previous
+GWMshutdownrequestalreadyfulfilled. No remoteoffcommandissued.
+Private evidence /root/projects/haval-impulse/test-artifacts/bridge-132-live-20261025T125436Z:
+controllerlog, exactinjectorcrash/crashbuffer, systemevents, state/telemetry,
+field-result.json andevidencehashes. No nativecodefix/build performed thissession.
+Read-onlyreviewagent confirmedprobablereentrantlinkermechanismfromAOSP9; arbitrary
+asyncsetTimeoutlosescoldbefore-first-use guarantee, NOT acceptablequickfix.
+Next offline: designprovensafeloadercompletionboundary/moduleownership, tests for
+incomplete-linkerstate, failPID-boundcontrollerobserver; Mini-onlynativebuild.
+MapcleanNOTreleased. Physicalprincipalrendering stillawaitingownerresponse.
+
+## 2026-10-25 09:47 - inert bridge assets staged and hash verified; no activation
+
+Owner answered parkedP/disconnected, then said proceed despite movement.
+Fresh rechecks contradicted parked status: D31.2, D34.7, briefP/0, thenD55.4,
+D43.8km/h. Did NOT restart/inject/set gate or touch display/power.
+Completed authorized stage-only to prepare inert files, preceded by noinjector/
+nomappedbridge check and saved old status/log tails. Exact mounted/staged service
+MD5b61f0e4d verified, CP/AA visualtasks0, OEM6125. Controller.stage succeeded:
+native7798416bytes SHA793449d908e1755c6821362049da39e0efda41f3647ed55951b5929550cddbdf,
+launcher template969d2494814b84090b64b84d6fc75498b5fd0a8150ec8af0688ce781e1fdae0d,
+full endpoint archive1a429e6d1118e429628ffde3d3172290dd339b39b1b5388cb36558d1797ee895.
+Private /root/projects/haval-impulse/test-artifacts/bridge-132-stage-20261025T124529Z
+contains preflight, saved prior logs, stage receipt, post-state/telemetry. Stock
+processes preserved. Actual activation pending stablefreshP/0 and parked session;
+do not treat transient0 asparked or override absentmodules/visualtask guards.
+Owner confirmation alreadyexists but fresh telemetry MUST also agree before
+cold restart. Prepared assets alone are not installed-pinned/endpointarmed or
+proof of principalD0/secondaryD3frame. No Android build or source edits.
+
+## 2026-10-25 09:43 - bridge preparation deferred: vehicle moving
+
+Owner reported car on; readiness read-only confirmed installed132, process3260,
+foreground/accessibility services, Minimalist, no Impulse crash-buffer mentions.
+Owner then explicitly authorized bridge preparation ("Faca"). Fresh telemetry
+09:42:43 showed engine1, gearD,44.9km/h, age1.2s. No staging/restart/injection or
+power command issued. Asked owner to report parkedP with CP/AA disconnected.
+Required answer pending; do not proceed merely because speed temporarily reaches0.
+OEM service mounted/staged MD5b61f0e4d63535a2ef447be559211697b; injector available,
+no visual CP/AA tasks or bridge/Frida mapping observed in OEM6125. Local exact
+Mini native793449d9 and bundled agent1a429e6d plus manifest verified offline.
+Private evidence: /root/projects/haval-impulse/test-artifacts/readiness-132-20261025T124112Z.
+When owner confirms parkedP, recheck freshP/0 + visual projection/task absence,
+then reviewed controller with explicit native+endpoint-bundle paths. Require
+installed-pinned and endpointarmed; keep pinned injectors alive, no hot bypass.
+Vehicle was started by owner; previous remote-session shutdown was already
+fulfilled. No power commands in this session.
+
 # Handoff
 
 ## COMPLETE — corrected132 installed; GWM shutdown explicitly confirmed
