@@ -15,7 +15,7 @@ frida registerClass+mkdex DEX descriptor tests;11Python endpoint/assets PASS.
 app_build_outputs_apk_release_app-release.apk, size81582379. SHA
  ddf7fb8c1407ef66b4cc02f3bdd23935f7ddf06171cd1babe9b819f1ee8fce1f.
 Prod cert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
-Payload136-b8c26f1a60e1-803a3d40d033; controller digest/asset hashes verified.
+Payload74136-b8c26f1a60e1-803a3d40d033; controller digest/asset hashes verified.
 Private delta-136-callback:4,009,641gzip bytes/12chunks, exactAPK reconstruction
 and install_delta_136.py --validate-only PASS. Uses pinned cached133 baseline86426
 at /data/local/tmp/impulse-74133-reviewed/app.apk, local baseline artifact133
@@ -24,8 +24,8 @@ served yet. validate_136.py/inspect_136.py prepared. No extra build is needed.
 
 Car STILL135. Same bootb6ab050a-4e1c-4360-a947-78eb32c06319 currentOEM28661 (last
 read); old11951/native12108/Java14297 are DEAD previoussession. Their old JSON9pinned
-is STALE. USB/currentstockCarPlay works; no bridge in replacementOEM. Explicit UI
-retry clearedAttemptBoot/Phase; oldReadyIdentity11951 persists. Do not treat as
+is STALE. USB/currentstockCarPlay works; no bridge in replacementOEM. AttemptBoot/Phase were cleared, matching the explicit retry path; sender not
+established. OldReadyIdentity11951 persists. Do not treat as
 new/currentREADY or kill reused oldPIDnumbers.
 
 Cause proven: first135 test capture started epoch1792956525487, OEM11951 crashed
