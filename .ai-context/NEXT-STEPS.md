@@ -1,10 +1,10 @@
-## Current status — 134 INSTALLED; bridge waiting (2026-10-25)
+## Current status — 136 READY, waiting for owner parked notice
 
-134 is installed and its actual APK hash verified. Do not repeat build/install.
-Car boot55bd/OEM3749; fresh P/0; quiescence=false. Current134 has no native/Java
-owners or attempt yet. Await owner response to the phone/Bluetooth/wireless CarPlay
-disconnection question, then inspect preparation. Old failed preferences refer to
-133/boot9055. Read current HANDOFF before any operation; map test is not ready yet.
+Installed135 has a proven Android receiver descriptor bug; the test killed OEM11951.
+136 fixes it and passed build/signature/real DEX callback tests. Owner says will
+notify when parked; lasttelemetry D/73.9. Do not repeat build or alter movingcar.
+Use current HANDOFF for ready artifact/delta and exact install/preflight sequence.
+Map video still unverified. Old9pinned11951 files are stale after its death.
 
 ## Current status — 134 ready, not installed (2026-10-25)
 

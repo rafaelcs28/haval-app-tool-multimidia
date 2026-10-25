@@ -1,3 +1,10 @@
+## 2026-10-25 — 136 signed APK ready; parked installation pending
+
+- Mini acc346af passed full JVM, signed Release/R8/lint in 5m17s (83 tasks). Twelve Node lifecycle/real DEX-signature scenarios and eleven Python endpoint/assets checks passed.
+- Verified exact signed APK SHA ddf7fb8c1407ef66b4cc02f3bdd23935f7ddf06171cd1babe9b819f1ee8fce1f and prepared a verified 4,009,641-byte gzip delta. No on-car installation yet; owner will notify when parked.
+- Retrieved complete 135 capture read-only. First test preceded AbstractMethodError by 10ms and aborted at 32ms; second recorded214 guidance callbacks without error but did not validate video/map.
+- Physical136 command preflight and map/frame validation remain pending. No vehicle changes while driving.
+
 ## 2026-10-25 — 135 field command failure and 136 callback correction
 
 - 135 installed, exact APK verified, and full HU reboot automatically restored native9/Java/owners; source paired ONLINE classification fix worked.
