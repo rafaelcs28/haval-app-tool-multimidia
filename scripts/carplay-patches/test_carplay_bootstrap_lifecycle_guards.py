@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MANAGER = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayPatchManager.kt"
 FRIDA = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/utils/FridaUtils.java"
 BOOTSTRAP = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt"
+QUIESCENCE = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeQuiescence.kt"
 
 
 def function_source(source, name):
@@ -162,6 +163,36 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertNotIn('.remove(', match.group(1))
         self.assertNotIn("attempt(", match.group(1))
         self.assertIn("attemptsThisBoot = if (bootAttempt) 1 else 0", tick)
+
+    def test_null_projection_semantics_require_exact_verified_oem_firmware(self):
+        source = QUIESCENCE.read_text()
+        self.assertIn('DCM_APK_SHA256 = "7859c63e089d6f053df7b4121063e30d4e5f7795cf8fca52a73bebe8a44b9b69"', source)
+        self.assertIn("DCM_APK_SIZE = 237_975L", source)
+        self.assertLess(source.index("if (!verifyFirmware(context, service.epoch))"),
+                        source.index("val onlineEmpty = readOnlineDevicesEmpty"))
+        verify = function_source(source, "verifyFirmware")
+        self.assertIn("getServiceInfo(ComponentName(DCM_PACKAGE, DCM_SERVICE_CLASS), 0)", verify)
+        self.assertIn("File(info.applicationInfo.sourceDir)", verify)
+        self.assertIn('MessageDigest.getInstance("SHA-256")', verify)
+        self.assertIn("cached.epoch == epoch", verify)
+        self.assertIn("cached.modified == modified", verify)
+        self.assertRegex(verify, r"catch \(_: Exception\) \{\s+firmwareCheck = null\s+false")
+
+    def test_profiled_null_list_is_absence_but_empty_list_may_be_connecting(self):
+        source = QUIESCENCE.read_text()
+        decoder = function_source(source, "readActiveProjectionsEmpty")
+        self.assertIn("-1 -> return@transactRead true", decoder)
+        self.assertIn("0 -> return@transactRead null", decoder)
+        self.assertIn("if (count < 0) return@transactRead null", decoder)
+        self.assertIn("reply.setDataPosition(listPosition)", decoder)
+        self.assertIn("reply.createTypedArrayList(ConnDevice.CREATOR)", decoder)
+        self.assertIn("if (devices.isNotEmpty()) false else null", decoder)
+        self.assertNotIn("devices.isEmpty()", decoder)
+        transaction = function_source(source, "transactRead")
+        self.assertIn("if (reply.dataAvail() == 0) result else null", transaction)
+        online = function_source(source, "readOnlineDevicesEmpty")
+        self.assertIn("if (reply.readInt() != 1) return@transactRead null", online)
+        self.assertIn("devices.get(it) !is ConnDevice", online)
 
     def test_absent_host_is_clear(self):
         self.assertEqual(self.run_probe("", {}, pidof_status=1), "bridge-map-clear")

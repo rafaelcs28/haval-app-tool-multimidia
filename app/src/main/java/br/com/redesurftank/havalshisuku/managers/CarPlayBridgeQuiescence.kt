@@ -10,6 +10,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Parcel
 import android.os.SystemClock
+import java.io.File
+import java.security.MessageDigest
 import ts.car.dcm.common.data.ConnDevice
 
 /**
@@ -23,12 +25,17 @@ import ts.car.dcm.common.data.ConnDevice
 object CarPlayBridgeQuiescence {
     private const val DCM_PACKAGE = "com.ts.car.dcm.dccontroller"
     private const val DCM_ACTION = "com.ts.car.dcm.dccontroller.connectionmanagerservice.CmService"
+    private const val DCM_SERVICE_CLASS = "com.ts.car.dcm.dccontroller.connectionmanagerservice.CmService"
     private const val DCM_INTERFACE = "ts.car.dcm.common.aidl.IConnectionManagementService"
+    private const val DCM_APK_SIZE = 237_975L
+    private const val DCM_APK_SHA256 = "7859c63e089d6f053df7b4121063e30d4e5f7795cf8fca52a73bebe8a44b9b69"
     private const val GET_ONLINE_DEVICES = 14
     private const val GET_ACTIVE_PROJECTIONS = 45
     private const val BIND_RETRY_MS = 5_000L
 
     private data class BoundService(val binder: IBinder, val epoch: Long, val boundAtMs: Long)
+    private data class FirmwareCheck(val epoch: Long, val source: String, val size: Long,
+                                     val modified: Long, val approved: Boolean)
 
     private val stateLock = Any()
     private val readLock = Any()
@@ -38,6 +45,8 @@ object CarPlayBridgeQuiescence {
     private var boundService: BoundService? = null
     private var nextEpoch = 0L
     private var lastBindAttemptMs = -BIND_RETRY_MS
+    // Accessed only under readLock. Rechecked on a new binding or installed APK identity.
+    private var firmwareCheck: FirmwareCheck? = null
 
     /** Call only from the background publisher; binding is posted without waiting for it. */
     fun read(context: Context): Boolean? {
@@ -48,6 +57,10 @@ object CarPlayBridgeQuiescence {
         return synchronized(readLock) {
             requestBinding(context.applicationContext)
             val service = synchronized(stateLock) { boundService } ?: return@synchronized null
+            if (!verifyFirmware(context, service.epoch)) {
+                synchronized(stateLock) { window.reset() }
+                return@synchronized null
+            }
             val startedAt = SystemClock.elapsedRealtime()
             val onlineEmpty = readOnlineDevicesEmpty(service.binder)
             val activeEmpty = readActiveProjectionsEmpty(service.binder)
@@ -83,7 +96,8 @@ object CarPlayBridgeQuiescence {
                     synchronized(stateLock) {
                         if (connection !== this) return
                         window.reset()
-                        boundService = binder?.takeIf { it.isBinderAlive }?.let {
+                        boundService = binder?.takeIf { it.isBinderAlive && name != null &&
+                            name.packageName == DCM_PACKAGE && name.className == DCM_SERVICE_CLASS }?.let {
                             BoundService(it, ++nextEpoch, SystemClock.elapsedRealtime())
                         }
                     }
@@ -149,12 +163,52 @@ object CarPlayBridgeQuiescence {
 
     private fun readActiveProjectionsEmpty(binder: IBinder): Boolean? =
         transactRead(binder, GET_ACTIVE_PROJECTIONS) { reply ->
-            // Captured firmware Proxy: readException(), createTypedArrayList(ConnDevice.CREATOR).
+            // Exact profiled server: null ONLY when mProjectionConnMap is empty.
+            // An empty non-null list can contain pending preconnects without an active device.
+            val listPosition = reply.dataPosition()
+            when (val count = reply.readInt()) {
+                -1 -> return@transactRead true
+                0 -> return@transactRead null
+                else -> if (count < 0) return@transactRead null
+            }
+            reply.setDataPosition(listPosition)
             val devices = reply.createTypedArrayList(ConnDevice.CREATOR)
                 ?: return@transactRead null
             if (devices.any { it == null }) return@transactRead null
-            devices.isEmpty()
+            if (devices.isNotEmpty()) false else null
         }
+
+    private fun verifyFirmware(context: Context, epoch: Long): Boolean = try {
+        val info = context.packageManager.getServiceInfo(ComponentName(DCM_PACKAGE, DCM_SERVICE_CLASS), 0)
+        check(info.packageName == DCM_PACKAGE && info.name == DCM_SERVICE_CLASS)
+        val apk = File(info.applicationInfo.sourceDir)
+        check(apk.isFile && apk.length() == DCM_APK_SIZE)
+        val source = apk.canonicalPath
+        val size = apk.length()
+        val modified = apk.lastModified()
+        val cached = firmwareCheck
+        if (cached != null && cached.epoch == epoch && cached.source == source &&
+            cached.size == size && cached.modified == modified) {
+            cached.approved
+        } else {
+            val digest = MessageDigest.getInstance("SHA-256")
+            apk.inputStream().use { stream ->
+                val bytes = ByteArray(16_384)
+                while (true) {
+                    val count = stream.read(bytes)
+                    if (count < 0) break
+                    digest.update(bytes, 0, count)
+                }
+            }
+            val approved = digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) } == DCM_APK_SHA256 &&
+                apk.length() == size && apk.lastModified() == modified
+            firmwareCheck = FirmwareCheck(epoch, source, size, modified, approved)
+            approved
+        }
+    } catch (_: Exception) {
+        firmwareCheck = null
+        false
+    }
 
     private fun transactRead(binder: IBinder, code: Int, decode: (Parcel) -> Boolean?): Boolean? {
         val data = Parcel.obtain()
