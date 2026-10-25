@@ -1,5 +1,41 @@
 # Haval Impulse 74132 — Netseek v9 integration
 
+## Latest overlay correction after parked baseline
+
+Supersedes the historical five-finding status below. Owner authorized GWM start,
+review and installation, followed by shutdown. The GWM command succeeded using the
+exact account-linked vehicle identifier; cloud state confirmed on, the APK reported
+P/0 km/h and the central became accessible. Current 74131 package metadata,
+activities, displays, windows, processes, preferences, logs and D0/D3 screenshots
+were retained privately before source changes. No projection was active in this
+baseline, so it does not establish a physical menu/CarPlay reproduction.
+
+The correction protects contract rule26 without new bridge keys or geometry:
+
+- Restore a physical-input overlay policy with session state. A card notification
+  alone cannot authorize an overlay; genuine CLUSTER_INPUT_KEY authorizes the
+  current projection. Neutral cards retain that authorization; disconnect, source
+  identity change and state-cache reset clear it. Input from before projection
+  cannot leak into its bootstrap.
+- Publish the existing boolean permission before canonical card delivery, including
+  full WebView synchronization. Preserve current card snapshots and AA recovery.
+- Both Default-theme menu visibility sites now use the same authorized-session
+  rule. Outside projection, the existing nonzero-card rule remains unchanged.
+- Rebuild bundled Default HTML and its catalog copy together. Their identical
+  SHA-256 is `1974322f5aec2ebf57abc5228fc5ea435822300855af57f8114177b1b509632f`.
+  CSS, theme XML, resolution and the installed Minimalist selection are unchanged;
+  no dynamic-theme publication occurred.
+- Migrate the guard to the active theme source and actual session call sites,
+  retaining and extending policy checks and risky-path coverage. No OEM hashes,
+  forbidden-pattern checks or required authorization semantics were waived.
+
+The complete regression guard passes. Six frontend source/caller scenarios and
+nine Python patch/guard tests pass; twelve JVM policy/sequence cases were added
+for the authorized Mini suite. The previous signed132 artifact remains archived;
+install only the newly validated artifact from this corrected immutable source.
+Manual steering-wheel/CarPlay interaction and a secondary map frame still require
+an attended physical test and are not claimed by these offline/model checks.
+
 Version: `1.0.0.74.132-preview`, version code `74132`.
 
 The release branch starts at the complete personal 74131 source `a427ddde`,

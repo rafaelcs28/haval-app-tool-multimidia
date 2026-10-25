@@ -56,6 +56,18 @@ class RegressionLockAlphaLiteralTest(unittest.TestCase):
         self.assertIn("attrs.alpha = 0.0f", findings[0])
         self.assertNotIn("chipBackground", findings[0])
 
+    def test_active_and_legacy_theme_paths_remain_guarded(self):
+        for source in (
+            "cluster-widgets/source/v1.0/default/src/core/main.js",
+            "cluster-widgets/default/src/core/main.js",
+        ):
+            with self.subTest(source=source):
+                diff = f"+++ b/{source}\n+send('VIDEO_FOCUS_CHANGE');\n"
+                with patch.object(guard, "git_output", side_effect=[diff, ""]):
+                    findings = guard.risky_added_lines()
+                self.assertEqual(len(findings), 1)
+                self.assertIn(source, findings[0])
+
 
 if __name__ == "__main__":
     unittest.main()

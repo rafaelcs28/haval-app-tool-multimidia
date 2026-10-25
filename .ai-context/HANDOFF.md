@@ -1,5 +1,33 @@
 # Handoff
 
+## Latest — GWM on; baseline captured; overlay correction ready for Mini/install/off
+
+Owner authorizedGWMstart,review/install132 andexplicitlyOFFwhenfinished; answered
+remote startonlyelectric. GWMcarUtil.engine succeeded with canonicalVINreturnedby
+getCarList. TwoinitiallowercaseconfiguredVINrequestsfailed551017 (notbound);
+readqueriesuppercasedVINhadworked. No account/credential/serviceconfigchanges.
+Canonicalstart23:57:09UTC succeeded000000;commandresult0,hyEngSts1confirmed23:57:39.
+CurrentbridgeAPKfreshgearP/speed0;centralonline. Remoteoperationtime15min, doNOT
+forgetexplicitGWMengineOFF +verify atworkend (canonicalVIN!), evenonfailure.
+
+Private /root/projects/haval-impulse/test-artifacts/gwm-132-session-20261024 holds
+powerreceiptandbaselinebeforefunctionalchanges: actual131,activities,display,
+windows,preferences,processes,logcat,D0/D3screenshots. InstalledthemeMinimalist,
+noactiveprojection; D3screenshotblackremotemode is notproofCarPlayfailure.
+No coldrestart/hookinjection/CarPlaymove/resize orAAoperationthissession.
+
+Functionaloverlayfixprotectsrule26: Sessionphysicalinputscope,bootstrapfalse,
+neutralcardretention,identity/disconnect/resetclears; permissionbeforecanonical
+cardincludingfullbatchsync. Defaultbothcallerssamepolicy,nonprojectionunchanged.
+Restoredpolicy+12JVMcases,6Nodeactualhelper/callermodels,9Pythonpatchtests PASS.
+Fullregressionguard NOWPASS: actualsessioncalls/policychecked, activethemepath
+migrated,riskysourcecoverageextended, OEMhashesunaltered. No token-onlyfakefix.
+RebuiltDefaultHTML/catalogidentical1840505bytesSHA1974322f5aec2ebf57abc5228fc5ea435822300855af57f8114177b1b509632f.
+CSS/XML/geometry unchanged. Native/tools/Gradle unchangedfromb266132source.
+Nextauditimmutablecommit, Mini signedrelease132, fetch/verifynewAPK, install-r
+onlywhileparked/online, actualversion/healthcheck, thenGWMoffandverify.
+Older132candidatekeptarchived, notinstalled. ManualCPwheelcasesremainunproven.
+
 ## Latest — offline overlay review; owner confirmed vehicle still off
 
 Owner asked reviewing pendingitems and installing132, including a request to

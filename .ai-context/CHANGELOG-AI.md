@@ -1,5 +1,16 @@
 # AI change log
 
+## 2026-10-25 UTC — parked baseline and actual overlay correction
+
+- GWMstartcanonicalaccountVIN succeeded;freshAPK P/0kmh andcentralonline.
+  OwnerexplicitlyrequestsGWMoffafterwork. Baseline131logs/screenshotsretained.
+- Restoredphysicalinput/sessionauthorization andfullsyncordering; neutralcard
+  visibilityfixedatbothDefaultcallers. No resolution/bridgekey/OEM/AAchanges.
+- RebuiltDefaultHTML/catalog, unchangedCSS/XML. Guardchecksactualsessioncalls
+  andactivefrontendpath, preservingallprohibitions/OEMhashes; fullguardpasses.
+- SixNodefrontendmodels/ninePythonpatchtests pass;12JVMtestsaddedforMini.
+- PendingnewimmutableMini132release/install/verifyandmandatoryGWMshutdown.
+
 ## 2026-10-24 — offline overlay review, live installation deferred
 
 - Owner requestedreview+install, thenconfirmedcarstilloff anddeferredlive session.
