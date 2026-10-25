@@ -104,6 +104,71 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertIn("chmod 500 ${q(temporary)}", install)
         self.assertIn("chmod 400 ${q(temporary)}/*", install)
 
+    def owner_fixture(self, argv, final_nul):
+        observe = function_source(self.bootstrap, "observe")
+        loop = re.search(r"for c in §\(pidof cpbridge-inject\); do.*?\n\s*done", observe, re.S)
+        self.assertIsNotNone(loop)
+        script = loop.group(0)
+        injector = "/data/local/tmp/impulse-carplay/versions/revision/cpbridge-inject"
+        runtime = "/data/local/tmp/impulse-carplay/runtime/boot-22287-952661"
+        native = f"{injector} -p 22287 -s {runtime}/cold-launcher.js -R qjs"
+        java = f"{injector} -p 22287 -s /data/local/tmp/impulse-carplay/versions/revision/endpoint.js -R qjs"
+        native_expression = '${q("${bundle.injector} -p ${id.pid} -s $run/cold-launcher.js -R qjs")}'
+        java_expression = '${q("${bundle.injector} -p ${id.pid} -s ${bundle.directory}/endpoint.js -R qjs")}'
+        self.assertIn(native_expression, script)
+        self.assertIn(java_expression, script)
+        script = script.replace(native_expression, shlex.quote(native)).replace(java_expression, shlex.quote(java))
+        self.assertNotIn("${q(", script)
+        script = script.replace("§", "$")
+        with tempfile.TemporaryDirectory(prefix="impulse-owner-argv-") as directory:
+            fixture = Path(directory)
+            proc = fixture / "proc" / "9441"
+            proc.mkdir(parents=True)
+            payload = b"\0".join(value.encode() for value in argv)
+            (proc / "cmdline").write_bytes(payload + (b"\0" if final_nul else b""))
+            (proc / "stat").write_text("9441 (cpbridge-inject) S " + "0 " * 18 + "952700\n")
+            pidof = fixture / "pidof-fixture"
+            pidof.write_text("#!/bin/sh\nprintf '9441\\n'\n")
+            pidof.chmod(0o700)
+            script = script.replace("pidof cpbridge-inject", shlex.quote(str(pidof)))
+            script = script.replace("/proc/", str(fixture / "proc") + "/")
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True,
+                                    check=True, timeout=5)
+            return {line.split("=", 1)[0]: line.split("=", 1)[1]
+                    for line in result.stdout.splitlines() if "=" in line}
+
+    def owner_argv(self, role):
+        injector = "/data/local/tmp/impulse-carplay/versions/revision/cpbridge-inject"
+        script = ("/data/local/tmp/impulse-carplay/runtime/boot-22287-952661/cold-launcher.js"
+                  if role == "native_owner" else
+                  "/data/local/tmp/impulse-carplay/versions/revision/endpoint.js")
+        return [injector, "-p", "22287", "-s", script, "-R", "qjs"]
+
+    def test_native_and_java_owners_accept_kernel_argv_with_or_without_final_nul(self):
+        for role in ("native_owner", "java_owner"):
+            for terminated in (False, True):
+                with self.subTest(role=role, terminated=terminated):
+                    actual = self.owner_fixture(self.owner_argv(role), terminated)
+                    self.assertEqual(actual.get(role), "9441")
+                    other = "java_owner" if role == "native_owner" else "native_owner"
+                    self.assertNotIn(other, actual)
+
+    def test_owner_argv_rejects_extra_arguments_and_reused_or_foreign_processes(self):
+        for role in ("native_owner", "java_owner"):
+            original = self.owner_argv(role)
+            variants = {
+                "extra_argument": original + ["--unexpected"],
+                "wrong_target": original[:2] + ["99999"] + original[3:],
+                "wrong_injector": ["/system/bin/toybox"] + original[1:],
+                "wrong_revision": [original[0].replace("/revision/", "/other/")] + original[1:],
+                "wrong_script": original[:4] + [original[4] + ".old"] + original[5:],
+                "wrong_runtime": original[:-1] + ["v8"],
+            }
+            for label, argv in variants.items():
+                for terminated in (False, True):
+                    with self.subTest(role=role, variant=label, terminated=terminated):
+                        self.assertEqual(self.owner_fixture(argv, terminated), {})
+
     @unittest.skipUnless(hasattr(os, "setuid") and os.geteuid() == 0,
                          "UID1000 DAC fixture requires Linux/POSIX root privileges")
     def test_system_uid_can_traverse_protected_parents_without_listing_or_mutating_them(self):
