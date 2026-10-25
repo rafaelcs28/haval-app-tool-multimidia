@@ -1,3 +1,43 @@
+## ACTIVE 2026-10-25 — owner DRIVING: read-only until explicit parked P
+
+Latestownersteering: alreadyINMOTIONwithpassengercoordinating; maponotherphone.
+UseraskswhenCarPlaytestcanstart. Answer: experimental133bridge/maptestneedsclean
+headunitbootFIRST, thenconnectiPhoneafterreadiness. Thiswaitsforownerexplicitly
+parkedinP+freshP0; NOrestart/install/experimentalactivationwhilemoving. Prior
+rebootapproval("Pode reiniciar agora")persistsforlaterPstop, but NEVERexecuteinD
+orontheassumptionpassengermakessafetydisplaysunnecessary. Do notaskpermissionagain
+onceownerconfirmsP/freshmachineP0;performalreadyapprovedHUrebootthenvalidate.
+
+IMPORTANT: NOREBOOTCOMMANDWASSENT. AttemptabortedatFIRSTfreshP0assertbecausegear/
+speedunknown(-1),telemetryage56s; nextreadTelnetoffline. Ownerthenconfirmedmoving,
+latertelemetryfreshD/speed0. WiFilossmatchesdepartinghouse. Onlylightread-only
+queriesaftermovement; noFridaprobes/injection/callbackorvehiclepowerchanges.
+LatestAPK04ee94e2 signedsource E531SHAinstalled+verifiedactualbase.apk; autooption
+savedtrue; allfilesbundledlocalfornextboot. Upstreamv9still5ccd91e2(latestchecked).
+NativeoldsessionlastconfirmedOEM20459/start1131261, nativeowner20605installed-
+pinned9/pinnedtrue/failureNULL, Java22512oldentryfailedimplicitprocfsread0. Preserve
+bothclients/OEM; do notunloadpinnedcallbacks. LatestAPKfixreadTextboundedinstalled
+butnewcleanbootpending. Fullboot/Javaarmed/mapfirstframeNOTvalidatedyet. No5mintest.
+
+FunctionalSource04ee94e27f50df9c185315172b97ab38cae08c00, personalbranch
+release/impulse-74133-v9. Actualinstalledsha
+e531c2a1bc4255ef0b704827903ba8c238533299a94327d54823547fdd984811,81582379bytes,
+productioncert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+MiniRelease04eeSUCCESS5m17/83tasks;905JVM0fail1skip(sameAndroidsourceas9df),
+25lifecyclePythonPASS,19endpoint/assetsPythonPASS,103NodeinterceptormodelPASS.
+Corefixes: native/ESMassetsbundled;localbootmanager;firmwarepinnedstrictDCM/OEMBT
+quiescence;parentROOT/versions/runtimeRoot0711;exactownerargvwithoptionalNUL;
+procfsexplicitreadlength;failurestack;guardedexplicitretryDUMP;noGlobalpkill.
+NoVPSAndroidbuilds. GitHubbranchcontainsfunctionalchanges;noPR15/OTA/tag/publicrelease.
+
+Nextwhenparked: freshP0+noprojrootguard, approvedAndroidHUrebootONLY(noGWMpower).
+Reconnectread-onlywithbackoff, requireNEWbootuuid, latestAPKe531, localselfprep
+Nativeinstalled-pinned9+Javaarmed+bothowners; thensafeApprestartifneeded/appropriate.
+TellownerWHENto connectiPhone; confirmoriginalD0normalparkedbeforeexperimentaltest.
+Map/driving5mintestremainownerinitiated. Beforepark, onlyreviewandlightdatareads.
+Privateevidence/helpers remain /root/projects/haval-impulse/test-artifacts/
+install-133-persistent-20261025. Sourceworktree /root/projects/haval-impulse-133.
+
 ## ACTIVE 2026-10-25 18:05 UTC — FINAL133 installed; clean boot approval pending
 
 CURRENT FUNCTIONAL SOURCE04ee94e27f50df9c185315172b97ab38cae08c00, branch
