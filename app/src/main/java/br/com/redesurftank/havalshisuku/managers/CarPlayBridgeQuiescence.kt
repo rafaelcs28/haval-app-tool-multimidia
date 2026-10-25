@@ -18,8 +18,8 @@ import ts.car.dcm.common.data.ConnDevice
  * Read-only absence evidence for the automatic CarPlay bootstrap, independent of AA recovery.
  *
  * true means sustained fresh empty DCM replies; false means a device/projection was observed;
- * null means unavailable, malformed, changing, or still settling. Even a Bluetooth-only phone
- * blocks this conservative gate: preparation can wait until phones are fully disconnected.
+ * null means unavailable, malformed, changing, or still settling. An offline paired Bluetooth
+ * record requires independent physical OEM Bluetooth absence proof; other devices block.
  * This is a settling policy, not a claim that the OEM exposes an initialization-ready flag.
  */
 object CarPlayBridgeQuiescence {
@@ -36,6 +36,7 @@ object CarPlayBridgeQuiescence {
     private data class BoundService(val binder: IBinder, val epoch: Long, val boundAtMs: Long)
     private data class FirmwareCheck(val epoch: Long, val source: String, val size: Long,
                                      val modified: Long, val approved: Boolean)
+    private data class OnlineSnapshot(val absentOrRetained: Boolean, val retainedAddresses: Set<String>)
 
     private val stateLock = Any()
     private val readLock = Any()
@@ -62,12 +63,19 @@ object CarPlayBridgeQuiescence {
                 return@synchronized null
             }
             val startedAt = SystemClock.elapsedRealtime()
-            val onlineEmpty = readOnlineDevicesEmpty(service.binder)
+            val online = readOnlineDevicesEmpty(service.binder)
             val activeEmpty = readActiveProjectionsEmpty(service.binder)
+            val radioEmpty = when {
+                online == null -> null
+                !online.absentOrRetained -> false
+                online.retainedAddresses.isEmpty() -> true
+                activeEmpty != true -> null
+                else -> CarPlayBluetoothQuiescence.read(context, online.retainedAddresses)
+            }
             val completedAt = SystemClock.elapsedRealtime()
             val observed = when {
-                onlineEmpty == false || activeEmpty == false -> false
-                onlineEmpty == true && activeEmpty == true -> true
+                radioEmpty == false || activeEmpty == false -> false
+                radioEmpty == true && activeEmpty == true -> true
                 else -> null
             }
             synchronized(stateLock) {
@@ -149,7 +157,7 @@ object CarPlayBridgeQuiescence {
         runCatching { context.unbindService(candidate) }
     }
 
-    private fun readOnlineDevicesEmpty(binder: IBinder): Boolean? =
+    private fun readOnlineDevicesEmpty(binder: IBinder): OnlineSnapshot? =
         transactRead(binder, GET_ONLINE_DEVICES) { reply ->
             // AIDL's out-Bundle presence marker must be present, not a null/default reply.
             if (reply.readInt() != 1) return@transactRead null
@@ -157,8 +165,21 @@ object CarPlayBridgeQuiescence {
             devices.classLoader = ConnDevice::class.java.classLoader
             val keys = devices.keySet()
             // Force complete unparcelling, including every value, before trusting emptiness.
-            if (keys.any { devices.get(it) !is ConnDevice }) return@transactRead null
-            keys.isEmpty()
+            val entries = keys.map { devices.get(it) }
+            if (entries.any { it !is ConnDevice }) return@transactRead null
+            val addresses = LinkedHashSet<String>()
+            for (entry in entries) {
+                val device = entry as ConnDevice
+                val address = RetainedBluetoothDevicePolicy.addressIfCandidate(
+                    RetainedBluetoothDevicePolicy.Facts(device.deviceType, device.accepted,
+                        device.deviceConnectedState, device.connectedTypeState,
+                        device.availableCapabilitys, device.activeCapability,
+                        device.activeCapabilityState, device.btAddr, device.isInUsbDeviceMode,
+                        listOf(device.usbHidNode, device.iapNode, device.usbNcmNode)))
+                    ?: return@transactRead OnlineSnapshot(false, emptySet())
+                addresses.add(address)
+            }
+            OnlineSnapshot(true, addresses)
         }
 
     private fun readActiveProjectionsEmpty(binder: IBinder): Boolean? =
@@ -210,7 +231,7 @@ object CarPlayBridgeQuiescence {
         false
     }
 
-    private fun transactRead(binder: IBinder, code: Int, decode: (Parcel) -> Boolean?): Boolean? {
+    private fun <T> transactRead(binder: IBinder, code: Int, decode: (Parcel) -> T?): T? {
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
         return try {

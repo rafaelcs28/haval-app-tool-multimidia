@@ -20,10 +20,14 @@ MANAGER = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/Ca
 FRIDA = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/utils/FridaUtils.java"
 BOOTSTRAP = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt"
 QUIESCENCE = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeQuiescence.kt"
+BLUETOOTH = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBluetoothQuiescence.kt"
 
 
 def function_source(source, name):
-    start = source.index("    private fun " + name + "(")
+    selected = re.search(r"    private fun (?:<[^>]+>\s+)?" + re.escape(name) + r"\(", source)
+    if not selected:
+        raise AssertionError("Missing private function: " + name)
+    start = selected.start()
     following = re.search(r"\n    (?:private |internal )?fun ", source[start + 1:])
     end = start + 1 + following.start() if following else len(source)
     return source[start:end]
@@ -169,7 +173,7 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertIn('DCM_APK_SHA256 = "7859c63e089d6f053df7b4121063e30d4e5f7795cf8fca52a73bebe8a44b9b69"', source)
         self.assertIn("DCM_APK_SIZE = 237_975L", source)
         self.assertLess(source.index("if (!verifyFirmware(context, service.epoch))"),
-                        source.index("val onlineEmpty = readOnlineDevicesEmpty"))
+                        source.index("val online = readOnlineDevicesEmpty"))
         verify = function_source(source, "verifyFirmware")
         self.assertIn("getServiceInfo(ComponentName(DCM_PACKAGE, DCM_SERVICE_CLASS), 0)", verify)
         self.assertIn("File(info.applicationInfo.sourceDir)", verify)
@@ -192,7 +196,28 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertIn("if (reply.dataAvail() == 0) result else null", transaction)
         online = function_source(source, "readOnlineDevicesEmpty")
         self.assertIn("if (reply.readInt() != 1) return@transactRead null", online)
-        self.assertIn("devices.get(it) !is ConnDevice", online)
+        self.assertIn("val entries = keys.map { devices.get(it) }", online)
+        self.assertIn("entries.any { it !is ConnDevice }", online)
+
+    def test_retained_records_require_independent_profiled_physical_bluetooth_proof(self):
+        source = QUIESCENCE.read_text()
+        self.assertIn("CarPlayBluetoothQuiescence.read(context, online.retainedAddresses)", source)
+        self.assertIn("activeEmpty != true -> null", source)
+        bluetooth = BLUETOOTH.read_text()
+        self.assertIn('APK_SHA256 = "c99e49b47704e610c044ab01aa530ca451784e9e78885b11cad1c1f45518eac0"', bluetooth)
+        self.assertIn("!verifyFirmware(context, current.epoch)", bluetooth)
+        self.assertIn("started - current.at < SETTLE_MS", bluetooth)
+        self.assertIn("for (profile in 0..4)", bluetooth)
+        self.assertIn("call(binder, 14, 1", bluetooth)
+        self.assertIn("if (before != after) return null", bluetooth)
+        self.assertIn("val addresses = before + retained", bluetooth)
+        self.assertIn("devices(binder, 13, -1)", bluetooth)
+        self.assertIn("call(binder, 4, 0", bluetooth)
+        self.assertIn("if (reply.readInt() != 1) return null", bluetooth)
+        self.assertIn("result == expectedResult && reply.dataAvail() == 0", bluetooth)
+        self.assertNotRegex(bluetooth, r"\bLog\.")
+        self.assertNotIn("getUsbSerialNumber", source)
+        self.assertNotIn("getWifiAddr", source)
 
     def test_absent_host_is_clear(self):
         self.assertEqual(self.run_probe("", {}, pidof_status=1), "bridge-map-clear")

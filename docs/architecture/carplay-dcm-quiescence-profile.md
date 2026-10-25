@@ -16,8 +16,8 @@ Não há root, rede ou comando de recuperação nessa leitura.
 Na transação 14, `getOnlineDevices(Bundle)` inclui somente dispositivos para os
 quais `Device.isOnline()` é verdadeiro. Esse método exige mapa de conexões não
 vazio e estado do dispositivo diferente de 2, 3 e 4. Portanto, uma entrada online
-não é simplesmente um telefone salvo. Mesmo Bluetooth sem projeção impede este
-preparo conservador; os telefones devem estar completamente desconectados.
+não é simplesmente um telefone salvo. Há uma exceção estreita para registros
+pareados retidos, comprovada também pela leitura física Bluetooth descrita abaixo.
 
 Na transação 45, `getActiveProjections()` delega a
 `ProjectionManager.getProjectionDevices()`:
@@ -33,13 +33,78 @@ A lista vazia não prova inatividade: `makeProjectionConnection()` pode adiciona
 uma conexão após `activateConnection()` apenas enfileirar o evento de preconexão,
 antes de existir um dispositivo ativo. O leitor não admite essa janela.
 
-O resultado final só afirma ausência com Bundle online presente, vazio e
-completamente decodificado, além da lista nula comprovada. Continuam obrigatórios
+O resultado final só afirma ausência com Bundle online presente, completamente
+decodificado e vazio ou composto exclusivamente pelos registros retidos comprovados
+abaixo, além da lista nula de projeções. Continuam obrigatórios
 cinco segundos com o mesmo Binder e pelo menos três respostas consecutivas frescas
 ao longo de dois segundos. O supervisor também exige suas próprias verificações de
 P, velocidade zero, identidade do OEM e ausência de telas de projeção. Não existe
 neste SDK um sinal explícito de inicialização concluída; o tempo de espera é uma
 política conservadora, não esse sinal.
+
+## Registro pareado retido e prova Bluetooth independente
+
+O DCM pode conservar um Android/iPhone aceito (`type=1/2`, `accepted=1`), estado
+global OFFLINE `0` e mapa de conexão exatamente `{BT=2: READY=3}`, mesmo quando
+não há telefone conectado. `BtConnection.Disconnected` e `Detecting` atribuem
+READY também a dispositivos apenas pareados. O estado global OFFLINE, por sua vez,
+força capacidades disponíveis/ativas para zero: esses zeros não provam ausência
+física. Mapa de perfis vazio também não equivale a perfis desconectados.
+
+Somente essa assinatura é candidata: capacidades disponível/ativa zero, mapa de
+estados ativos vazio, endereço Bluetooth válido, modo USB device desativado e os
+três nodes nativos USB HID/IAP/NCM ausentes. Qualquer outro tipo, estado, conexão,
+node ou campo desconhecido bloqueia. Serial USB e MAC Wi-Fi históricos não são
+usados como prova de conexão atual. Uma candidata ainda precisa da lista nula de
+projeções DCM e da confirmação física independente.
+
+`CarPlayBluetoothQuiescence` mantém um bind assíncrono, sem `BIND_AUTO_CREATE`, ao
+serviço existente `com.ts.car.bluetooth.service/.BluetoothService`, interface
+`ts.car.bluetooth.sdk.IBluetoothManager`. Não registra callbacks SDK, não liga o
+rádio e não conecta/desconecta dispositivos. Verifica por época do Binder o APK
+local de 2.871.765 bytes, SHA-256
+`c99e49b47704e610c044ab01aa530ca451784e9e78885b11cad1c1f45518eac0`.
+
+O protocolo foi conferido no serviço e no DEX inalterado do `ts-framework.jar`,
+SHA-256 `33570de5adee6bd24bdaf0c5e3641210b299c4c2764ee0e47f2b8804ffb82943`:
+
+- TX4 lê o estado do adaptador. Este método específico deixa o `CallResult` novo
+  com código `0` e mensagem nula; esse comportamento só é admitido no APK verificado.
+  Estado OFF `10` confirmado duas vezes prova rádio desligado; transições `11/13`
+  e valores desconhecidos bloqueiam.
+- Com estado ON `12`, TX12 fornece todos os endereços conhecidos pelo serviço,
+  incluindo os adicionados durante eventos CONNECTING. A união desses endereços
+  com os dos registros DCM candidatos deve ser não vazia e limitada a 16 itens.
+- TX14 consulta cada endereço nos cinco perfis reais `0..4`: HFP, PBAP, A2DP,
+  AVRCP e MAP. Exige `CallResult.SUCCESS=1` e estado DISCONNECTED `0` em todos.
+  CONNECTING `1`, CONNECTED `2` e DISCONNECTING `3` bloqueiam. Proxy indisponível
+  devolve estado zero com erro `2`, que continua desconhecido. PAN `5` é rejeitado
+  por TX14 nesse firmware e não é uma sexta proxy válida.
+- TX13 com perfil `-1` deve devolver lista não nula vazia antes e depois. Essa
+  consulta é suplementar: o serviço pode devolver vazio com sucesso para um
+  gerenciador ainda sem dados. TX12 deve manter o mesmo conjunto antes/depois e
+  TX4 deve continuar ON.
+
+Cada resposta exige `readException`, marcadores presentes, decode completo e zero
+bytes restantes. TX12/13/14 exigem sucesso `1`; nunca se generaliza a exceção de
+código `0` da TX4. Endereços e nomes ficam internos e não aparecem em logs/status.
+Falha, troca de Binder, mudança de firmware, excesso de dispositivos ou leitura
+acima de 1,5 segundo bloqueiam. O Binder Bluetooth também espera cinco segundos;
+o resultado físico participa da janela DCM existente de dois segundos.
+
+Há uma prova adicional de prontidão com rádio ON: `handleInitilize()` solicita as
+cinco proxies e carrega o banco antes de finalizar. O listener publica as respostas
+das proxies no mesmo Handler; a atribuição das proxies ocorre depois da mensagem
+de inicialização. Assim, cinco consultas TX14 com sucesso provam proxies prontas
+após a carga do banco, além do tempo conservador de espera.
+
+Evidências REA Bluetooth: `ev_b4c1e24b2eb38fb27050734c7cc9a5083afca2cbbbdb35cc42e393ca7d67111b`
+(proxy e erros), `ev_bcaa36a1f6eaa986ef29b78b7bd3578799f29e84804e69dfd05b67b550e32fc9`
+(inclusão de dispositivos em conexão), `ev_78ce9dcf7f6f58e45ed0b4b24cd7af9d8768cffdc16acabcfb7d88f98fe38611`
+(conjunto TX12), `ev_405490c5c2762d3e0173d4b94a4dd0ea011bbbc1112df3c3b8c6abb15b028c05`,
+`ev_c1fa66122a2714e181e246003e57404eb84cadfd7cbddd72e6f4ec3e3f831cd6`
+e `ev_2b5d4df99d2f286bc977f29115c06e9e8ebd668969b6c603d1b72fa6ab45eaec`
+(ordem de inicialização).
 
 ## Evidências e limites
 
