@@ -154,6 +154,10 @@ object CarPlayBridgeBootstrapManager {
             .put("wallMs", beginWall).put("elapsedMs", beginElapsed)
             .put("targetPid", identity?.pid ?: 0).put("targetStartTime", identity?.start ?: 0)
             .put("ticket", attempt?.ticket ?: "").put("eligible", eligible)
+            .put("gear", gear ?: JSONObject.NULL)
+            .put("speedKmh", speed ?: JSONObject.NULL)
+            .put("quiescent", quiet ?: JSONObject.NULL)
+            .put("preparationState", mutableStatus.value.state)
         writeSafetyPacket(packet)
     }
 
