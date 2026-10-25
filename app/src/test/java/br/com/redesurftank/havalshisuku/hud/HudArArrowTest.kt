@@ -463,6 +463,32 @@ class HudArArrowTest {
     }
 
     @Test
+    fun `text-only guidance does not infer an AR arrow from its formatted distance`() {
+        val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR)
+        val text = Directions(active = true, distance = "150 m", street = "Via de teste")
+        val tbt = HudOverlayModel.tbtFor(text, ar)!!
+        assertTrue(tbt.style != HudOverlayModel.TbtStyle.AR)
+        assertNull(tbt.arAngle)
+        assertNull(tbt.arMeters)
+        assertNull(tbt.guideAngle)
+        assertNull(tbt.arDestination)
+
+        // An AA step with its numeric distance or maneuver identity retains upstream's
+        // straight-on fallback, even when the maneuver token itself is not recognized yet.
+        for (d in listOf(text.copy(distanceM = 150), text.copy(turnId = 99))) {
+            val aa = HudOverlayModel.tbtFor(d, ar)!!
+            assertEquals(HudOverlayModel.TbtStyle.AR, aa.style)
+            assertEquals(0f, aa.arAngle)
+        }
+        // Known maneuvers retain AR while AA has yet to send the new step's distance.
+        for (turn in listOf("MERGE", "FERRY_BOAT", "ROUNDABOUT")) {
+            val pending = HudOverlayModel.tbtFor(Directions(active = true, turn = turn), ar)!!
+            assertEquals(turn, HudOverlayModel.TbtStyle.AR, pending.style)
+            assertEquals(0f, pending.arAngle)
+        }
+    }
+
+    @Test
     fun `chevrons on a roundabout - never entering it, only near the exit`() {
         val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR, chevronsAlways = true)
         val rb = Directions(active = true, distance = "120 m", distanceM = 120, turn = "ROUNDABOUT", exitNumber = 3, turnAngle = 270, roundaboutClockwise = false)

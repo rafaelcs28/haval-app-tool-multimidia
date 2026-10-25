@@ -1119,7 +1119,10 @@ object HudOverlayModel {
         // side, a ferry, a roundabout without its exit) or no distance yet (AA sends the new step
         // before its distance) stays in AR, straight on: dropping to the plain row took the 3D
         // map away at junctions (owner, 2026-10-25).
-        val arAngle = if (config.layout != Layout.AR) null else HudArArrow.angleFor(d.turn) ?: 0f
+        // CarPlay's experimental text-only guidance carries neither an identified maneuver
+        // nor AA's numeric distance. Its formatted distance must not imply a straight arrow.
+        val textOnly = d.turn.isBlank() && d.turnId == null && d.distanceM == null
+        val arAngle = if (config.layout != Layout.AR || textOnly) null else HudArArrow.angleFor(d.turn) ?: 0f
         val style = when {
             // AR keeps the centre arrow with lanes too; the lanes go to the left column.
             arAngle != null -> TbtStyle.AR
