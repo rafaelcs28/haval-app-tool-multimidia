@@ -2,11 +2,13 @@
 
 function createColdOemInterceptor(api) {
     const { Process, Module, File, Memory, Checksum, NativeFunction, Interceptor, Script } = api;
+    const coldLoadProfileDigest = 'e60a8f3776bc460b08b436aca24537d14610a54ebc71e377d9ffc6d8e47b0da3';
     const profileDigest = '31b878ba35c1a7fec07d7e854264837ef3702962a1e059fa5d020afa0d7c4d0f';
     const video = ['initialize', 'finalize', 'dimensions', 'start', 'stop', 'avcc', 'data'];
     const labels = video.concat(['session', 'displays']);
     let phase = 'idle';
     let observer = null;
+    let loadListener = null;
     let timer = null;
     let pinned = false;
     let changed = [];
@@ -121,6 +123,7 @@ function createColdOemInterceptor(api) {
     function releaseObserver() {
         if (timer !== null) { api.clearTimeout(timer); timer = null; }
         if (observer) { observer.detach(); observer = null; }
+        if (loadListener) { loadListener.detach(); loadListener = null; }
     }
     function unpin() { if (pinned) { Script.unpin(); pinned = false; } }
     function status() { return { phase, replacements: changed.length, pinned, failure }; }
@@ -150,6 +153,7 @@ function createColdOemInterceptor(api) {
             !/^\/data\/local\/tmp\/impulse-carplay\/[A-Za-z0-9._/-]+\/libcarplay_video_bridge\.so$/.test(options.bridgePath || '') ||
             options.bridgePath.split('/').includes('..')) throw new Error('Invalid explicit bridge settings');
         if (typeof Process.attachModuleObserver !== 'function' || typeof Interceptor.replaceFast !== 'function' ||
+            typeof Interceptor.attach !== 'function' || typeof Process.getCurrentThreadId !== 'function' ||
             typeof Script.pin !== 'function' || typeof Script.unpin !== 'function') throw new Error('Unsupported Frida runtime');
         const absent = () => profile.modules.every(expected => !Process.enumerateModules().some(module => module.name === expected.name));
         if (!absent()) throw new Error('Existing OEM modules: warm interception forbidden');
@@ -192,6 +196,11 @@ function createColdOemInterceptor(api) {
         let registering = true;
         let prepared = false;
         const seen = new Set();
+        const baseline = new Map(Process.enumerateModules().map(module => [module.path,
+            { base: module.base, name: module.name, size: module.size }]));
+        if (!absent()) throw new Error('OEM load raced boundary preparation');
+        const loads = new Map();
+        let selectedLoad = null;
         function fail(error, uncertain = false) {
             failure = String(error.message || error);
             releaseObserver();
@@ -249,15 +258,92 @@ function createColdOemInterceptor(api) {
         }
         Script.pin(); pinned = true; phase = 'armed';
         try {
+            // Android 9 notifies module observers before it marks the load group
+            // linked. Reentering dlopen/NOLOAD there aborts ElfReader::Load.
+            // Use the reviewed internal return, while the caller still owns the
+            // recursive loader mutex, before JNI/app code can use the group.
+            const candidate = api.coldLoadProfile;
+            const encodedBoundary = canonical(candidate);
+            if (!candidate || candidate.kind !== 'android9-cold-load-boundary-v1' || encodedBoundary.length > 32768 ||
+                Checksum.compute('sha256', encodedBoundary) !== coldLoadProfileDigest) {
+                throw new Error('Unreviewed loader completion boundary');
+            }
+            const boundary = JSON.parse(encodedBoundary);
+            const linker = unique(boundary.name, boundary.path);
+            fileBytes(boundary.path, boundary.fileSize, boundary.sha256);
+            for (const body of [boundary.load, ...boundary.callers]) {
+                const address = readable(linker, body.offset, body.size, true);
+                if (Checksum.compute('sha256', address.readByteArray(body.size)) !== body.sha256) {
+                    throw new Error('Loader boundary code changed');
+                }
+            }
+            const allowed = new Map(boundary.dependencies.map(module => [module.path, module]));
+            const callers = boundary.callers.map(body => linker.base.add(body.returnOffset));
+            loadListener = Interceptor.attach(linker.base.add(boundary.load.offset), {
+                onEnter() {
+                    this.impulseLoad = null;
+                    if (phase !== 'armed') return;
+                    const thread = Process.getCurrentThreadId();
+                    const stack = loads.get(thread) || [];
+                    const frame = { thread, root: stack.length ? stack[0] : null,
+                        approved: callers.some(address => address.equals(this.returnAddress)), modules: new Set() };
+                    if (!frame.root) frame.root = frame;
+                    stack.push(frame); loads.set(thread, stack); this.impulseLoad = frame;
+                },
+                onLeave(result) {
+                    const frame = this.impulseLoad;
+                    if (!frame || phase !== 'armed') return;
+                    const stack = loads.get(frame.thread);
+                    if (!stack || stack.pop() !== frame) { fail(new Error('Ambiguous loader nesting')); return; }
+                    if (result.isNull()) frame.root.failed = true;
+                    if (stack.length) return;
+                    loads.delete(frame.thread);
+                    if (selectedLoad !== frame) return;
+                    if (frame.failed || seen.size !== profile.modules.length) {
+                        fail(new Error('Incomplete OEM cold load group')); return;
+                    }
+                    install();
+                }
+            });
             observer = Process.attachModuleObserver({
                 onAdded(module) {
-                    if (phase !== 'armed' || !profile.modules.some(expected => expected.name === module.name)) return;
+                    if (phase !== 'armed') return;
+                    const prior = baseline.get(module.path);
+                    if (prior && prior.base.equals(module.base) && prior.name === module.name && prior.size === module.size) return;
                     if (registering) { fail(new Error('OEM present during observer registration')); return; }
+                    const stack = loads.get(Process.getCurrentThreadId());
+                    const frame = stack && stack[stack.length - 1];
+                    if (!frame || stack.some(load => !load.approved)) {
+                        fail(new Error('Module added outside reviewed loader boundary')); return;
+                    }
+                    const expected = profile.modules.find(expected => expected.name === module.name);
+                    const dependency = allowed.get(module.path);
+                    if ((!expected || expected.path !== module.path) && !dependency) {
+                        fail(new Error('Unreviewed cold-load dependency: ' + module.path)); return;
+                    }
+                    if (dependency) {
+                        try {
+                            fileBytes(module.path, dependency.fileSize, dependency.sha256);
+                            for (const body of dependency.executable) {
+                                const address = readable(module, body.offset, body.size, true);
+                                if (Checksum.compute('sha256', address.readByteArray(body.size)) !== body.sha256) {
+                                    throw new Error('Dependency executable code changed');
+                                }
+                            }
+                        } catch (error) { fail(error); return; }
+                    }
+                    frame.root.modules.add(module.path);
+                    if (!expected) return;
+                    if (selectedLoad && selectedLoad !== frame.root) {
+                        fail(new Error('OEM modules span separate load groups')); return;
+                    }
+                    selectedLoad = frame.root;
+                    if (seen.has(module.name)) { fail(new Error('Duplicate cold OEM image')); return; }
                     seen.add(module.name);
-                    if (seen.size === profile.modules.length) install();
                 },
                 onRemoved(module) {
-                    if (phase === 'armed' && profile.modules.some(expected => expected.name === module.name)) {
+                    if (phase === 'armed' && (baseline.has(module.path) || allowed.has(module.path) ||
+                        profile.modules.some(expected => expected.name === module.name))) {
                         fail(new Error('OEM image unloaded during cold preparation'));
                     }
                 }
@@ -281,4 +367,5 @@ function createColdOemInterceptor(api) {
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { createColdOemInterceptor };
 else rpc.exports = createColdOemInterceptor({ Process, Module, File, Memory, Checksum, NativeFunction,
-    Interceptor, Script, setTimeout, clearTimeout });
+    Interceptor, Script, setTimeout, clearTimeout,
+    coldLoadProfile: typeof impulseColdLoadProfile === 'undefined' ? null : impulseColdLoadProfile });

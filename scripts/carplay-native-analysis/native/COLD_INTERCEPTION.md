@@ -28,10 +28,31 @@ again before observer registration. Any OEM module reported during registration
 is rejected as an ambiguous race. No existing principal/session is guessed from
 an old pointer or interrupted to create this boundary.
 
-The module observer waits for all three images to be newly loaded after arming,
-then installs synchronously from the last onAdded callback. The implementation
-relies on the documented Frida callback boundary before application use of the
-new module. It never attaches this replacement path late to an already-loaded
+The module observer records all three newly loaded images but never prepares
+native handles from `onAdded`. On the pinned Android 9 linker, that notification
+occurs before the load group is fully linked; a recursive `NOLOAD` at that point
+aborted the OEM process in the attended 2026-10-25 test.
+
+The launcher embeds `testdata/android9-linker-profile.json`. Its canonical digest
+is pinned in the interceptor. The exact linker file, internal `do_dlopen` body
+and both public caller bodies are verified before attaching a load observer.
+Per-thread nested load frames must originate from one of the two reviewed call
+sites. Installation runs synchronously on the successful outermost internal
+return, after linkage/constructors and before the public caller releases its
+recursive loader mutex. No timer schedules installation. All three required
+images must belong to that same group; incomplete or failed nested loads refuse
+installation.
+
+Only exact pre-arm module identities and the hash/code-pinned OEM dependency
+closure may appear. New system libraries or unknown dependencies fail closed.
+The extra PlatformMedia constructor creates an idle worker with an empty queue
+and a zero work semaphore; its initializer, constructor, trampoline and waiting
+loop were separately reviewed. Other admitted dependencies have no initializers,
+and the captured closure has no GNU IFUNC/IRELATIVE resolvers. These facts apply
+only to the exact pinned firmware. The runtime preserves full OEM code checks,
+native module ownership, nine passthrough entries and process-pinned lifetimes.
+
+It never attaches this replacement path late to an already-loaded
 service. Read-only `inspect(profile)` can attest currently loaded pristine images
 without installing anything; after our replacements it is intentionally no longer
 a pristine-image check that should succeed.
@@ -111,8 +132,9 @@ no trampoline is freed/reverted based on an ambiguous error. There is no automat
 retry, unload, process kill or force-stop. The operator must inspect that state
 before relying on a cold test. It does not imply a working CarPlay session.
 
-Preparation may be cancelled only while armed, before modifications. A fixed
-60-second wait timeout and a module unloading during preparation cancel cleanly.
+Preparation may be cancelled only while armed, before OEM entry modifications.
+The explicitly bounded wait (5–300 seconds) and unexpected module unloading
+during preparation cancel cleanly.
 Installed state cannot be cancelled through this RPC.
 
 ## Initializer evidence for the pinned firmware

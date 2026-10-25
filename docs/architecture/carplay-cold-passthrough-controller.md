@@ -41,6 +41,27 @@ a vida daquele processo, conforme o contrato do trampoline Frida.
 
 ## Confirmação de estado independente do stdout
 
+### Correção após o teste de 25/10
+
+O estado agora exige o PID original vivo, o mesmo `starttime` de `/proc/PID/stat`
+e o `cmdline` OEM exato, antes e depois da leitura de cada confirmação. Um arquivo
+`armed` ou `installed-pinned` deixado por um processo morto não autoriza o processo
+que o Android criou em seguida. O controlador encerra a espera imediatamente,
+limpa o gate e não reinicia nem descarrega o processo substituto. As verificações
+iniciais compartilham as consultas existentes; não acrescentam viagens de rede à
+janela fria de oito segundos.
+
+A instalação também saiu de `onAdded`: ela acontece no retorno interno revisado
+de `do_dlopen`, com a carga concluída e o mutex do linker ainda retido pelo caller.
+O perfil adicional fixa o linker da central e a closure OEM admitida. Bibliotecas
+inesperadas, carga parcial ou callers diferentes interrompem a preparação antes
+de modificar entradas OEM. Ver
+[o contrato do interceptor](../../scripts/carplay-native-analysis/native/COLD_INTERCEPTION.md).
+
+Essa correção tem testes de modelo e evidência estática do carregador real. Ainda
+exige novo resultado físico `installed-pinned`, endpoint armado e CarPlay D0
+íntegro antes de afirmar que a bridge ou o mapa secundário funcionam.
+
 O launcher grava cada mudança de fase em `cold-state.json`, no diretório privado
 de staging, com `flush()` e fechamento explícitos antes de emitir a mensagem
 Frida. O controlador consulta esse arquivo. O stdout redirecionado do injector

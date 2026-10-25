@@ -108,7 +108,8 @@ def build_launcher(
     }}, 50);
 }})();
 """
-    return interceptor_source.rstrip() + auto_arm
+    boundary = json.loads((Path(__file__).resolve().parent / "testdata/android9-linker-profile.json").read_text())
+    return "const impulseColdLoadProfile = " + canonical_json(boundary) + ";\n" + interceptor_source.rstrip() + auto_arm
 
 
 def main() -> int:

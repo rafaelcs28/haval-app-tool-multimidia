@@ -305,6 +305,27 @@ class Inputs:
         return bridge, interceptor, profile, endpoint
 
 
+@dataclass(frozen=True)
+class ProcessIdentity:
+    pid: int
+    start_time_ticks: int
+
+
+def process_identity_from_stat(stat: str, expected_pid: int) -> ProcessIdentity:
+    # comm (field 2) may contain spaces or parentheses; fields after its final
+    # closing parenthesis start at state (field 3). starttime is field 22.
+    head, separator, tail = stat.rpartition(") ")
+    fields = tail.split()
+    try:
+        pid = int(head.split(" (", 1)[0])
+        start_time = int(fields[19])
+    except (ValueError, IndexError):
+        raise ControllerError("Unable to read OEM CarPlay process identity") from None
+    if not separator or pid != expected_pid or start_time <= 0 or fields[0] in {"Z", "X", "x"}:
+        raise ControllerError("OEM CarPlay process is absent, dead or replaced")
+    return ProcessIdentity(pid, start_time)
+
+
 class ColdPassthroughController:
     def __init__(self, remote: TelnetShell, inputs: Inputs):
         self.remote = remote
@@ -312,6 +333,7 @@ class ColdPassthroughController:
         self.nonce: str | None = None
         self.pid: int | None = None
         self.oem_uid: int | None = None
+        self.process_identity: ProcessIdentity | None = None
 
     def preflight(self) -> dict[str, str]:
         output = self.remote.run(
@@ -396,15 +418,75 @@ class ColdPassthroughController:
                 return int(value)
         raise ControllerError("Fresh OEM CarPlay host did not appear inside the cold-gate window")
 
+    def _process_snapshot(self, status_command: str = ":") -> tuple[ProcessIdentity, str]:
+        if self.pid is None:
+            raise ControllerError("OEM CarPlay process identity has not been established")
+        marker = "identity_status_" + secrets.token_hex(8)
+        # Bracket the status read in one shell round trip. A stale state file
+        # cannot authorize a replacement process, including reuse of the PID.
+        output = self.remote.run(
+            "printf '\\nidentity_pids_before='; " + f"pidof {OEM_PROCESS} 2>/dev/null || true; "
+            "printf '\\nidentity_stat_before='; " + f"cat /proc/{self.pid}/stat 2>/dev/null || true; "
+            "printf '\\nidentity_cmdline='; "
+            + f"tr '\\000' '\\n' < /proc/{self.pid}/cmdline 2>/dev/null | head -n 1; "
+            + f"printf '\\n{marker}_begin\\n'; " + status_command + "; "
+            + f"printf '\\n{marker}_end\\n'; "
+            + "printf 'identity_stat_after='; " + f"cat /proc/{self.pid}/stat 2>/dev/null || true; "
+            + "printf '\\nidentity_pids_after='; " + f"pidof {OEM_PROCESS} 2>/dev/null || true",
+            check=False,
+        )
+        def field(name: str) -> str:
+            values = re.findall(r"(?m)^" + name + r"=([^\n]*)$", output)
+            if len(values) != 1:
+                raise ControllerError("Unable to verify OEM CarPlay process identity")
+            return values[0].strip()
+        if field("identity_cmdline") != OEM_PROCESS or any(
+            field(name).split() != [str(self.pid)]
+            for name in ("identity_pids_before", "identity_pids_after")
+        ):
+            raise ControllerError("OEM CarPlay process exited or was replaced; refusing stale status")
+        before = process_identity_from_stat(field("identity_stat_before"), self.pid)
+        after = process_identity_from_stat(field("identity_stat_after"), self.pid)
+        if before != after:
+            raise ControllerError("OEM CarPlay PID was reused while reading status")
+        match = re.search(r"(?m)^" + marker + r"_begin\n(.*?)\n" + marker + r"_end$", output, re.DOTALL)
+        if not match:
+            raise ControllerError("OEM CarPlay status framing was not returned")
+        return after, match.group(1)
+
+    def _live_status(self, command: str) -> str:
+        if self.process_identity is None:
+            raise ControllerError("OEM CarPlay process identity has not been bound")
+        identity, status = self._process_snapshot(command)
+        if identity != self.process_identity:
+            raise ControllerError("OEM CarPlay PID was reused; refusing stale status")
+        return status
+
     def _wait_phase(self, expected: set[str], deadline: float) -> tuple[str, str]:
         last_log = ""
         while time.monotonic() < deadline:
-            last_log = self.remote.run(f"cat {shell_quote(REMOTE_STATUS)} 2>/dev/null || true", check=False)
+            last_log = self._live_status(f"cat {shell_quote(REMOTE_STATUS)} 2>/dev/null || true")
             phase = classify_injector_log(last_log)
             if phase in expected:
                 return phase, last_log
             time.sleep(0.1)
         return classify_injector_log(last_log), last_log
+
+    def _wait_endpoint(self, deadline: float) -> str:
+        endpoint_log = ""
+        while time.monotonic() < deadline:
+            endpoint_log = self._live_status(
+                f"tail -n 80 {REMOTE_ENDPOINT_STATUS} 2>/dev/null || true"
+            )
+            # Only the most recent endpoint state can acknowledge this attempt.
+            states = re.findall(r'"state"\s*:\s*"([^"\n]+)"', endpoint_log)
+            state = states[-1] if states else None
+            if state == "armed":
+                return endpoint_log
+            if state == "failed":
+                raise ControllerError(f"Clean-map endpoint failed to arm: {endpoint_log[-1200:]}")
+            time.sleep(0.1)
+        raise ControllerError(f"Clean-map endpoint did not arm: {endpoint_log[-1200:]}")
 
     def run(self) -> dict[str, str | int]:
         print("[cold] preflight", file=sys.stderr, flush=True)
@@ -426,12 +508,11 @@ class ColdPassthroughController:
             print("[cold] old host terminated", file=sys.stderr, flush=True)
             deadline = time.monotonic() + 8.0
             self.pid = self._wait_new_pid(old_pid, deadline)
-            print(f"[cold] fresh host pid={self.pid}", file=sys.stderr, flush=True)
-            maps_status = self.remote.run(
+            self.process_identity, maps_status = self._process_snapshot(
                 f"printf 'maps_loaded='; if grep -qi -e libairplay_ts -e libcarplaystack "
-                f"-e libcoreutils_ts /proc/{self.pid}/maps; then echo yes; else echo no; fi",
-                check=False,
+                f"-e libcoreutils_ts /proc/{self.pid}/maps; then echo yes; else echo no; fi"
             )
+            print(f"[cold] fresh host pid={self.pid}", file=sys.stderr, flush=True)
             loaded = re.findall(r"(?m)^maps_loaded=(yes|no)$", maps_status)
             if not loaded or loaded[-1] != "no":
                 raise ControllerError("OEM libraries loaded before injector arming; refusing warm interception")
@@ -444,7 +525,7 @@ class ColdPassthroughController:
                 + shell_quote(f's/{PID_PLACEHOLDER}/{self.pid}/')
                 + " " + shell_quote(REMOTE_LAUNCHER)
             )
-            observed = self.remote.run(
+            observed = self._live_status(
                 f"sha256sum {shell_quote(REMOTE_LAUNCHER)} | awk '{{print $1}}'"
             ).strip().splitlines()[-1]
             if observed != sha256_bytes(exact):
@@ -477,27 +558,17 @@ class ColdPassthroughController:
             persistent_endpoint = (
                 f"{REMOTE_INJECTOR} -p {self.pid} -s {REMOTE_ENDPOINT_LAUNCHER} -R qjs"
             )
+            self._live_status(":")
             self.remote.run(
                 f"nohup setsid sh -c \"$(printf {shell_quote(shell_octal_command(persistent_endpoint))})\" "
                 f"> {REMOTE_ENDPOINT_LOG} 2>&1 < /dev/null & :"
             )
             print("[cold] endpoint launched", file=sys.stderr, flush=True)
-            endpoint_deadline = time.monotonic() + 8.0
-            endpoint_log = ""
-            while time.monotonic() < endpoint_deadline:
-                endpoint_log = self.remote.run(
-                    f"tail -n 80 {REMOTE_ENDPOINT_STATUS} 2>/dev/null || true", check=False
-                )
-                if '"state":"armed"' in endpoint_log:
-                    break
-                if '"state":"failed"' in endpoint_log:
-                    raise ControllerError(f"Clean-map endpoint failed to arm: {endpoint_log[-1200:]}")
-                time.sleep(0.1)
-            else:
-                raise ControllerError(f"Clean-map endpoint did not arm: {endpoint_log[-1200:]}")
+            self._wait_endpoint(time.monotonic() + 8.0)
             return {
                 **staged,
                 "pid": self.pid,
+                "processStartTimeTicks": self.process_identity.start_time_ticks,
                 "phase": phase,
                 "injectorLog": REMOTE_LOG,
                 "endpointLog": REMOTE_ENDPOINT_LOG,

@@ -8,13 +8,19 @@ const { createColdOemInterceptor } = require('./cold_oem_interceptor');
 
 const directory = process.argv[2];
 const profile = JSON.parse(fs.readFileSync(path.join(directory, 'oem-cold-profile.json'), 'utf8'));
+const boundary = JSON.parse(fs.readFileSync(path.join(__dirname, 'testdata/android9-linker-profile.json'), 'utf8'));
+const linkerFile = process.argv[3];
 const checksum = value => crypto.createHash('sha256').update(typeof value === 'string' ? value : Buffer.from(value)).digest('hex');
 const arrayBuffer = bytes => Uint8Array.from(bytes).buffer;
 
 function runtime(fault = {}) {
     const images = new Map(profile.modules.map(module => [module.path,
         fs.readFileSync(path.join(directory, 'vendor__app__TsCarPlayService__lib__arm64__' + module.name))]));
+    images.set(boundary.path, fs.readFileSync(linkerFile));
+    for (const dependency of boundary.dependencies) images.set(dependency.path,
+        fs.readFileSync(path.join(directory, 'vendor__app__TsCarPlayService__lib__arm64__' + dependency.name)));
     if (fault.file) images.get(profile.modules[0].path)[images.get(profile.modules[0].path).length - 1] ^= 1;
+    if (fault.dependencyFile) images.get(boundary.dependencies[0].path)[100] ^= 1;
     images.set('/proc/self/cmdline', Buffer.from((fault.process ? 'wrong.process' : 'com.ts.carplay') + '\0'));
     const bridgePath = '/data/local/tmp/impulse-carplay/test/libcarplay_video_bridge.so';
     const bridgeBytes = Buffer.alloc(4096, 0);
@@ -36,6 +42,11 @@ function runtime(fault = {}) {
     let next = 0x1000000n;
     let nativeReady = 0;
     let readyThrows = false;
+    let loaderListener = null;
+    let notification = false;
+    let loaderComplete = false;
+    let loaderLocked = false;
+    let currentThread = 77;
 
     class Pointer {
         constructor(value, region, label = null) { this.value = BigInt(value); this.region = region; this.label = label; }
@@ -64,8 +75,25 @@ function runtime(fault = {}) {
         if (fault.memory && index === 1) object.memory[0x217f8 + 40] ^= 1;
         if (fault.writable && index === 1) object.protection = 'rwx';
         if (fault.path && index === 1) object.path = '/wrong/' + object.name;
-        if (callback) callback.onAdded(object);
+        if (callback) {
+            notification = true;
+            try { callback.onAdded(object); } finally { notification = false; }
+        }
         return object;
+    }
+    const linker = loaded(boundary);
+    if (fault.linkerMemory) linker.memory[boundary.load.offset + 40] ^= 1;
+    function withLoad(action, options = {}) {
+        const previousComplete = loaderComplete, previousLock = loaderLocked;
+        const listener = loaderListener;
+        const context = { returnAddress: linker.base.add(options.unreviewedCaller ? 32 :
+            boundary.callers[options.wrapper || 0].returnOffset) };
+        loaderLocked = true; loaderComplete = false;
+        if (listener) listener.onEnter.call(context);
+        action();
+        loaderComplete = true;
+        if (listener) listener.onLeave.call(context, options.failed ? new Pointer(0, linker) : linker.base);
+        loaderComplete = previousComplete; loaderLocked = previousLock;
     }
     class File {
         constructor(filePath) { assert.ok(images.has(filePath)); this.bytes = images.get(filePath); this.position = 0; opened++; }
@@ -78,6 +106,7 @@ function runtime(fault = {}) {
     const api = {
         Process: {
             arch: 'arm64', pointerSize: 8, id: 1234,
+            getCurrentThreadId: () => currentThread,
             enumerateModules: () => modules.slice(),
             findRangeByAddress(address) { return regions.find(item => address.compare(item.base) >= 0 && address.compare(item.base.add(item.size)) < 0) || null; },
             attachModuleObserver(observer) {
@@ -87,6 +116,7 @@ function runtime(fault = {}) {
                 return { detach() { callback = null; } };
             }
         },
+        coldLoadProfile: fault.boundaryProfile ? {} : boundary,
         Module: { getGlobalExportByName(name) {
             assert.equal(name, 'dlerror');
             return { label: 'dlerror' };
@@ -116,9 +146,12 @@ function runtime(fault = {}) {
             if (address.label.endsWith('_abi')) return () => fault.abi ? 2 : 1;
             if (address.label.endsWith('_state')) return () => { if (readyThrows) throw new Error('state unavailable'); return nativeReady; };
             if (address.label === 'impulse_carplay_prepare_initial_entries') return () => {
+                assert.ok(loaderLocked && loaderComplete && !notification, 'pin only after completed load under mutex');
                 operations.push('pin-modules'); return fault.prepare ? -1 : 0;
             };
             if (address.label === 'impulse_carplay_prepare_initial_entries_for_oem_namespace') return caller => {
+                assert.ok(loaderLocked && loaderComplete && !notification, 'pin only after completed load under mutex');
+                if (fault.reentrantPrepare) withLoad(() => { operations.push('nested-noload'); });
                 const stack = modules.find(module => module.name === 'libcarplaystack.so');
                 assert.ok(caller.equals(stack.base.add(stack.profile.functions.initialize.offset)));
                 operations.push('pin-modules'); return fault.prepare ? -1 : 0;
@@ -144,6 +177,11 @@ function runtime(fault = {}) {
             };
         },
         Interceptor: {
+            attach(target, callbacks) {
+                assert.ok(target.equals(linker.base.add(boundary.load.offset)));
+                loaderListener = callbacks;
+                return { detach() { loaderListener = null; operations.push('detach-loader'); } };
+            },
             replaceFast(target) {
                 operations.push('replace');
                 const offset = Number(target.value - target.region.base.value);
@@ -163,7 +201,15 @@ function runtime(fault = {}) {
         Script: { pin() { pins++; }, unpin() { pins--; assert.ok(pins >= 0); } },
         setTimeout(fn, delay) { timer = fn; timerDelay = delay; return 1; }, clearTimeout() { timer = null; }
     };
-    return { api, loadOem, modules, patched, operations,
+    return { api, loadOem, withLoad, modules, patched, operations,
+        changeThread(thread) { currentThread = thread; },
+        loadDependency(index) {
+            const object = loaded(boundary.dependencies[index]);
+            if (fault.dependencyMemory) object.memory[boundary.dependencies[index].executable[0].offset + 40] ^= 1;
+            if (callback) callback.onAdded(object);
+            return object;
+        },
+        unknownModule() { if (callback) callback.onAdded({ name: 'unreviewed.so', path: '/vendor/unreviewed.so' }); },
         options: { enabled: true, bridgePath, bridgeSize: bridgeBytes.length, bridgeSha256: checksum(bridgeBytes), principalUuid: 'main', expectedPid: 1234 },
         metrics: () => ({ pins, opened, closed, timerDelay }),
         timeout() { if (timer) timer(); },
@@ -173,7 +219,7 @@ function runtime(fault = {}) {
 
 let passed = 0;
 function test(name, action) { action(); passed++; process.stdout.write(name + ': passed\n'); }
-function complete(env) { [0, 1, 2].forEach(index => env.loadOem(index)); }
+function complete(env) { env.withLoad(() => [0, 1, 2].forEach(index => env.loadOem(index))); }
 
 test('default disabled is inert', () => {
     const env = runtime(); const installer = createColdOemInterceptor(env.api);
@@ -228,6 +274,112 @@ test('cold installation owns nine originals', () => {
     assert.equal(installer.status().phase, 'installed-pinned'); assert.equal(env.patched.size, 9);
     assert.equal(env.metrics().pins, 1); assert.throws(() => installer.cancel());
     assert.equal(env.metrics().opened, env.metrics().closed);
+});
+test('module notifications never reenter the unfinished linker', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => {
+        [0, 1, 2].forEach(index => env.loadOem(index));
+        assert.equal(installer.status().phase, 'armed');
+        assert.equal(env.patched.size, 0);
+        assert.ok(!env.operations.includes('pin-modules'));
+    });
+    assert.equal(installer.status().phase, 'installed-pinned');
+    assert.equal(env.operations.filter(operation => operation === 'pin-modules').length, 1);
+});
+test('nested completed load waits for outermost loader return', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => {
+        env.withLoad(() => [0, 1, 2].forEach(index => env.loadOem(index)), { wrapper: 1 });
+        assert.equal(installer.status().phase, 'armed');
+        assert.equal(env.patched.size, 0);
+    });
+    assert.equal(installer.status().phase, 'installed-pinned');
+});
+test('a failed nested load cannot be hidden by outer success', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => {
+        env.withLoad(() => [0, 1, 2].forEach(index => env.loadOem(index)), { failed: true });
+    });
+    assert.equal(installer.status().phase, 'failed');
+    assert.ok(!env.operations.includes('pin-modules'));
+});
+test('native NOLOAD reentry cannot trigger a second installation', () => {
+    const env = runtime({ reentrantPrepare: true }); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); complete(env);
+    assert.equal(installer.status().phase, 'installed-pinned');
+    assert.equal(env.operations.filter(operation => operation === 'pin-modules').length, 1);
+    assert.equal(env.operations.filter(operation => operation === 'replace').length, 9);
+    assert.ok(env.operations.includes('nested-noload'));
+});
+test('failed loader return refuses native preparation', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => [0, 1, 2].forEach(index => env.loadOem(index)), { failed: true });
+    assert.equal(installer.status().phase, 'failed');
+    assert.ok(!env.operations.includes('pin-modules'));
+});
+test('separate incomplete load groups cannot authorize a warm installation', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => env.loadOem(0));
+    complete(env);
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.patched.size, 0);
+});
+test('unobserved loader notification fails closed', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options); env.loadOem(0);
+    assert.equal(installer.status().phase, 'failed');
+    assert.match(installer.status().failure, /outside reviewed loader/);
+    assert.equal(env.metrics().pins, 0);
+});
+test('unreviewed caller cannot impersonate locked load boundary', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => [0, 1, 2].forEach(index => env.loadOem(index)), { unreviewedCaller: true });
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.patched.size, 0);
+});
+test('new unreviewed dependency refuses the whole group', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => { env.unknownModule(); [0, 1, 2].forEach(index => env.loadOem(index)); });
+    assert.equal(installer.status().phase, 'failed');
+    assert.match(installer.status().failure, /Unreviewed cold-load dependency/);
+    assert.equal(env.patched.size, 0);
+});
+test('hash-pinned reviewed dependency closure is admitted', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => {
+        boundary.dependencies.forEach((_, index) => env.loadDependency(index));
+        [0, 1, 2].forEach(index => env.loadOem(index));
+    });
+    assert.equal(installer.status().phase, 'installed-pinned');
+});
+for (const fault of ['dependencyFile', 'dependencyMemory']) test('changed ' + fault + ' rejects before native pinning', () => {
+    const env = runtime({ [fault]: true }); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => { env.loadDependency(0); [0, 1, 2].forEach(index => env.loadOem(index)); });
+    assert.equal(installer.status().phase, 'failed');
+    assert.ok(!env.operations.includes('pin-modules'));
+    assert.equal(env.metrics().pins, 0);
+});
+test('different thread cannot publish into another loader frame', () => {
+    const env = runtime(); const installer = createColdOemInterceptor(env.api);
+    installer.arm(profile, env.options);
+    env.withLoad(() => { env.changeThread(88); env.loadOem(0); env.changeThread(77); });
+    assert.equal(installer.status().phase, 'failed');
+    assert.equal(env.patched.size, 0);
+});
+for (const fault of ['linkerMemory', 'boundaryProfile']) test('unreviewed ' + fault + ' refuses loader instrumentation', () => {
+    const env = runtime({ [fault]: true }); const installer = createColdOemInterceptor(env.api);
+    assert.equal(installer.arm(profile, env.options).phase, 'failed');
+    assert.equal(env.patched.size, 0);
+    assert.equal(env.metrics().pins, 0);
 });
 for (const fault of [{ replaceAt: 4 }, { trampoline: true }, { bootstrap: true }, { prepare: true }]) test('cold failure rolls back ' + JSON.stringify(fault), () => {
     const env = runtime(fault); const installer = createColdOemInterceptor(env.api);
