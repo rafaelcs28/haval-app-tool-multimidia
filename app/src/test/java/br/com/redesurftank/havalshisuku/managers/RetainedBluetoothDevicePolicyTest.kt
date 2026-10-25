@@ -26,9 +26,34 @@ class RetainedBluetoothDevicePolicyTest {
             assertNull(policy.addressIfCandidate(candidate().copy(accepted = accepted)))
     }
 
-    @Test fun onlyExactOfflineStateIsAdmitted() {
-        for (state in listOf(-1, 1, 2, 3, 4, 5))
+    @Test fun onlyReviewedOfflineOrStickyOnlineStateIsAdmitted() {
+        for (state in 0..1) {
+            assertEquals(candidate().address, policy.addressIfCandidate(candidate().copy(state = state)))
+            assertEquals(candidate().address, policy.addressIfCandidate(candidate().copy(type = 2, state = state)))
+        }
+        for (state in listOf(Int.MIN_VALUE, -1, 2, 3, 4, 5, 6, Int.MAX_VALUE))
             assertNull(policy.addressIfCandidate(candidate().copy(state = state)))
+    }
+
+    @Test fun stickyOnlineStateStillRequiresEveryOtherExactCandidateFact() {
+        val online = candidate().copy(state = 1)
+        for (different in listOf(online.copy(type = 3), online.copy(accepted = 0),
+                online.copy(connections = emptyMap()), online.copy(connections = mapOf(2 to 1)),
+                online.copy(connections = mapOf(2 to 3, 1 to 4)), online.copy(available = 1),
+                online.copy(active = 1), online.copy(activeStates = mapOf(1024 to 0)),
+                online.copy(usbDeviceMode = true), online.copy(transportNodes = listOf(null, "/dev/fixture", null)),
+                online.copy(transportNodes = emptyList()), online.copy(address = null))) {
+            assertNull(policy.addressIfCandidate(different))
+        }
+    }
+
+    @Test fun stickyOnlineCandidateCannotReplacePhysicalProfileAbsenceProof() {
+        assertEquals(candidate().address, policy.addressIfCandidate(candidate().copy(state = 1)))
+        for (profileState in 1..3) assertEquals(false, policy.profileAbsence(profileState))
+        for (unknown in listOf(Int.MIN_VALUE, -1, 4, 10, 12, Int.MAX_VALUE)) {
+            assertNull(policy.profileAbsence(unknown))
+        }
+        assertEquals(true, policy.profileAbsence(0))
     }
 
     @Test fun bluetoothReadyIsTheOnlyReviewedRetainedConnectionSignature() {

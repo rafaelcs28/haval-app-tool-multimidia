@@ -207,7 +207,9 @@ internal object RetainedBluetoothDevicePolicy {
     }
 
     fun addressIfCandidate(facts: Facts): String? {
-        if (facts.type !in setOf(1, 2) || facts.accepted != 1 || facts.state != 0 ||
+        // Profiled DCM promotes paired BT READY to global ONLINE (1) and can
+        // retain it after disconnect. Neither 0 nor 1 proves physical absence.
+        if (facts.type !in setOf(1, 2) || facts.accepted != 1 || facts.state !in 0..1 ||
             facts.connections != mapOf(2 to 3) || facts.available != 0 || facts.active != 0 ||
             facts.activeStates.isNotEmpty() || facts.usbDeviceMode ||
             facts.transportNodes.size != 3 || facts.transportNodes.any { !it.isNullOrEmpty() }) return null
