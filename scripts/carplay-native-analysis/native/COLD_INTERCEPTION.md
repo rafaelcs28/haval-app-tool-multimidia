@@ -47,7 +47,10 @@ Only exact pre-arm module identities and the hash/code-pinned OEM dependency
 closure may appear. New system libraries or unknown dependencies fail closed.
 The extra PlatformMedia constructor creates an idle worker with an empty queue
 and a zero work semaphore; its initializer, constructor, trampoline and waiting
-loop were separately reviewed. Other admitted dependencies have no initializers,
+loop were separately reviewed. The exact vendor `libc++_shared.so` has one
+standard iostream initializer; its root, stream initialization and local imbue
+targets were reviewed. This is not an exhaustive audit of every allocator or
+locale helper. Other admitted dependencies have no initializers,
 and the captured closure has no GNU IFUNC/IRELATIVE resolvers. These facts apply
 only to the exact pinned firmware. The runtime preserves full OEM code checks,
 native module ownership, nine passthrough entries and process-pinned lifetimes.

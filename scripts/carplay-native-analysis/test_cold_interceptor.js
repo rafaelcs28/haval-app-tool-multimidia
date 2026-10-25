@@ -17,8 +17,11 @@ function runtime(fault = {}) {
     const images = new Map(profile.modules.map(module => [module.path,
         fs.readFileSync(path.join(directory, 'vendor__app__TsCarPlayService__lib__arm64__' + module.name))]));
     images.set(boundary.path, fs.readFileSync(linkerFile));
-    for (const dependency of boundary.dependencies) images.set(dependency.path,
-        fs.readFileSync(path.join(directory, 'vendor__app__TsCarPlayService__lib__arm64__' + dependency.name)));
+    for (const dependency of boundary.dependencies) {
+        const captured = path.join(directory, 'vendor__app__TsCarPlayService__lib__arm64__' + dependency.name);
+        images.set(dependency.path, fs.readFileSync(fs.existsSync(captured) ? captured :
+            path.join(process.argv[4] || directory, dependency.name)));
+    }
     if (fault.file) images.get(profile.modules[0].path)[images.get(profile.modules[0].path).length - 1] ^= 1;
     if (fault.dependencyFile) images.get(boundary.dependencies[0].path)[100] ^= 1;
     images.set('/proc/self/cmdline', Buffer.from((fault.process ? 'wrong.process' : 'com.ts.carplay') + '\0'));

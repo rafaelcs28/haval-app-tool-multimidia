@@ -238,6 +238,65 @@
           "sha256": "1e7ac219f00058e7457577630418f510642a2964f4b169b12f8fa1f5726c30e6"
         }
       ]
+    },
+    {
+      "name": "libmfiinterface.so",
+      "path": "/vendor/app/TsCarPlayService/lib/arm64/libmfiinterface.so",
+      "fileSize": 68472,
+      "sha256": "00ff27bf64c7d85ae8dd7f1d3f41729689b746e232fca7caa7fd3aa0e7d37a61",
+      "needed": [
+        "libcutils.so",
+        "liblog.so",
+        "libhidlbase.so",
+        "libutils.so",
+        "vendor.ts.iap@1.0.so",
+        "libm.so",
+        "libc++.so",
+        "libc.so",
+        "libdl.so"
+      ],
+      "init": {
+        "dtInit": null,
+        "dtInitArray": null,
+        "dtInitArraySize": 0,
+        "targets": [],
+        "dtPreinitArray": null,
+        "dtPreinitArraySize": 0
+      },
+      "executable": [
+        {
+          "offset": 0,
+          "size": 8308,
+          "sha256": "787a9f2ea0b1177b468497d4b09e1263a0af06746a642c99d8feea486560a932"
+        }
+      ]
+    },
+    {
+      "name": "libc++_shared.so",
+      "path": "/vendor/app/TsCarPlayService/lib/arm64/libc++_shared.so",
+      "fileSize": 7812664,
+      "sha256": "d25fdec80cb2ab3b4ca02b189d909bc90a6378411bbf3d3a36a09512f2798638",
+      "needed": [
+        "libc.so",
+        "libdl.so"
+      ],
+      "init": {
+        "dtInit": null,
+        "dtInitArray": "0xf12a0",
+        "dtInitArraySize": 8,
+        "targets": [
+          "0x91824"
+        ],
+        "dtPreinitArray": null,
+        "dtPreinitArraySize": 0
+      },
+      "executable": [
+        {
+          "offset": 0,
+          "size": 954784,
+          "sha256": "450f6516667741495eda8155fc2d54ae44e279b3f120e7cf2cf60b7000178594"
+        }
+      ]
     }
   ]
 }

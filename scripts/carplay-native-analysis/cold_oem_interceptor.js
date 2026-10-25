@@ -2,7 +2,7 @@
 
 function createColdOemInterceptor(api) {
     const { Process, Module, File, Memory, Checksum, NativeFunction, Interceptor, Script } = api;
-    const coldLoadProfileDigest = 'e60a8f3776bc460b08b436aca24537d14610a54ebc71e377d9ffc6d8e47b0da3';
+    const coldLoadProfileDigest = '5501d81df03cb9e7baf5dbc37d594ce973ae708e13390a4330d3dde5be977ae8';
     const profileDigest = '31b878ba35c1a7fec07d7e854264837ef3702962a1e059fa5d020afa0d7c4d0f';
     const video = ['initialize', 'finalize', 'dimensions', 'start', 'stop', 'avcc', 'data'];
     const labels = video.concat(['session', 'displays']);
