@@ -6,6 +6,41 @@ import java.security.MessageDigest
 internal object CarPlayResidentProof {
     class Pending(message: String) : IllegalStateException(message)
 
+    data class ColdGateBudget(val proofDeadlineMs: Long, val releaseDeadlineMs: Long)
+
+    /** Process birth precedes the OEM's ten-second gate; it is a conservative bound, not a gate marker. */
+    fun coldGateBudget(startTicks: Long, ticksPerSecond: Long, nowMs: Long,
+        attemptDeadlineMs: Long): ColdGateBudget {
+        require(nowMs >= 0 && attemptDeadlineMs > nowMs) { "Cold preparation attempt expired" }
+        require(startTicks > 0 && startTicks <= Long.MAX_VALUE / 1000 && ticksPerSecond > 0) {
+            "Invalid cold startup clock"
+        }
+        val birthMs = startTicks * 1000 / ticksPerSecond
+        require(nowMs >= birthMs && birthMs <= Long.MAX_VALUE - 10_000) { "Invalid cold startup chronology" }
+        val releaseDeadline = minOf(birthMs + 10_000, attemptDeadlineMs)
+        val proofDeadline = releaseDeadline - 1000 // Reserve time for final identity, safety and gate release.
+        require(proofDeadline > nowMs) { "Conservative cold startup window expired" }
+        return ColdGateBudget(proofDeadline, releaseDeadline)
+    }
+
+    fun rootTimeout(deadlineMs: Long, nowMs: Long): Long {
+        require(nowMs >= 0 && deadlineMs > nowMs) { "Cold startup deadline expired" }
+        return minOf(5000L, deadlineMs - nowMs)
+    }
+
+    /** Recheck in the same root shell immediately before a bounded startup mutation. */
+    fun deadlineGuard(deadlineMs: Long, firstSampleElapsedMs: Long? = null): String {
+        require(deadlineMs > 0 && (firstSampleElapsedMs == null || firstSampleElapsedMs >= 0))
+        val freshness = firstSampleElapsedMs?.let {
+            "test \$((cpb_now-$it)) -ge 0 && test \$((cpb_now-$it)) -le 3000 || exit 1\n"
+        }.orEmpty()
+        return """
+            cpb_now=§(awk '{print int(§1*1000)}' /proc/uptime) || exit 1
+            case "§cpb_now" in ''|*[!0-9]*) exit 1;; esac
+            test "§cpb_now" -gt 0 && test "§cpb_now" -lt $deadlineMs || exit 1
+        """.trimIndent().replace('§', '$') + "\n" + freshness
+    }
+
     /** A pending poll spends the existing budget; terminal errors are never retried. */
     fun <T> await(deadline: Long, now: () -> Long, pause: () -> Unit, probe: () -> T): T {
         var last: Pending? = null

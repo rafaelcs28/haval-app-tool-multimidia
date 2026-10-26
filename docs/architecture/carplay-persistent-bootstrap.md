@@ -167,3 +167,18 @@ owner reported the same generic waiting screen on142, but current remote reads
 timed out, so that specific incident remains unconfirmed. 40 source fixtures, independent visibility cases and full JVM/Release passed
 on the authorized Mini. The143 APK and public updater were verified. Physical143
 testing remains pending.
+
+## 144 — OEM reader compatibility and bounded startup proof
+
+The143 AWK program failed on the OEM reader, while simple AWK expressions worked.
+The shared visibility parser now uses POSIX shell/grep; its exact capture/guard
+passed live on the central for real/hidden/visible/unknown cases. No quiescence
+or identity gate is bypassed.
+
+The native proof deadline is conservatively derived from target process birth
+and `Os.sysconf(_SC_CLK_TCK)`: proof before birth+9s, release before birth+10s,
+capped by the overall attempt. This is a lower bound on the OEM gate window,
+not evidence that the gate is open. Existing old processes beyond the bound fail
+without an extra restart. Root calls consume remaining time; fork, nonce and
+release have same-shell clock guards. Release also requires current identity,
+fresh quiescence and fresh resident samples. The actual OEM gate is unchanged.

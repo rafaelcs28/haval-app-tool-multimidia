@@ -1,3 +1,39 @@
+## ACTIVE — 144 compatibility fix frozen; install authorized, owner will reboot later
+
+Latest user explicitly authorized remote APK INSTALL NOW despite movement because
+passenger is coordinating; OWNER will reboot central when parked. This supersedes
+old blanket handoff "no install while moving" for this installation. Do NOT issue
+full central reboot/GWMpower. Install only exact validated signed Mini APK, verify
+actual installed version/hash and report activation pending owner reboot. pm help
+supports --dont-kill (documented for feature splits; do not promise preservation
+on a full update without checking old app PID). No install/reboot done yet.
+
+Actual installed143 confirmed read-only, boot2044eaa6-bf1c-4bd2-8fb1-280e2365d80a,
+OEM4163. Current attempt prefs remain historical142 boot43a1bd0a; not143 failure.
+143 exact helper crashes OEM awk, preventing observe/attempt and causing generic
+local-services UI. Basic awk works. Replaced complex parser with POSIX shell/grep;
+exact live helper+guard passed12real/fixture cases on OEM, including actual stacks,
+hidden, visibleD0/D3, missing/duplicate flags, errors and unknown. No callbacks,
+radio/task/process mutation in those checks. Current safetyquiescent=false remains
+an INDEPENDENT blocker; parser fix is not proof of READY or phone absence.
+
+Historical142: successfulCLIexit39160, valid resident sample returned after caller
+4s budget in41086, eligible/quiescent true before failure. Old nonce was overwritten
+later, so original first-sample timing is unknown. 144 uses conservative target
+birth+9s proof /birth+10s release (actual sysconfHZ), caps by overall attempt, checks
+same-shell before fork/nonce/release and freshness, preserves strict late rejection.
+Old cold-attach beyond bound fails without extra restart. Does not enlarge OEMgate.
+
+Independent QA cleared5runtime/test paths.11visibility+31lifecycle Python/OEMlock/
+diffcheck PASS;6newJVM budget tests (22residentproof total) await Mini ONLY. Parser
+actual OEM compatibility passed BEFORE build. V9/AA/themes unchanged from143.
+Private evidence originalworkspace test-artifacts/143-local-services-20261026/.
+Use run_readonly_compressed.py for long scripts; legacy collect single-line octal
+transport failed on large packs. No Android/Kotlin build on coordinator.
+Next immutableaudit/fullJVM signedRelease144, fetch NEWdir/validatecert/hash/payload,
+publicrelease+downloadverify/fixedpreviewLAST, then authorizedremoteinstall and
+verify. Owner reboot afterwards, phone/projection quiescence and READY stillrequired.
+
 ## 2026-10-26 — 143 published and verified
 
 Integrated Netseek v9 through30e301fb and fixed HUD RPM bar colour application.

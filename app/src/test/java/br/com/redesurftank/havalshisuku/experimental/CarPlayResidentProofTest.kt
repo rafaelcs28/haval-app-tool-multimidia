@@ -35,6 +35,82 @@ class CarPlayResidentProofTest {
         catch (_: CarPlayResidentProof.Pending) {}
     }
 
+    @Test fun coldGateBudgetUsesProcessBirthAndActualClockTickFrequency() {
+        for ((ticks, frequency) in listOf(3477L to 100L, 34_770L to 1000L)) {
+            val budget = CarPlayResidentProof.coldGateBudget(ticks, frequency, 41_086, 362_580)
+            assertEquals(43_770L, budget.proofDeadlineMs)
+            assertEquals(44_770L, budget.releaseDeadlineMs)
+        }
+        val fractional = CarPlayResidentProof.coldGateBudget(100, 3, 34_000, 100_000)
+        assertEquals(42_333L, fractional.proofDeadlineMs) // Floor conversion never lengthens the gate.
+        assertEquals(43_333L, fractional.releaseDeadlineMs)
+    }
+
+    @Test fun coldGateBudgetKeepsReleaseReserveAndOverallAttemptLimit() {
+        val budget = CarPlayResidentProof.coldGateBudget(3477, 100, 40_000, 42_000)
+        assertEquals(41_000L, budget.proofDeadlineMs)
+        assertEquals(42_000L, budget.releaseDeadlineMs)
+        rejects { CarPlayResidentProof.coldGateBudget(3477, 100, 41_000, 42_000) }
+        rejects { CarPlayResidentProof.coldGateBudget(3477, 100, 43_770, 362_580) }
+        rejects { CarPlayResidentProof.coldGateBudget(3477, 100, 50_000, 362_580) } // Old cold attach; no new window.
+    }
+
+    @Test fun invalidOrOverflowingStartupClocksCannotCreateAWindow() {
+        for ((ticks, frequency) in listOf(0L to 100L, -1L to 100L, 3477L to 0L,
+            3477L to -1L, Long.MAX_VALUE to 100L)) {
+            rejects { CarPlayResidentProof.coldGateBudget(ticks, frequency, 40_000, 362_580) }
+        }
+        rejects { CarPlayResidentProof.coldGateBudget(4001, 100, 40_000, 362_580) } // Future birth.
+        rejects { CarPlayResidentProof.coldGateBudget(3477, 100, -1, 362_580) }
+        for (attempt in listOf(Long.MIN_VALUE, -1L, 0L, 40_000L)) {
+            rejects { CarPlayResidentProof.coldGateBudget(3477, 100, 40_000, attempt) }
+        }
+    }
+
+    @Test fun startupRootCallsSpendRemainingBudgetRatherThanTwoIndependentTimeouts() {
+        assertEquals(5000L, CarPlayResidentProof.rootTimeout(43_770, 37_000))
+        assertEquals(2770L, CarPlayResidentProof.rootTimeout(43_770, 41_000))
+        assertEquals(1L, CarPlayResidentProof.rootTimeout(43_770, 43_769))
+        rejects { CarPlayResidentProof.rootTimeout(43_770, 43_770) }
+        rejects { CarPlayResidentProof.rootTimeout(43_770, 44_000) }
+    }
+
+    @Test fun conservativeStartupBudgetAcceptsInWindowCompletionAndStillRejectsLateSuccess() {
+        val deadline = CarPlayResidentProof.coldGateBudget(3477, 100, 37_170, 362_580).proofDeadlineMs
+        var now = 37_170L
+        assertEquals("verified", CarPlayResidentProof.await(deadline, { now }, {}) {
+            now = 41_086L; "verified"
+        })
+        try {
+            now = 41_086
+            CarPlayResidentProof.await(deadline, { now }, {}) { now = deadline; "late" }
+            fail("A successful result at the conservative deadline was accepted")
+        } catch (_: IllegalStateException) {}
+    }
+
+    @Test fun generatedStartupGuardRejectsLateAndStaleProofBeforeMutation() {
+        val uptime = java.io.File.createTempFile("carplay-gate-clock-", ".txt")
+        try {
+            fun run(clock: String, sampleElapsed: Long): Int {
+                uptime.writeText("$clock 0.00\n")
+                val shell = CarPlayResidentProof.deadlineGuard(44_770, sampleElapsed)
+                    .replace("/proc/uptime", CarPlayResidentProof.quote(uptime.absolutePath))
+                val process = ProcessBuilder("sh", "-c", shell + "printf allowed")
+                    .redirectErrorStream(true).start()
+                val output = process.inputStream.bufferedReader().readText()
+                val result = process.waitFor()
+                assertEquals(result == 0, output == "allowed")
+                return result
+            }
+            assertEquals(0, run("44.76", 42_000))
+            assertNotEquals(0, run("44.77", 42_000))
+            assertNotEquals(0, run("44.78", 42_000))
+            assertNotEquals(0, run("44.00", 40_000))
+            assertNotEquals(0, run("44.00", 45_000))
+            assertNotEquals(0, run("0.00", 0))
+        } finally { uptime.delete() }
+    }
+
     @Test fun onlyPostExitFreshAdvancingSamplesProveNativeResidence() {
         val proof = verify()
         assertTrue(CarPlayResidentProof.nativeArmed(proof))

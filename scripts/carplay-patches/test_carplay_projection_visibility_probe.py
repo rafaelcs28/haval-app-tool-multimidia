@@ -33,7 +33,7 @@ class ProjectionVisibilityProbeTest(unittest.TestCase):
         cls.capture = textwrap.dedent(capture.group(1)).replace("§", "$")
         cls.clear = textwrap.dedent(clear.group(1)).replace("§", "$")
 
-    def run_probe(self, stacks, *, require_clear=False, am_status=0):
+    def run_probe(self, stacks, *, require_clear=False, am_status=0, broken_awk=False, glob_trap=False):
         with tempfile.TemporaryDirectory(prefix="impulse-projection-visibility-") as directory:
             fixture = Path(directory)
             data = fixture / "stacks.txt"
@@ -42,10 +42,17 @@ class ProjectionVisibilityProbeTest(unittest.TestCase):
             am.write_text("#!/bin/sh\n[ \"$*\" = 'stack list' ] || exit 2\ncat " +
                           shlex.quote(str(data)) + "\nexit " + str(am_status) + "\n")
             am.chmod(0o700)
+            if broken_awk:
+                awk = fixture / "awk"
+                awk.write_text("#!/bin/sh\nexit 138\n")
+                awk.chmod(0o700)
+            if glob_trap:
+                (fixture / "visible=false").write_text("A filename must not turn an ambiguous flag into false")
             script = self.capture + (self.clear if require_clear else "")
             script += '\nprintf "%s\\n" "$cpb_projection_visuals"\n'
             return subprocess.run(["sh", "-c", script], text=True, capture_output=True,
-                                  timeout=5, env={**os.environ, "PATH": str(fixture) + ":" + os.environ["PATH"]})
+                                  timeout=5, cwd=fixture,
+                                  env={**os.environ, "PATH": str(fixture) + ":" + os.environ["PATH"]})
 
     def values(self, stacks):
         result = self.run_probe(stacks)
@@ -121,6 +128,19 @@ class ProjectionVisibilityProbeTest(unittest.TestCase):
         self.assertEqual(source.count("CarPlayProjectionVisibilityProbe.capture()"), 1)
         self.assertEqual(source.count("CarPlayProjectionVisibilityProbe.requireClear()"), 1)
         self.assertNotIn("grep -c 'com.ts.carplay.app'", source)
+
+    def test_projection_evidence_does_not_depend_on_the_crashing_oem_awk(self):
+        for visible, expected in [("false", "0"), ("true", "1"), (None, "unknown")]:
+            with self.subTest(visible=visible):
+                result = self.run_probe(self.task("com.ts.carplay.app", visible=visible), broken_awk=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("cp_visual=" + expected + "\n", result.stdout)
+
+    def test_filename_globbing_cannot_make_a_malformed_flag_look_hidden(self):
+        data = self.task("com.ts.carplay.app", visible="false*")
+        result = self.run_probe(data, glob_trap=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("cp_visual=unknown\n", result.stdout)
 
 
 if __name__ == "__main__":

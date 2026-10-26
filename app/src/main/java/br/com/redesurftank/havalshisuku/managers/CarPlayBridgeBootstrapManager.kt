@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.os.Process
 import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.BuildConfig
@@ -540,6 +542,9 @@ object CarPlayBridgeBootstrapManager {
             }
             val identity = requireNotNull(current.id)
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
+            val coldBudget = CarPlayResidentProof.coldGateBudget(identity.start,
+                Os.sysconf(OsConstants._SC_CLK_TCK), SystemClock.elapsedRealtime(),
+                prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0))
             synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
             check(prefs().edit().putString("cpBridgeAttemptIdentity", identity.key).commit())
             val run = identity.directory
@@ -558,13 +563,23 @@ object CarPlayBridgeBootstrapManager {
                 test "§(sha256sum ${q("$run/cold-launcher.js")} | cut -d' ' -f1)" = ${q(sha(launcher))}
             """))
             requireFreshSafety(identity)
-            launch(bundle, identity, "$run/cold-launcher.js", "$run/native-injector.log")
-            val proof = awaitResident(bundle, identity, "native", SystemClock.elapsedRealtime() + 4_000, starting = true)
+            launch(bundle, identity, "$run/cold-launcher.js", "$run/native-injector.log", coldBudget.proofDeadlineMs)
+            val proof = awaitResident(bundle, identity, "native", coldBudget.proofDeadlineMs, starting = true)
             check(CarPlayResidentProof.nativeArmed(proof) || CarPlayResidentProof.nativeInstalled(proof)) {
                 "Native resident peer not prepared before gate release"
             }
+            requireFreshSafety(identity)
+            check(CarPlayResidentProof.fresh(proof, SystemClock.elapsedRealtime(), System.currentTimeMillis())) {
+                "Native resident proof expired before gate release"
+            }
             // Only a fresh response produced after the exact CLI exited can release the gate.
-            root.run(identityGuard(identity) + "setprop $GATE " + UUID.randomUUID().toString().replace("-", ""))
+            root.run(identityGuard(identity) + CarPlaySafetyPublicationGate.warmKillCheck(
+                CarPlaySafetyPublicationGate.Key(identity.boot, identity.pid, identity.start, attemptTicket),
+                "$INPUT/safety.json") + CarPlayResidentProof.deadlineGuard(
+                coldBudget.releaseDeadlineMs, proof.firstElapsedMs) + "setprop $GATE " +
+                UUID.randomUUID().toString().replace("-", ""),
+                CarPlayResidentProof.rootTimeout(coldBudget.releaseDeadlineMs, SystemClock.elapsedRealtime()))
+            check(SystemClock.elapsedRealtime() < coldBudget.releaseDeadlineMs) { "Cold gate release completed after its deadline" }
             recoverAttempt(bundle, observe(bundle, minimal = true))
             return
         } catch (error: Exception) {
@@ -704,7 +719,9 @@ object CarPlayBridgeBootstrapManager {
 
     private fun attemptMarker(bundle: Payload, boot: String) = "$ROOT/attempts/$boot-${bundle.revision}"
 
-    private fun launch(bundle: Payload, identity: Identity, scriptPath: String, log: String) {
+    private fun launch(bundle: Payload, identity: Identity, scriptPath: String, log: String,
+        deadline: Long? = null) {
+        if (deadline != null) CarPlayResidentProof.rootTimeout(deadline, SystemClock.elapsedRealtime())
         val role = if (scriptPath.endsWith("/cold-launcher.js")) "native" else "java"
         val now = observe(bundle, skipResidentRole = role)
         check(now.id == identity)
@@ -724,8 +741,9 @@ object CarPlayBridgeBootstrapManager {
             test ! -e ${q(remote)} || exit 1
             cp ${q(supervisor.absolutePath)} ${q(remote)} || exit 1
             chown 0:0 ${q(remote)}; chmod 500 ${q(remote)}
+            ${deadline?.let { CarPlayResidentProof.deadlineGuard(it) }.orEmpty()}
             nohup setsid sh ${q(remote)} > ${q("${identity.directory}/$role-supervisor.log")} 2>&1 < /dev/null & :
-        """))
+        """), deadline?.let { CarPlayResidentProof.rootTimeout(it, SystemClock.elapsedRealtime()) } ?: 5000L)
     }
 
     private fun nativeLauncher(bundle: Payload, identity: Identity): String {
@@ -798,10 +816,10 @@ object CarPlayBridgeBootstrapManager {
     private fun awaitResident(bundle: Payload, identity: Identity, role: String, deadline: Long,
         starting: Boolean = false): CarPlayResidentProof.Sample = CarPlayResidentProof.await(
         deadline, { SystemClock.elapsedRealtime() }, { Thread.sleep(80) }
-    ) { residentSample(bundle, identity, role, starting) }
+    ) { residentSample(bundle, identity, role, starting, deadline) }
 
     private fun residentSample(bundle: Payload, identity: Identity, role: String,
-        starting: Boolean = false): CarPlayResidentProof.Sample {
+        starting: Boolean = false, deadline: Long? = null): CarPlayResidentProof.Sample {
         check(role in setOf("native", "java"))
         val launchPath = "${identity.directory}/$role-launch.json"
         val exitPath = "${identity.directory}/$role-exit.json"
@@ -844,7 +862,8 @@ object CarPlayBridgeBootstrapManager {
             printf 'launch=%s' "§cpb_launch"
             printf '\nexit=%s' "§cpb_exit"
             printf '\nreceipts_pending=%s\n' "§cpb_receipts_pending"
-        """) + "\n" + identityGuard(identity) + ":")
+        """) + "\n" + identityGuard(identity) + ":",
+            deadline?.let { CarPlayResidentProof.rootTimeout(it, SystemClock.elapsedRealtime()) } ?: 5000L)
         val values = fields(receipts)
         if (values["receipts_pending"] == "yes") {
             if (!values["launch"].isNullOrBlank()) {
@@ -868,7 +887,8 @@ object CarPlayBridgeBootstrapManager {
             .put("nonce", challenge.nonce).put("issuedElapsedMs", challenge.issuedElapsedMs).toString()
         val challengePath = "${identity.directory}/$role-residency-challenge.json"
         val responsePath = "${identity.directory}/$role-residency-response.json"
-        val responseText = root.run(identityGuard(identity) + script("""
+        val responseText = root.run(identityGuard(identity) +
+            deadline?.let { CarPlayResidentProof.deadlineGuard(it) }.orEmpty() + script("""
             printf '%s\n' ${q(packet)} > ${q("$challengePath.next")} || exit 1
             chown 1000:1000 ${q("$challengePath.next")} && chmod 400 ${q("$challengePath.next")} || exit 1
             mv ${q("$challengePath.next")} ${q(challengePath)} || exit 1
@@ -886,7 +906,8 @@ object CarPlayBridgeBootstrapManager {
               sleep 0.05
             done
             if [ -z "§cpb_response" ]; then cpb_response=CPB_RESIDENCY_PENDING; fi
-        """) + "\n" + identityGuard(identity) + "printf '%s\\n' \"\$cpb_response\"\n")
+        """) + "\n" + identityGuard(identity) + "printf '%s\\n' \"\$cpb_response\"\n",
+            deadline?.let { CarPlayResidentProof.rootTimeout(it, SystemClock.elapsedRealtime()) } ?: 5000L)
         if (responseText == "CPB_RESIDENCY_PENDING") throw CarPlayResidentProof.Pending("Fresh residency response not yet available")
         val sample = CarPlayResidentProof.checkResponse(binding, launch, exited, challenge,
             parseResidentResponse(JSONObject(responseText)), SystemClock.elapsedRealtime(), System.currentTimeMillis())
