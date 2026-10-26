@@ -658,3 +658,18 @@ Regras de contrato:
 
 - Sequência exata de inicialização em cold boot real na central.
 - Quais permissões precisam ser concedidas manualmente em cada instalação.
+
+## 2026-10-26 — Falha da saída independente CLUSTER durante navegação
+
+O registro da141 mostrou `ClusterFramePump.CapacityExceededException` às12:05:02,
+com sessão ativa e demanda de mapa preservada. A rota reiniciada pelo usuário
+voltou aLIVE às12:05:18. O erro de decoder zera `surfaceAttached`; a recuperação
+antiga tratava apenas streamsLIVE parados e ignorava esse estadoFAILED.
+
+A correção142 acrescenta recuperação limitada para erro conhecido de decoder
+apósLIVE, reusando o protocolo de desativação e confirmação autenticadaRELEASED
+antes da nova saída. Mantém limites de tentativas/backoff e cancela recuperação
+obsoleta ao trocar demanda ou ocorrer erro de ownership. Desconexão de sessão,
+app no display secundário e consumer inválido continuam impedindo saída. Não
+altera APKsOEM, fila H264, contrato de temas, geometria ou CarPlay. Validação
+compilada e física ainda pendentes enquanto o código está em revisão.

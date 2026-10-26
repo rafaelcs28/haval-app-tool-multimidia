@@ -39,6 +39,8 @@ object AndroidAutoClusterController {
     private var deliveredDemandEpoch = -1L
     private var liveSinceMs = 0L
     private var recoveryInFlight = false
+    private var recoveryDemandEpoch = -1L
+    private var decoderFailurePending = false
     private var recoveryCount = 0
     private var lastRecoveryAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -47,9 +49,17 @@ object AndroidAutoClusterController {
             val live = state == AaClusterProtocol.LIVE && wantsOutput() &&
                 AaClusterVideoHost.peekSurface()?.isValid == true
             val wasLive = surfaceAttached.getAndSet(live)
+            decoderFailurePending = AndroidAutoClusterStreamHealth.nextDecoderFailurePending(
+                decoderFailurePending, state, reason, wasLive
+            )
+            if (AndroidAutoClusterStreamHealth.shouldCancelRecovery(state, reason)) {
+                recoveryInFlight = false
+                recoveryDemandEpoch = -1L
+            }
             if (live) {
                 if (!wasLive) liveSinceMs = SystemClock.elapsedRealtime()
                 recoveryInFlight = false
+                recoveryDemandEpoch = -1L
             } else {
                 liveSinceMs = 0L
             }
@@ -254,6 +264,8 @@ object AndroidAutoClusterController {
         sessionStopSuppressed.set(false)
         liveSinceMs = 0L
         recoveryInFlight = false
+        recoveryDemandEpoch = -1L
+        decoderFailurePending = false
         recoveryCount = 0
         lastRecoveryAtMs = 0L
         detachSurface("session_stopped")
@@ -348,6 +360,10 @@ object AndroidAutoClusterController {
     private fun checkClusterStreamHealth() {
         val nowMs = SystemClock.elapsedRealtime()
         val lastFrameAtMs = AaClusterVideoHost.lastFrameElapsedRealtimeMs()
+        if (recoveryInFlight && recoveryDemandEpoch != demandEpoch.get()) {
+            recoveryInFlight = false
+            recoveryDemandEpoch = -1L
+        }
         if (AndroidAutoClusterStreamHealth.shouldResetRecoveryBudget(
                 nowMs = nowMs,
                 liveSinceMs = liveSinceMs,
@@ -387,7 +403,7 @@ object AndroidAutoClusterController {
                     recoveryCount++
                     lastRecoveryAtMs = nowMs
                     recoveryInFlight = true
-                    demandEpoch.incrementAndGet()
+                    recoveryDemandEpoch = demandEpoch.incrementAndGet()
                     deliveredGeneration = -1L
                     surfaceAttached.set(false)
                     client.setOutput(null)
@@ -399,6 +415,45 @@ object AndroidAutoClusterController {
                     )
                 }
             }
+            return
+        }
+        if (decoderFailurePending) {
+            val requested = wantsOutput()
+            if (!requested) {
+                decoderFailurePending = false
+                return
+            }
+            val output = AaClusterVideoHost.peekOutput()
+            if (!AndroidAutoClusterStreamHealth.shouldRecoverDecoderFailure(
+                    pending = true,
+                    outputRequested = requested,
+                    consumerAvailable = output?.isAvailable == true,
+                    nowMs = nowMs,
+                    lastRecoveryAtMs = lastRecoveryAtMs,
+                    recoveryCount = recoveryCount
+                )) return
+            decoderFailurePending = false
+            recoveryInFlight = true
+            recoveryCount++
+            lastRecoveryAtMs = nowMs
+            val epoch = demandEpoch.incrementAndGet()
+            recoveryDemandEpoch = epoch
+            deliveredGeneration = -1L
+            ClusterPersistentEventLogger.log(
+                "aa_cluster_decoder_failure_recovery",
+                mapOf("recovery_count" to recoveryCount, "demand_epoch" to epoch)
+            )
+            // The client waits for authenticated RELEASED before exposing any new output.
+            client.setOutput(null)
+            mainHandler.postDelayed({
+                if (recoveryDemandEpoch != epoch) return@postDelayed
+                if (demandEpoch.get() == epoch && wantsOutput() && output?.isAvailable == true) {
+                    reconcileOutput("decoder_failure_recovery")
+                } else {
+                    recoveryInFlight = false
+                    recoveryDemandEpoch = -1L
+                }
+            }, 250L)
             return
         }
         if (!surfaceAttached.get() || !wantsOutput()) return
@@ -421,7 +476,7 @@ object AndroidAutoClusterController {
         recoveryInFlight = true
         recoveryCount++
         lastRecoveryAtMs = nowMs
-        demandEpoch.incrementAndGet()
+        recoveryDemandEpoch = demandEpoch.incrementAndGet()
         deliveredGeneration = -1L
         surfaceAttached.set(false)
         AaClusterVideoHost.setLive(false)

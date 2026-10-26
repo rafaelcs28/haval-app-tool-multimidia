@@ -778,22 +778,39 @@ object CarPlayBridgeBootstrapManager {
         val supervisorPath = "${identity.directory}/$role-supervisor.sh"
         val receipts = root.run(identityGuard(identity) + script("""
             cpb_receipts_pending=no
+            cpb_startup_attested=no
             if [ ! -f ${q(launchPath)} ] || [ ! -f ${q(exitPath)} ]; then
               test ${if (admission != null) "1" else "0"} = 1 || exit 1
               if [ -e ${q(exitPath)} ] && [ ! -f ${q(launchPath)} ]; then exit 1; fi
               test "§(stat -c %u ${q(supervisorPath)})" = 0 && test "§(stat -c %a ${q(supervisorPath)})" = 500 || exit 1
               test "§(sha256sum ${q(supervisorPath)} | cut -d' ' -f1)" = ${q(admissionHash)} || exit 1
-              cpb_receipts_pending=yes
+              cpb_startup_attested=yes
             fi
+            cpb_launch=
+            cpb_exit=
             for cpb_receipt in ${q(launchPath)} ${q(exitPath)}; do
               if [ ! -e "§cpb_receipt" ]; then continue; fi
               test -f "§cpb_receipt" || exit 1
               test "§(stat -c %u "§cpb_receipt")" = 0 || exit 1
               test "§(stat -c %a "§cpb_receipt")" = 400 || exit 1
               test -s "§cpb_receipt" && test "§(wc -c < "§cpb_receipt")" -le 4096 || exit 1
+              cpb_receipt_text=§(cat "§cpb_receipt") || exit 1
+              test -n "§cpb_receipt_text" || exit 1
+              if [ "§cpb_receipt" = ${q(launchPath)} ]; then
+                cpb_launch=§cpb_receipt_text
+              else
+                cpb_exit=§cpb_receipt_text
+              fi
             done
-            printf 'launch='; if [ -f ${q(launchPath)} ]; then cat ${q(launchPath)}; fi
-            printf '\nexit='; if [ -f ${q(exitPath)} ]; then cat ${q(exitPath)}; fi
+            # Classify the checked snapshots, not the existence before supervisor attestation.
+            # The child can publish its exit while the checks above are running.
+            if [ -z "§cpb_launch" ] || [ -z "§cpb_exit" ]; then
+              test "§cpb_startup_attested" = yes || exit 1
+              cpb_receipts_pending=yes
+            fi
+            if [ -n "§cpb_exit" ] && [ -z "§cpb_launch" ]; then exit 1; fi
+            printf 'launch=%s' "§cpb_launch"
+            printf '\nexit=%s' "§cpb_exit"
             printf '\nreceipts_pending=%s\n' "§cpb_receipts_pending"
         """) + "\n" + identityGuard(identity) + ":")
         val values = fields(receipts)

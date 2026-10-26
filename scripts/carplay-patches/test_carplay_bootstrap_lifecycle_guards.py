@@ -16,6 +16,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import hashlib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -463,6 +464,110 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
     def test_grep_errors_are_distinct_from_an_absent_mapping(self):
         self.assertEqual(self.run_probe("1234", {"1234": ""}, grep_status=2),
                          "bridge-map-unknown")
+
+
+@unittest.skipUnless(os.geteuid() == 0, "Receipt DAC fixtures require root")
+class ResidentReceiptSnapshotTest(unittest.TestCase):
+    """Execute the actual local probe while an admitted child publishes its exit."""
+
+    def probe(self, *, publication="none", launch=True, exit_present=False,
+              admission=True, supervisor_mode=0o500, supervisor_uid=0,
+              bad_hash=False, receipt_mode=0o400, receipt_uid=0,
+              empty_exit=False, source=None):
+        source = BOOTSTRAP.read_text() if source is None else source
+        resident = function_source(source, "residentSample")
+        selected = re.search(r'val receipts = root.run\(identityGuard\(identity\) \+ script\("""(.*?)"""\)',
+                             resident, re.S)
+        self.assertIsNotNone(selected)
+        script = textwrap.dedent(selected.group(1))
+        with tempfile.TemporaryDirectory(prefix="impulse-receipt-snapshot-") as directory:
+            fixture = Path(directory)
+            born, end, supervisor = (fixture / name for name in ("launch.json", "exit.json", "supervisor.sh"))
+            born_text, exit_text = '{"fixture":"birth"}', '{"fixture":"exit"}'
+            supervisor.write_text("#!/bin/sh\nexit 0\n")
+            supervisor.chmod(supervisor_mode)
+            os.chown(supervisor, supervisor_uid, supervisor_uid)
+            supervisor_hash = hashlib.sha256(supervisor.read_bytes()).hexdigest()
+            if launch:
+                born.write_text(born_text)
+                born.chmod(0o400)
+            if exit_present:
+                end.write_text("" if empty_exit else exit_text)
+                end.chmod(receipt_mode)
+                os.chown(end, receipt_uid, receipt_uid)
+            # Publishing during the supervisor hash deterministically recreates the
+            # existence-check race without wall-clock sleeps or Android tooling.
+            sha = fixture / "sha256sum"
+            publish = ""
+            if publication == "during_attestation":
+                publish = ("printf '%s' " + shlex.quote("" if empty_exit else exit_text) +
+                           " > " + shlex.quote(str(end)) + "\nchmod " + oct(receipt_mode)[2:] +
+                           " " + shlex.quote(str(end)) + "\nchown " + str(receipt_uid) + ":" +
+                           str(receipt_uid) + " " + shlex.quote(str(end)) + "\n")
+            sha.write_text("#!/bin/sh\n" + publish + "exec /usr/bin/sha256sum \"$@\"\n")
+            sha.chmod(0o700)
+            if publication == "disappear_during_validation":
+                stat = fixture / "stat"
+                stat.write_text("#!/bin/sh\nif [ \"$3\" = " + shlex.quote(str(born)) +
+                                " ]; then rm -f " + shlex.quote(str(end)) +
+                                "; fi\nexec /usr/bin/stat \"$@\"\n")
+                stat.chmod(0o700)
+            replacements = {
+                "${q(launchPath)}": shlex.quote(str(born)),
+                "${q(exitPath)}": shlex.quote(str(end)),
+                "${q(supervisorPath)}": shlex.quote(str(supervisor)),
+                "${q(admissionHash)}": shlex.quote("0" * 64 if bad_hash else supervisor_hash),
+                '${if (admission != null) "1" else "0"}': "1" if admission else "0",
+            }
+            for expression, value in replacements.items():
+                script = script.replace(expression, value)
+            self.assertNotIn("${", script)
+            script = script.replace("§", "$")
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True,
+                                    env={**os.environ, "PATH": str(fixture) + ":" + os.environ["PATH"]},
+                                    timeout=5)
+            values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+            return result, values
+
+    def test_exit_published_during_attestation_is_complete_in_the_same_probe(self):
+        result, values = self.probe(publication="during_attestation")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(values, {"launch": '{"fixture":"birth"}', "exit": '{"fixture":"exit"}',
+                                  "receipts_pending": "no"})
+
+    def test_still_missing_exit_remains_pending_without_new_admission(self):
+        result, values = self.probe()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(values["receipts_pending"], "yes")
+        self.assertEqual(values["exit"], "")
+        result, _ = self.probe(admission=False)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_complete_pair_does_not_need_startup_admission(self):
+        result, values = self.probe(exit_present=True, admission=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(values["receipts_pending"], "no")
+
+    def test_exit_without_birth_and_invalid_supervisor_remain_fatal(self):
+        variants = [dict(launch=False, exit_present=True), dict(supervisor_mode=0o700),
+                    dict(supervisor_uid=1000), dict(bad_hash=True)]
+        for variant in variants:
+            with self.subTest(variant=variant):
+                result, _ = self.probe(**variant)
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_newly_published_exit_must_pass_owner_mode_and_size_checks(self):
+        for variant in [dict(receipt_mode=0o600), dict(receipt_uid=1000), dict(empty_exit=True)]:
+            with self.subTest(variant=variant):
+                result, _ = self.probe(publication="during_attestation", **variant)
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_disappearing_complete_pair_is_not_reclassified_as_startup_pending(self):
+        for admission in (False, True):
+            with self.subTest(admission=admission):
+                result, _ = self.probe(publication="disappear_during_validation",
+                                       exit_present=True, admission=admission)
+                self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

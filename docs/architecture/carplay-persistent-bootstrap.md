@@ -128,3 +128,18 @@ duas amostras frescas, dispose irreversível, nove hooks pinados e Java armado s
 obrigatórios. Fixtures de shell comprovaram o caso de saída imediata e um atraso
 artificial do supervisor; falhas de hash e de gravação impedem o exec. O preparo
 real da versão 139 após boot continua dependendo da validação na central.
+
+## 2026-10-26 — Recibos capturados durante a inicialização
+
+Na141, uma falha de prazo4s preservou quiescência/elegibilidade positivas; o
+recibo de saída0 tinha tempo36310ms anterior à falha36706ms. O código marcava
+recibos pendentes antes da leitura e podia conservar a marca mesmo quando a
+saída chegava durante a verificação. A ordem exata dentro da leitura de campo
+não foi registrada.
+
+A correção142 decide pendência usando os próprios recibos capturados após
+validar dono, modo, tamanho, supervisor e identidade. Recibos que chegam durante
+a conferência podem ser usados nessa leitura quando ambos foram validados.
+Os prazos4s/15s/330s e as provas de residência posteriores à saída permanecem
+obrigatórios; não há reinjeção, relaxamento de quiescência ou novo bloqueio deP.
+Testes e validação noMini aguardam congelamento; boot real continua separado.

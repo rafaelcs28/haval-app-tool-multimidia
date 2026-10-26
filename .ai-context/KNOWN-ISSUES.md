@@ -1,3 +1,33 @@
+## 2026-10-26 — 141 field evidence captured; 142 runtime corrections in progress
+
+Owner confirmed141 and later full AA map disappearance when leaving primary AA UI.
+Current readonly bootad748b68-f097-42b1-99e5-0aa8772113dd, OEMCarPlay7699/start3032.
+Complete 2,093,894-byte daily log prefix SHA1e2799f6... and filtered logcat saved in
+originalworkspace test-artifacts/141-aa-disappears-20261026/ with incident-summary.
+AA12:04:24LIVE ->12:05:02.622 ClusterFramePump CapacityExceededException (queue full,
+clean stream restart required), FAILED while sessionACTIVE/demandtrue. Owner route
+restartoff/on ->12:05:18.967LIVE. Failed callback clears surfaceAttached, so old
+healthloop cannot recover. Queue trigger by primary visibility is ownerreported,
+not independently proven; decoder failure and missing recovery are established.
+
+CarPlay sameboot failselapsed36706: Resident proof deadline expired: Admitted CLI
+has not completed its birth/exit receipts. preFailureSafety elapsed36428 remained
+eligibletrue/quiescenttrue. Matching nativeROOT400 birth+exit0(elapsed36310) exist;
+postfailure resident response42800/43050 ARMED/pinned/no failure; noJava launch.
+Native eligibility failure follows cancellation. Source race: initialmissingflag
+latched before attestation/read ignores exit arriving during sameprobe. Actual
+midprobe ordering is unrecorded; source race is compatible, not fieldproven.
+
+142 branchrelease/impulse-74142-runtime-recovery combines narrow independent fixes:
+AA bounded known-postLIVE decoder recovery through existing authenticated release
+ledger, demandepoch/cancellation/backoff/budget; no newOEMAPK/geometry/theme/protocol.
+CP uses validated captured receipts to decide pending; no weaker receipts/identity,
+no newinjection and unchanged4s/15s/330s budgets/Pspeedremoval. QA/tests stillpending.
+No car writes, install, reboot, reset, injection or vehiclepower operation issued.
+Owner can drive/leave; logs saved. Publication/build pending;141 remains public.
+Next freezeafterQA, sourcechecks, immutableaudit, signedMiniONLY fullJVM/Release,
+validate cert/payload, then authorized previewpublication142; owner installlater.
+
 ## Current status — 141 published/verified, owner installation and field test pending
 
 141 preserves same-attempt preparation for typedpending proofs/ARMEDbeforeSOmapping,
