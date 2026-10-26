@@ -1,18 +1,22 @@
 import json
+import os
 import re
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 import build_persistent_carplay_assets as assets
+import patch_bootstrap_injector as injector
 from cold_passthrough_controller import ENDPOINT_STATUS_PROCESS, endpoint_launcher, read_endpoint_bundle
 
 ROOT = Path(__file__).resolve().parent
 MINI_NATIVE = Path('/root/projects/haval-impulse/artifacts/carplay-namespace-2f6e6961-debug/native/libcarplay_video_bridge.so')
 HAS_COMPILER = (ROOT / 'agent/node_modules/.bin/frida-compile').exists()
+MINI_ASSET_TESTS = sys.platform == 'darwin' and os.environ.get('IMPULSE_MINI_ASSET_TESTS') == '1'
 BOOT = '12345678-abcd-4abc-8def-123456789abc'
 
 
@@ -69,6 +73,7 @@ process.stdout.write(JSON.stringify(results));
     def test_revision_digest_covers_program_profile_and_generator_changes(self):
         essential = {'cold_oem_interceptor.js', 'carplay_clean_map_endpoint.js', 'make_cold_launcher.py',
                      'impulse_residency_peer.js',
+                     'patch_bootstrap_injector.py', 'testdata/frida-injector-17.5.2-permissive.json',
                      'cold_passthrough_controller.py', 'testdata/oem-cold-profile-v3.json',
                      'testdata/android9-linker-profile.json', 'agent/package.json', 'agent/package-lock.json'}
         self.assertTrue(essential.issubset(assets.SOURCE_FILES))
@@ -124,7 +129,21 @@ process.stdout.write(JSON.stringify(results));
                 assets.build(output / 'missing.so', output)
             self.assertEqual('original', sentinel.read_text())
 
-    @unittest.skipUnless(MINI_NATIVE.exists() and HAS_COMPILER, 'Existing Mini ELF and pinned JS compiler required')
+    def test_profiled_injector_is_a_separate_hashed_asset(self):
+        self.assertEqual(1, assets.ASSET_FILES.count('cpbridge-inject'))
+        self.assertEqual({'libcarplay_video_bridge.so', 'cold-launcher-template.js',
+                          'endpoint.js', 'endpoint.js.manifest.json', 'cpbridge-inject'},
+                         set(assets.ASSET_FILES))
+        original = assets.INJECTOR.read_bytes()
+        metadata = injector.audit(original, json.loads(injector.PROFILE.read_text()))
+        self.assertEqual(assets.file_sha256(assets.INJECTOR), metadata['injectorOriginalSha256'])
+        self.assertNotEqual(metadata['injectorOriginalSha256'], metadata['injectorSha256'])
+        self.assertEqual(injector.PATCHED_SHA, metadata['injectorSha256'])
+        self.assertEqual(injector.PROFILE_ID, metadata['patchProfile'])
+        self.assertEqual(injector.POLICY_MODE, metadata['policyMode'])
+
+    @unittest.skipUnless(MINI_ASSET_TESTS and MINI_NATIVE.exists() and HAS_COMPILER,
+                         'Real Android asset generation is opt-in on the authorized Mini only')
     def test_real_assets_are_reproducible_and_bind_native_agent_and_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -134,7 +153,11 @@ process.stdout.write(JSON.stringify(results));
             directory = root / 'first/carplay_bridge'
             self.assertEqual({'manifest.json', *assets.ASSET_FILES}, {path.name for path in directory.iterdir()})
             self.assertEqual(MINI_NATIVE.read_bytes(), (directory / 'libcarplay_video_bridge.so').read_bytes())
-            self.assertEqual(assets.file_sha256(assets.INJECTOR), first['injectorSha256'])
+            self.assertEqual(assets.file_sha256(assets.INJECTOR), first['injectorOriginalSha256'])
+            self.assertEqual(injector.PATCHED_SHA, first['injectorSha256'])
+            self.assertEqual(assets.file_sha256(directory / 'cpbridge-inject'), first['injectorSha256'])
+            self.assertEqual(injector.PROFILE_ID, first['patchProfile'])
+            self.assertEqual(injector.POLICY_MODE, first['policyMode'])
             self.assertEqual(assets.INJECTOR.stat().st_size, first['injectorSize'])
             self.assertEqual(1, first['schema'])
             self.assertEqual(74136, first['versionCode'])
@@ -156,7 +179,8 @@ process.stdout.write(JSON.stringify(results));
                 self.assertEqual((directory / record['name']).read_bytes(),
                                  (root / 'second/carplay_bridge' / record['name']).read_bytes())
 
-    @unittest.skipUnless(MINI_NATIVE.exists(), 'Existing Mini ELF required')
+    @unittest.skipUnless(MINI_ASSET_TESTS and MINI_NATIVE.exists(),
+                         'Real Android asset generation is opt-in on the authorized Mini only')
     def test_failed_endpoint_build_never_publishes_partial_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)

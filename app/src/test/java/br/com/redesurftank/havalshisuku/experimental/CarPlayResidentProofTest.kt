@@ -8,9 +8,11 @@ class CarPlayResidentProofTest {
     private val ticket = "10112233-4455-6677-8899-aabbccddeeff"
     private val instance = "20112233-4455-6677-8899-aabbccddeeff"
     private val nonce = "30112233-4455-6677-8899-aabbccddeeff"
+    private val environment = CarPlayResidentProof.Environment(boot, 100, 1000, "b".repeat(64),
+        CarPlayResidentProof.PATCHED_INJECTOR_SHA, "1:123:51758352:1000:1000:0:500")
     private val binding = CarPlayResidentProof.Binding("native", boot, 1234, 5678, "74138-123456789abc-abcdef012345",
         ticket, instance, "a".repeat(64), "/data/local/tmp/impulse-carplay/runtime/$boot-1234-5678",
-        "/data/local/tmp/impulse-carplay/versions/74138-123456789abc-abcdef012345")
+        "/data/local/tmp/impulse-carplay/versions/74138-123456789abc-abcdef012345", environment, 20_000)
     private fun launch(b: CarPlayResidentProof.Binding = binding) =
         CarPlayResidentProof.Receipt(b, 2345, 6000, CarPlayResidentProof.commandSha256(b),
             commandEvidence = "declared-before-exec-v1", supervisorSha256 = CarPlayResidentProof.supervisorSha256(b))
@@ -306,7 +308,7 @@ class CarPlayResidentProofTest {
         assertTrue(shell.contains("childStartTime"))
         assertTrue(shell.contains("exitElapsedMs"))
         assertFalse(shell.contains("kill "))
-        assertEquals(1, Regex("'" + Regex.escape("${binding.payloadDirectory}/cpbridge-inject") + "'").findAll(shell).count())
+        assertEquals(1, Regex("exec '" + Regex.escape("${binding.payloadDirectory}/cpbridge-inject") + "'").findAll(shell).count())
         rejects { CarPlayResidentProof.arguments(binding, "bad'; touch /tmp/injected; '") }
         rejects { CarPlayResidentProof.bindingJson(binding.copy(revision = "bad'; touch x")) }
     }
@@ -318,6 +320,52 @@ class CarPlayResidentProofTest {
             val output = process.inputStream.bufferedReader().readText()
             assertEquals(output, 0, process.waitFor())
         } finally { file.delete() }
+    }
+
+    @Test fun preflightRequiresTheExactPatchedExecutableAndAnUnchangedFrameworkPolicyAndVersion() {
+        CarPlayResidentProof.checkPreflight(environment, environment, "17.5.2")
+        for (changed in listOf(environment.copy(bootId = ticket), environment.copy(systemServerPid = 101),
+            environment.copy(systemServerStart = 1001), environment.copy(policySha256 = "c".repeat(64)),
+            environment.copy(injectorFingerprint = "1:124:51758352:1000:1000:0:500"))) {
+            rejects { CarPlayResidentProof.checkPreflight(environment, changed, "17.5.2") }
+        }
+        rejects { CarPlayResidentProof.checkPreflight(environment, environment, "17.5.3") }
+        rejects { CarPlayResidentProof.checkEnvironment(environment.copy(injectorSha256 = CarPlayResidentProof.ORIGINAL_INJECTOR_SHA)) }
+        rejects { CarPlayResidentProof.checkEnvironment(environment.copy(injectorFingerprint = "1:123:51758352:1000:1000:1000:500")) }
+        rejects { CarPlayResidentProof.checkEnvironment(environment.copy(injectorFingerprint = "1:123:51758352:1000:1000:0:700")) }
+    }
+
+    @Test fun environmentIsBoundByTheSupervisorWithoutChangingTheResidencyWireSchemaOrArguments() {
+        val changed = binding.copy(environment = environment.copy(policySha256 = "c".repeat(64)))
+        assertNotEquals(CarPlayResidentProof.supervisorSha256(binding), CarPlayResidentProof.supervisorSha256(changed))
+        assertEquals(CarPlayResidentProof.arguments(binding, "${binding.payloadDirectory}/cpbridge-inject"),
+            CarPlayResidentProof.arguments(changed, "${changed.payloadDirectory}/cpbridge-inject"))
+        assertFalse(CarPlayResidentProof.bindingJson(binding).contains("policySha256"))
+        rejects { CarPlayResidentProof.checkLaunch(changed, launch()) }
+        rejects { CarPlayResidentProof.checkBinding(binding.copy(execDeadlineMs = 0)) }
+    }
+
+    @Test fun supervisorRechecksTheApprovedEnvironmentAndDeadlineAfterTheBirthBarrierBeforeExec() {
+        val shell = CarPlayResidentProof.supervisor(binding)
+        val barrier = shell.indexOf("test \"\$(cat '" + binding.runtimeDirectory + "/native-exec-")
+        val enforcement = shell.indexOf("cat /sys/fs/selinux/enforce", barrier)
+        val deadline = shell.indexOf("test \"\$cpb_now\" -gt 0", enforcement)
+        val exec = shell.indexOf("exec '${binding.payloadDirectory}/cpbridge-inject'")
+        assertTrue(barrier >= 0 && enforcement > barrier && deadline > enforcement && exec > deadline)
+        assertTrue(shell.contains(environment.policySha256))
+        assertTrue(shell.contains(environment.injectorFingerprint))
+        assertTrue(shell.contains("/preflight/${boot}-${binding.revision}/success.json"))
+        assertFalse(shell.contains("sha256sum '${binding.payloadDirectory}/cpbridge-inject'"))
+        assertFalse(shell.contains("setenforce"))
+    }
+
+    @Test fun preflightReceiptIsDeterministicAndSeparateFromTheAgentBinding() {
+        val receipt = CarPlayResidentProof.preflightReceipt(environment, binding.revision)
+        assertTrue(receipt.contains("\"policyMode\":\"permissive-existing-policy-v1\""))
+        assertTrue(receipt.contains("\"state\":\"success\""))
+        assertTrue(receipt.contains(environment.injectorSha256))
+        assertEquals(receipt, CarPlayResidentProof.preflightReceipt(environment, binding.revision))
+        rejects { CarPlayResidentProof.preflightReceipt(environment, "invalid'; touch /tmp/x") }
     }
 
 }

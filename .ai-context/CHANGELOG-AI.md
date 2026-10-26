@@ -1,3 +1,12 @@
+## 2026-10-26 — 145 loader correction, field validation pending
+
+First private candidate passed quiescence but lost Android framework during stock
+injector startup. Vehicle OFF confirmed, automatic preparation paused. Added a
+separate reproducible injector asset that preserves the existing permissive policy,
+plus one-shot preflight and framework/policy identity guards. Original Frida resource,
+OEM CP/AA patches, themes and cold deadlines preserved. 56 portable tests passed;
+two Mini-only fixture tests skipped. Full JVM/build/physical validation pending.
+
 ## 2026-10-26 — 145 same-sample preparation diagnostics, source frozen
 
 Owner requested ready-to-test145 and GWM ON/install/reboot/OFF; openairconfirmed.

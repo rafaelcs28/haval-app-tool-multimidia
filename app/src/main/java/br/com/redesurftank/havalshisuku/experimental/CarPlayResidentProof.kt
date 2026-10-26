@@ -5,6 +5,88 @@ import java.security.MessageDigest
 /** Pure validation and shell generation. No process restart or callback teardown. */
 internal object CarPlayResidentProof {
     class Pending(message: String) : IllegalStateException(message)
+    const val POLICY_MODE = "permissive-existing-policy-v1"
+    const val PATCH_PROFILE = "frida-17.5.2-android-arm64-init-tailcall-ret-v1"
+    const val ORIGINAL_INJECTOR_SHA = "bdfa97cdd84ca678c5e5eea9eb6625c9528acff32b4f9413f1e5c58a3d15222e"
+    const val PATCHED_INJECTOR_SHA = "32f7c702ea36c9ad1d09d2dc9e21de5f4994d98f855c4e51db01bcc6d0fd496a"
+    const val INJECTOR_SIZE = 51_758_352L
+    data class Environment(val bootId: String, val systemServerPid: Int, val systemServerStart: Long,
+        val policySha256: String, val injectorSha256: String, val injectorFingerprint: String)
+
+    fun checkEnvironment(environment: Environment) = with(environment) {
+        require(uuid.matches(bootId) && systemServerPid > 0 && systemServerStart > 0) { "Invalid preflight framework identity" }
+        require(digest.matches(policySha256) && injectorSha256 == PATCHED_INJECTOR_SHA) { "Unverified preflight policy or injector" }
+        require(injectorFingerprint.matches(Regex("[0-9]+:[0-9]+:$INJECTOR_SIZE:[0-9]+:[0-9]+:0:500"))) {
+            "Preflight injector is not the immutable root-owned executable"
+        }
+    }
+
+    fun checkPreflight(before: Environment, after: Environment, version: String) {
+        checkEnvironment(before); checkEnvironment(after)
+        require(before == after && version == "17.5.2") { "Injector probe changed its environment or version" }
+    }
+
+    fun preflightDirectory(boot: String, revision: String): String {
+        require(uuid.matches(boot) && revision.matches(Regex("[1-9][0-9]{0,9}-[a-f0-9]{12}-[a-f0-9]{12}")))
+        return "/data/local/tmp/impulse-carplay/preflight/$boot-$revision"
+    }
+
+    fun preflightReceipt(environment: Environment, revision: String): String {
+        checkEnvironment(environment); preflightDirectory(environment.bootId, revision)
+        return """{"schema":1,"state":"success","version":"17.5.2","revision":"$revision","bootId":"${environment.bootId}","systemServerPid":${environment.systemServerPid},"systemServerStart":${environment.systemServerStart},"policySha256":"${environment.policySha256}","injectorSha256":"${environment.injectorSha256}","injectorFingerprint":"${environment.injectorFingerprint}","policyMode":"$POLICY_MODE","patchProfile":"$PATCH_PROFILE"}"""
+    }
+
+    /** Read only; the expensive executable hash is used before the cold gate, never by a child guard. */
+    fun environmentSnapshot(injector: String): String = """
+        test "§(cat /sys/fs/selinux/enforce)" = 0 && test "§(getenforce)" = Permissive || exit 1
+        test "§(getprop sys.boot_completed)" = 1 || exit 1
+        cpb_env_boot=§(cat /proc/sys/kernel/random/boot_id) || exit 1
+        cpb_env_pid=§(pidof system_server) || exit 1
+        case "§cpb_env_pid" in ''|*[!0-9]*) exit 1;; esac
+        cpb_env_stat=§(cat /proc/§cpb_env_pid/stat) || exit 1
+        cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail
+        case "§1" in Z|X|x) exit 1;; esac
+        shift 19; cpb_env_start=§1
+        cpb_env_policy=§(sha256sum /sys/fs/selinux/policy | cut -d' ' -f1) || exit 1
+        cpb_env_injector=§(sha256sum ${quote(injector)} | cut -d' ' -f1) || exit 1
+        cpb_env_fingerprint=§(stat -c '%d:%i:%s:%Y:%Z:%u:%a' ${quote(injector)}) || exit 1
+        test "§(cat /proc/sys/kernel/random/boot_id)" = "§cpb_env_boot" || exit 1
+        test "§(pidof system_server)" = "§cpb_env_pid" || exit 1
+        cpb_env_stat=§(cat /proc/§cpb_env_pid/stat) || exit 1
+        cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail; shift 19
+        test "§1" = "§cpb_env_start" && test "§(cat /sys/fs/selinux/enforce)" = 0 || exit 1
+        printf 'env_boot=%s\nenv_system_pid=%s\nenv_system_start=%s\nenv_policy_sha=%s\nenv_injector_sha=%s\nenv_injector_fingerprint=%s\n' "§cpb_env_boot" "§cpb_env_pid" "§cpb_env_start" "§cpb_env_policy" "§cpb_env_injector" "§cpb_env_fingerprint"
+    """.trimIndent().replace('§', '$') + "\n"
+
+    fun environmentStateGuard(environment: Environment, injector: String): String {
+        checkEnvironment(environment)
+        return """
+            test "§(cat /sys/fs/selinux/enforce)" = 0 && test "§(getenforce)" = Permissive || exit 1
+            test "§(getprop sys.boot_completed)" = 1 || exit 1
+            test "§(cat /proc/sys/kernel/random/boot_id)" = ${quote(environment.bootId)} || exit 1
+            test "§(pidof system_server)" = ${environment.systemServerPid} || exit 1
+            cpb_env_stat=§(cat /proc/${environment.systemServerPid}/stat) || exit 1
+            cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail
+            case "§1" in Z|X|x) exit 1;; esac
+            shift 19; test "§1" = ${environment.systemServerStart} || exit 1
+            test "§(sha256sum /sys/fs/selinux/policy | cut -d' ' -f1)" = ${quote(environment.policySha256)} || exit 1
+            test "§(stat -c '%d:%i:%s:%Y:%Z:%u:%a' ${quote(injector)})" = ${quote(environment.injectorFingerprint)} || exit 1
+            test "§(pidof system_server)" = ${environment.systemServerPid} || exit 1
+            cpb_env_stat=§(cat /proc/${environment.systemServerPid}/stat) || exit 1
+            cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail; shift 19
+            test "§1" = ${environment.systemServerStart} || exit 1
+            test "§(cat /sys/fs/selinux/enforce)" = 0 || exit 1
+        """.trimIndent().replace('§', '$') + "\n"
+    }
+
+    fun environmentGuard(environment: Environment, revision: String, injector: String): String {
+        val receipt = preflightDirectory(environment.bootId, revision) + "/success.json"
+        return environmentStateGuard(environment, injector) + """
+            test -f ${quote(receipt)} && test ! -L ${quote(receipt)} || exit 1
+            test "§(stat -c %u ${quote(receipt)})" = 0 && test "§(stat -c %a ${quote(receipt)})" = 400 || exit 1
+            test "§(cat ${quote(receipt)})" = ${quote(preflightReceipt(environment, revision))} || exit 1
+        """.trimIndent().replace('§', '$') + "\n"
+    }
 
     data class ColdGateBudget(val proofDeadlineMs: Long, val releaseDeadlineMs: Long)
 
@@ -59,7 +141,7 @@ internal object CarPlayResidentProof {
     data class Binding(val role: String, val bootId: String, val targetPid: Int,
         val targetStartTime: Long, val revision: String, val ticket: String,
         val instance: String, val scriptSha256: String, val runtimeDirectory: String,
-        val payloadDirectory: String) {
+        val payloadDirectory: String, val environment: Environment, val execDeadlineMs: Long) {
         val scriptPath get() = if (role == "native") "$runtimeDirectory/cold-launcher.js" else "$payloadDirectory/endpoint.js"
     }
     data class Receipt(val binding: Binding, val childPid: Int, val childStartTime: Long,
@@ -81,6 +163,9 @@ internal object CarPlayResidentProof {
     }
 
     fun checkBinding(binding: Binding) = with(binding) {
+        checkEnvironment(environment)
+        require(environment.bootId == bootId) { "Residency and preflight boots differ" }
+        require(execDeadlineMs > 0) { "Residency launch deadline missing" }
         require(role in setOf("native", "java")) { "Unknown residency role" }
         require(uuid.matches(bootId) && uuid.matches(ticket) && uuid.matches(instance)) { "Invalid residency UUID" }
         require(targetPid > 0 && targetStartTime in 1..9_007_199_254_740_991L) { "Invalid residency target" }
@@ -207,6 +292,8 @@ internal object CarPlayResidentProof {
               done
               test "§(stat -c %u ${quote(release)})" = 0 && test "§(stat -c %a ${quote(release)})" = 400 || exit 96
               test "§(cat ${quote(release)})" = ${quote(binding.instance)} || exit 97
+              ${environmentGuard(binding.environment, binding.revision, "${binding.payloadDirectory}/cpbridge-inject")}
+              ${deadlineGuard(binding.execDeadlineMs)}
               exec $args
             ) > ${quote("$run/$role-injector.log")} 2>&1 < /dev/null &
             cpb_child=§!

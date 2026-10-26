@@ -1,3 +1,91 @@
+## Current 145 correction — source reviewed; vehicle OFF; signed Mini build next
+
+The first private 145 failed during native injector initialization: the SELinux
+policy was reloaded just before system_server died. Correlation is established;
+causality remains unproven. Quiescence itself passed. Automatic preparation was
+paused through the app receiver and GWM OFF was freshly confirmed at 23:07 UTC.
+No public 145 or preview update exists.
+
+The new candidate keeps the original Frida resource and derives a separate
+bootstrap injector on the Mini. A pinned four-byte initializer tail-call patch
+omits the redundant policy reload on this already-permissive device. Admission
+requires kernel permissive mode, a one-shot version probe, unchanged policy and
+framework identity, and the existing full native/Java resident proofs. It never
+changes SELinux mode. Full physical attach and new-boot READY remain unverified.
+See docs/architecture/carplay-injector-policy-preservation.md.
+
+Focused portable verification: 56 passed and two Mini-only asset fixtures skipped;
+OEM regression lock and diff whitespace checks passed. New JVM tests await Mini.
+All source/QA agents are frozen. Build only an audited immutable commit via the
+signed Mini queue, version 74145 / 1.0.0.74.145-preview. Verify the exact derived
+asset, original resource, production certificate, OEM assets and unchanged themes.
+
+User authorizes GWM ON -> install -> central reboot -> validate -> GWM OFF and
+explicitly confirmed open air. Build and transport first. Preparation is currently
+disabled: enable only after corrected installation, let current-boot preparation
+complete before requesting the full reboot, then validate automatic preparation
+on the new boot. Always confirm GWM OFF even if field validation fails. The owner
+will connect the iPhone later; do not request an interactive test now.
+
+## LIVE145 UPDATE — VEHICLE NOW OFF; pause verified; investigate loader/policy reload
+
+GWM OFF accepted23:06:55Z, freshengine0confirmed23:07:00Z(updateTime1793056019047).
+Candidate145installed exactSHA fb1302e6...; rebootnewd550617b/appinitial3131 then12317.
+Quiescence PASSED (retainedDCMvalid,TX45NULL,BTabsent). Nativeinjectchild9802start4250,
+target9354start3887 exited4at44780ms: The connection is closed. No cold-state,
+ARMED/residency/READY. Full systemrootcause read showsSELinuxpolicyreload42.77s,
+then system_serverdead/zygoteSIGKILL43.59s, Androidframeworkrestart(app/systemUI died).
+NO evidence OOM (2+GBfree). Relation toattach/policyreload NOTyetproven; don'tblameOEM
+ambientlightingcrashstormor changeunrelatedvehiclecontrols. The kernelCMDLINE and
+getenforce proveSELinuxalreadyPERMISSIVE beforeloader. PossibleunneededFridaautopolicy
+reload; investigatepinnedFrida17.5.2source/artifactoffline, notglobalsetenforcechange.
+
+To avoid nextboot repeatingfailedattach, usedOWN appDUMPreceiver explicitextra_enabled
+false and clearedpersist.haval.carplay.experimental_cold_hook; both VERIFIED.
+Disabledfeaturepreservesothercarapps/CPnative; no reinjection/reset/retry ofthisboot.
+Old heading 'VEHICLE ON' below is SUPERSEDED. VehicleOFF, do notclaimready/complete.
+UserstillwantsFINISHready145 thenauthorizedON/install/reboot/OFF whenactualfixready.
+Currentopenairconfirmationpersists; no needrepeatapproval unlessconditionschange.
+Private145evidencefirst-field-outcome.json/pause-preparation.txt/power.jsonl and
+system-before-death.txt/system-root-cause-read.txt preserveallknownfacts. No public145
+release/previewupdate yet; installedcandidate145needsfixbeforeuserCarPlaytest.
+
+## LIVE145 — VEHICLE ON; installed/reboot requested; MUST GWM OFF before ending
+
+GWM ON accepted22:55:41Z, fresh hyEngSts1 confirmed22:56:07Z. Current locationOPENAIR
+confirmed, owner-authorized GWM ON/install/reboot/OFF. RootMcu freshP/0 confirmed
+beforeinstallation and reboot. Signed145 built/validated/installed Success, actual
+installedSHA fb1302e6e11328fdf2f60c134893a784daf0d459e3ac830dbddab6167ce3a832,
+81666859bytes; UID10052, codePathZmjZohvGtPA19W_dXZj78g==, appPID16161 afterinstall.
+One fullcentralreboot requested~22:59:23Z with guardoldboot90869374-54bf-4cb9-a973-3c778ffd6dda,
+package145and onetimemarker/data/local/tmp/impulse-74145-reboot-90869374.
+Do NOT repeatreboot. Waitnewboot thenread productionq_diagnostics/currentproof.
+
+Mini source4cbd9336fd735b3c864d7bcaf0e6b3b4b180413c, jobhaval-impulse-133-4cbd9336fd735b3c-20261026T224758Z-13419 SUCCESS6m11s finished22:54:26Z.
+FullJVM/Release/R8/lint/prodcert allPASS;4newJVM+43portable. Buildcontrolsdigest
+f6becec6833767d6934be6f9f08015e32b0d6c8bbd334011d31576cbeeb70b05;
+archiveSHA d30fdae826ee3d25a3c9dfd323d529e7125b1ea2d29a1aac6b9cf6a471246276.
+Fetched originalworkspace artifacts/impulse-74145-readiness-release-mini/;
+validator145PASS, cert5efec0..., payload74145-fa1a127f9224-f04082d4143e,
+OEM AA/CPassets andthemesunchanged. Sourcebranchrelease/impulse-74145-carplay-readiness.
+
+ExactAPK144->145delta only4MB compressed transferred via reviewedtemporaryHTTPS,
+fulltargethashverified BEFOREPM andinstalledbaseAPKverifiedafter. Private evidence
+originalworkspace test-artifacts/release-74145-20261026/ has transport-plan.json,
+installation-receipt.json, mini-job.json, source-audit.json, power.jsonl, requests,
+parkingreceipts. stage/data/local/tmp/impulse-74145-reviewed-fb1302e6e113.
+Currentpublicpreview144; no145publicrelease yet. Readiness NOTconfirmed.
+
+Next NOW: afterreboot use field-read.sh through readonlycompressedhelper, save new
+boot/read and privateq_reasons. IfREADY mustmatchnewboot/PID/start/rev/freshnative9hooks
+andJavaarmed, notold137READY/142failure. Ifstillblocked, exact145qfields nowavailable;
+finish actualprep with evidence, neverbypassunknown state/claimsuccess. Then GWMoff
+helper node originalworkspace/test-artifacts/release-74145-20261026/gwm_power.js off
+(cwd/opt/gwm-bridge/haval-h6-mqtt), verify freshengine0. ALWAYS OFF evenifprepfailed.
+Cleanup onlyownpublictemporarytransportdir afteruse. Publish145actualverifiedAPK +
+publicdownloadverify/previewLAST oncefieldoutcomehonest; publictagbase048749ae,
+neverpushprivatehistorypublic. OwnerwilltestiPhonelater, nophoneinteractionnow.
+
 ## ACTIVE145 — source FROZEN and QA clear; signed Mini build next, then field/OFF
 
 User explicitly requests FINISH/GEnERATE ready-to-test CarPlay145; after completion,

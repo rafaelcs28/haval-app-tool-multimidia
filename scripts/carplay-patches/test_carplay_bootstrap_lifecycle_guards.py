@@ -27,6 +27,7 @@ QUIESCENCE = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers
 BLUETOOTH = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBluetoothQuiescence.kt"
 INTERCEPTOR = ROOT / "scripts/carplay-native-analysis/cold_oem_interceptor.js"
 PROFILE = ROOT / "scripts/carplay-native-analysis/testdata/oem-cold-profile-v3.json"
+RESIDENT = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayResidentProof.kt"
 
 
 def function_source(source, name):
@@ -77,6 +78,37 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertNotRegex(self.frida, r"\b(?:pkill|killall)\b")
         self.assertIn("if (serverExists && injectExists)", self.frida)
         self.assertIn("if (!injectExists)", self.frida)
+
+    def test_bootstrap_uses_only_the_profiled_asset_and_attests_it_before_probe(self):
+        extract = function_source(self.bootstrap, "extractPayload")
+        self.assertNotIn("R.raw.fridainject", extract)
+        for field in ("policyMode", "patchProfile", "injectorOriginalSha256", "injectorSha256", "injectorSize"):
+            self.assertIn('"' + field + '"', extract)
+        self.assertIn('"cpbridge-inject"', extract)
+        self.assertIn("files.length() == expectedFiles.size", extract)
+        self.assertIn('.toSet() == expectedFiles', extract)
+        install = function_source(self.bootstrap, "installPayload")
+        self.assertIn('chown 0:0 ${q("$temporary/cpbridge-inject")}', install)
+        tick = function_source(self.bootstrap, "tick")
+        self.assertLess(tick.index("installPayload(bundle)"), tick.index("ensureInjectorPreflight(bundle)"))
+        preflight = function_source(self.bootstrap, "ensureInjectorPreflight")
+        self.assertLess(preflight.index('mkdir ${q(directory)} || exit 1'), preflight.index(' --version'))
+        existing = preflight.split('"existing" -> {', 1)[1].split('"admitted" -> {', 1)[0]
+        self.assertNotIn(' --version', existing)
+        self.assertNotIn('rm ', existing)
+        self.assertIn('preflightReceipt(before, bundle.revision)', existing)
+        self.assertIn('checkPreflight(before, after, version)', preflight)
+        self.assertIn('mv ${q("$receipt.next")} ${q(receipt)}', preflight)
+
+    def test_environment_guard_is_in_child_after_barrier_and_before_exec(self):
+        proof = RESIDENT.read_text()
+        child = proof.split('while [ ! -f ${quote(release)} ]; do', 1)[1].split('cpb_child=§!', 1)[0]
+        self.assertLess(child.index('cat ${quote(release)}'), child.index('environmentGuard(binding.environment'))
+        self.assertLess(child.index('environmentGuard(binding.environment'), child.index('deadlineGuard(binding.execDeadlineMs)'))
+        self.assertLess(child.index('deadlineGuard(binding.execDeadlineMs)'), child.index('exec $args'))
+        state_guard = proof.split('fun environmentStateGuard(', 1)[1].split('fun environmentGuard(', 1)[0]
+        self.assertNotIn('sha256sum ${quote(injector)}', state_guard)
+        self.assertNotRegex(proof, r'\bsetenforce\b|>\s*/sys/fs/selinux/load')
 
     def test_automatic_owner_is_checked_before_mapping_probe(self):
         body = function_source(self.manager, "deferPatchProcessReload")
@@ -491,6 +523,77 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
     def test_grep_errors_are_distinct_from_an_absent_mapping(self):
         self.assertEqual(self.run_probe("1234", {"1234": ""}, grep_status=2),
                          "bridge-map-unknown")
+
+
+class InjectorEnvironmentShellGuardTest(unittest.TestCase):
+    """Run the exact read-only pre-exec shell with every kernel path redirected."""
+
+    def run_guard(self, mutation=None):
+        proof = RESIDENT.read_text()
+        selected = re.search(r'fun environmentStateGuard\(.*?return """(.*?)"""', proof, re.S)
+        self.assertIsNotNone(selected)
+        body = textwrap.dedent(selected.group(1)).replace('§', '$')
+        with tempfile.TemporaryDirectory(prefix='impulse-loader-environment-') as temporary:
+            directory = Path(temporary)
+            boot = '12345678-abcd-4abc-8def-123456789abc'
+            system_pid, start = 4242, 123
+            for name, contents in (('boot', boot), ('enforce', '0'), ('policy', 'policy-original'),
+                                   ('injector', 'synthetic data; never executed'),
+                                   ('stat', f'{system_pid} (system_server) S ' + '0 ' * 18 + str(start))):
+                (directory / name).write_text(contents)
+            executable = directory / 'injector'
+            executable.chmod(0o500)
+            fingerprint = subprocess.run(['stat', '-c', '%d:%i:%s:%Y:%Z:%u:%a', str(executable)],
+                                         check=True, capture_output=True, text=True).stdout.strip()
+            expected_policy = hashlib.sha256((directory / 'policy').read_bytes()).hexdigest()
+            for name, result in (('pidof', str(system_pid)), ('getenforce', 'Permissive'), ('getprop', '1')):
+                tool = directory / name
+                tool.write_text('#!/bin/sh\nprintf \'%s\\n\' ' + shlex.quote(result) + '\n')
+                tool.chmod(0o700)
+            substitutions = {
+                '${quote(environment.bootId)}': shlex.quote(boot),
+                '${environment.systemServerPid}': str(system_pid),
+                '${environment.systemServerStart}': str(start),
+                '${quote(environment.policySha256)}': shlex.quote(expected_policy),
+                '${quote(environment.injectorFingerprint)}': shlex.quote(fingerprint),
+                '${quote(injector)}': shlex.quote(str(executable)),
+                '/sys/fs/selinux/enforce': str(directory / 'enforce'),
+                '/sys/fs/selinux/policy': str(directory / 'policy'),
+                '/proc/sys/kernel/random/boot_id': str(directory / 'boot'),
+            }
+            for expression, value in substitutions.items():
+                body = body.replace(expression, value)
+            body = body.replace(f'/proc/{system_pid}/stat', str(directory / 'stat'))
+            self.assertNotIn('${quote(', body)
+            self.assertNotIn('/proc/', body)
+            self.assertNotIn('/sys/', body)
+            if mutation is not None:
+                mutation(directory)
+            result = subprocess.run(['sh', '-c', body], text=True, capture_output=True, timeout=5,
+                                    env={**os.environ, 'PATH': str(directory) + ':' + os.environ['PATH']})
+            return result
+
+    def test_matching_environment_is_accepted(self):
+        result = self.run_guard()
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_mode_unknown_policy_changed_framework_restart_and_changed_asset_fail_closed(self):
+        variants = {
+            'enforcing': lambda p: (p / 'enforce').write_text('1'),
+            'unknown_mode': lambda p: (p / 'enforce').write_text(''),
+            'getenforce_mismatch': lambda p: (p / 'getenforce').write_text('#!/bin/sh\necho Enforcing\n'),
+            'boot_changed': lambda p: (p / 'boot').write_text('other-boot'),
+            'not_booted': lambda p: (p / 'getprop').write_text('#!/bin/sh\necho 0\n'),
+            'multiple_system_servers': lambda p: (p / 'pidof').write_text('#!/bin/sh\necho 4242 4243\n'),
+            'system_server_reused': lambda p: (p / 'stat').write_text('4242 (system_server) S ' + '0 ' * 18 + '124'),
+            'system_server_dead': lambda p: (p / 'stat').write_text('4242 (system_server) Z ' + '0 ' * 18 + '123'),
+            'system_server_unknown': lambda p: (p / 'stat').write_text(''),
+            'policy_changed': lambda p: (p / 'policy').write_text('different-policy'),
+            'asset_changed': lambda p: (p / 'injector').chmod(0o400),
+        }
+        for label, mutation in variants.items():
+            with self.subTest(case=label):
+                self.assertNotEqual(0, self.run_guard(mutation).returncode)
 
 
 @unittest.skipUnless(os.geteuid() == 0, "Receipt DAC fixtures require root")

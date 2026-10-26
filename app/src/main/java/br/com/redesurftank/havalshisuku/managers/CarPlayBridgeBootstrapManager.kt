@@ -9,7 +9,6 @@ import android.system.OsConstants
 import android.util.Log
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.BuildConfig
-import br.com.redesurftank.havalshisuku.R
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
@@ -53,6 +52,8 @@ object CarPlayBridgeBootstrapManager {
     @Volatile private var safety = Safety()
     private var payload: Payload? = null
     private var installedRevision: String? = null
+    private var preflightEnvironment: CarPlayResidentProof.Environment? = null
+    private var preflightRevision: String? = null
     private var verifiedServiceBoot: String? = null
     private var nextReadyCheckAt = 0L
     private var lastWaitSignature: String? = null // worker-only; log evidence changes, not every poll
@@ -198,6 +199,7 @@ object CarPlayBridgeBootstrapManager {
         if (SystemClock.elapsedRealtime() < nextReadyCheckAt) return
         val bundle = payload ?: extractPayload().also { payload = it }
         installPayload(bundle)
+        if (!ensureInjectorPreflight(bundle)) return
         val observed = try { observe(bundle) } catch (error: Exception) {
             val boot = runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()
             if (prefs().getString("cpBridgeAttemptPhase", "") == "preparing" &&
@@ -350,18 +352,90 @@ object CarPlayBridgeBootstrapManager {
         check(metadata.getString("remoteDirectory") == directory)
         val source = File(app.filesDir, "carplay-bridge/$revision").apply { mkdirs() }
         val files = metadata.getJSONArray("files")
+        check(metadata.getString("policyMode") == CarPlayResidentProof.POLICY_MODE &&
+            metadata.getString("patchProfile") == CarPlayResidentProof.PATCH_PROFILE)
+        check(metadata.getString("injectorOriginalSha256") == CarPlayResidentProof.ORIGINAL_INJECTOR_SHA &&
+            metadata.getString("injectorSha256") == CarPlayResidentProof.PATCHED_INJECTOR_SHA &&
+            metadata.getLong("injectorSize") == CarPlayResidentProof.INJECTOR_SIZE)
+        val expectedFiles = setOf("libcarplay_video_bridge.so", "cold-launcher-template.js", "endpoint.js",
+            "endpoint.js.manifest.json", "cpbridge-inject")
+        check(files.length() == expectedFiles.size && (0 until files.length())
+            .map { files.getJSONObject(it).getString("name") }.toSet() == expectedFiles)
         for (index in 0 until files.length()) {
             val entry = files.getJSONObject(index)
             val name = entry.getString("name")
             check(name.matches(Regex("[a-zA-Z0-9_.-]+")))
+            if (name == "cpbridge-inject") check(entry.getString("sha256") == metadata.getString("injectorSha256") &&
+                entry.getLong("size") == metadata.getLong("injectorSize"))
             copyVerified(File(source, name), entry.getString("sha256"), entry.getLong("size")) {
                 app.assets.open("carplay_bridge/$name")
             }
         }
-        copyVerified(File(source, "cpbridge-inject"), metadata.getString("injectorSha256"), metadata.getLong("injectorSize")) {
-            app.resources.openRawResource(R.raw.fridainject)
-        }
         return Payload(revision, directory, metadata, source)
+    }
+
+    private fun parseEnvironment(values: Map<String, String>): CarPlayResidentProof.Environment =
+        CarPlayResidentProof.Environment(requireNotNull(values["env_boot"]),
+            requireNotNull(values["env_system_pid"]).toInt(), requireNotNull(values["env_system_start"]).toLong(),
+            requireNotNull(values["env_policy_sha"]), requireNotNull(values["env_injector_sha"]),
+            requireNotNull(values["env_injector_fingerprint"])).also(CarPlayResidentProof::checkEnvironment)
+
+    /** A root-owned admission marker precedes the one probe. A pending/crashed probe is never rerun. */
+    private fun ensureInjectorPreflight(bundle: Payload): Boolean {
+        if (preflightEnvironment != null && preflightRevision == bundle.revision) return true
+        return try {
+            val before = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+            val directory = CarPlayResidentProof.preflightDirectory(before.bootId, bundle.revision)
+            val receipt = "$directory/success.json"
+            val admission = root.run(script("""
+                test ! -L ${q("$ROOT/preflight")} || exit 1
+                mkdir -p ${q("$ROOT/preflight")} || exit 1
+                chown 0:0 ${q("$ROOT/preflight")}; chmod 700 ${q("$ROOT/preflight")}
+                test ! -L ${q(directory)} || exit 1
+                if [ -e ${q(directory)} ]; then
+                  test -d ${q(directory)} && test "§(stat -c %u ${q(directory)})" = 0 && test "§(stat -c %a ${q(directory)})" = 700 || exit 1
+                  echo existing
+                else
+                  mkdir ${q(directory)} || exit 1
+                  chown 0:0 ${q(directory)} && chmod 700 ${q(directory)} || exit 1
+                  echo admitted
+                fi
+            """)).trim()
+            val environment = when (admission) {
+                "existing" -> {
+                    val text = root.run(script("""
+                        test -f ${q(receipt)} && test ! -L ${q(receipt)} || exit 1
+                        test "§(stat -c %u ${q(receipt)})" = 0 && test "§(stat -c %a ${q(receipt)})" = 400 || exit 1
+                        test "§(wc -c < ${q(receipt)})" -le 4096 || exit 1
+                        cat ${q(receipt)}
+                    """))
+                    check(text == CarPlayResidentProof.preflightReceipt(before, bundle.revision)) { "Preflight receipt no longer matches the environment" }
+                    root.run(CarPlayResidentProof.environmentGuard(before, bundle.revision, bundle.injector))
+                    before
+                }
+                "admitted" -> {
+                    val version = root.run(CarPlayResidentProof.environmentStateGuard(before, bundle.injector) +
+                        "${q(bundle.injector)} --version", 15_000).trim()
+                    val after = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+                    CarPlayResidentProof.checkPreflight(before, after, version)
+                    root.run(CarPlayResidentProof.environmentStateGuard(after, bundle.injector) + script("""
+                        test ! -e ${q(receipt)} || exit 1
+                        printf '%s\n' ${q(CarPlayResidentProof.preflightReceipt(after, bundle.revision))} > ${q("$receipt.next")} || exit 1
+                        chown 0:0 ${q("$receipt.next")} && chmod 400 ${q("$receipt.next")} && mv ${q("$receipt.next")} ${q(receipt)} || exit 1
+                    """))
+                    after
+                }
+                else -> error("Unknown preflight admission")
+            }
+            preflightEnvironment = environment
+            preflightRevision = bundle.revision
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "Injector preflight unavailable; no cold attempt admitted", error)
+            report("blocked", "Verificação do carregador pendente ou interrompida; sessão preservada")
+            nextReadyCheckAt = SystemClock.elapsedRealtime() + 30_000
+            false
+        }
     }
 
     private fun copyVerified(file: File, digest: String, size: Long, input: () -> InputStream) {
@@ -388,8 +462,6 @@ object CarPlayBridgeBootstrapManager {
         if (installedRevision == bundle.revision) return
         val files = bundle.manifest.getJSONArray("files")
         val entries = (0 until files.length()).map { files.getJSONObject(it) }.toMutableList()
-        entries += JSONObject().put("name", "cpbridge-inject")
-            .put("sha256", bundle.manifest.getString("injectorSha256"))
         fun verify(directory: String) = entries.joinToString("; ") {
             script("""test "§(sha256sum ${q(directory + "/" + it.getString("name"))} | cut -d' ' -f1)" = ${q(it.getString("sha256"))} || exit 1""")
         }
@@ -404,7 +476,7 @@ object CarPlayBridgeBootstrapManager {
             "if [ -d ${q(bundle.directory)} ]; then ${verify(bundle.directory)}; else " +
             "mkdir ${q(temporary)} || exit 1; $copies; ${verify(temporary)}; " +
             "chown -R 1000:1000 ${q(temporary)}; chmod 500 ${q(temporary)}; chmod 400 ${q(temporary)}/*; " +
-            "chmod 500 ${q("$temporary/cpbridge-inject")}; mv ${q(temporary)} ${q(bundle.directory)} || exit 1; fi; " +
+            "chown 0:0 ${q("$temporary/cpbridge-inject")}; chmod 500 ${q("$temporary/cpbridge-inject")}; mv ${q(temporary)} ${q(bundle.directory)} || exit 1; fi; " +
             "mkdir -p ${q(INPUT)}; chown ${Process.myUid()}:1000 ${q(INPUT)}; chmod 750 ${q(INPUT)}", 15_000)
         installedRevision = bundle.revision
     }
@@ -536,7 +608,8 @@ object CarPlayBridgeBootstrapManager {
                     cpb_stat=§(cat /proc/${original.pid}/stat) || exit 1
                     cpb_tail=§{cpb_stat##*) }; set -- §cpb_tail; shift 19
                     test "§1" = ${original.start} || exit 1
-                """) + "\n" + CarPlaySafetyPublicationGate.warmKillCheck(
+                """) + "\n" + CarPlayResidentProof.environmentGuard(requireNotNull(preflightEnvironment),
+                    bundle.revision, bundle.injector) + identityGuard(original) + CarPlaySafetyPublicationGate.warmKillCheck(
                     CarPlaySafetyPublicationGate.Key(original.boot, original.pid, original.start, attemptTicket),
                     "$INPUT/safety.json") + "kill -15 ${original.pid}\n")
             }
@@ -737,13 +810,18 @@ object CarPlayBridgeBootstrapManager {
             check(now.cold == true && now.mappedPath == null && !now.cpVisual && !now.aaVisual)
             requireFreshSafety(identity)
         }
+        val execDeadline = deadline ?: minOf(prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0),
+            SystemClock.elapsedRealtime() + 15_000)
+        check(execDeadline > SystemClock.elapsedRealtime()) { "Injector launch deadline expired" }
+        check(prefs().edit().putLong("cpBridgeExecDeadline_${identity.key}_$role", execDeadline).commit())
         val binding = residentBinding(bundle, identity, role, UUID.randomUUID().toString())
         check(binding.scriptPath == scriptPath && log == "${identity.directory}/$role-injector.log") { "Unexpected resident launch path" }
         val supervisor = File(requireNotNull(context).filesDir, "carplay-$role-supervisor-${identity.key}.sh")
         supervisor.writeText(CarPlayResidentProof.supervisor(binding))
         startingBindings["${identity.key}/$role"] = binding
         val remote = "${identity.directory}/$role-supervisor.sh"
-        root.run(identityGuard(identity) + script("""
+        root.run(identityGuard(identity) + CarPlayResidentProof.environmentGuard(binding.environment,
+            bundle.revision, bundle.injector) + script("""
             test -d ${q(attemptMarker(bundle, identity.boot))} || exit 1
             test ! -e ${q(remote)} || exit 1
             cp ${q(supervisor.absolutePath)} ${q(remote)} || exit 1
@@ -768,7 +846,8 @@ object CarPlayBridgeBootstrapManager {
         val scriptHash = if (role == "native") sha(nativeLauncher(bundle, identity).toByteArray(Charsets.UTF_8))
             else sha(File(bundle.source, "endpoint.js"))
         return CarPlayResidentProof.Binding(role, identity.boot, identity.pid, identity.start,
-            bundle.revision, ticket, instance, scriptHash, identity.directory, bundle.directory)
+            bundle.revision, ticket, instance, scriptHash, identity.directory, bundle.directory,
+            requireNotNull(preflightEnvironment), prefs().getLong("cpBridgeExecDeadline_${identity.key}_$role", 0))
             .also(CarPlayResidentProof::checkBinding)
     }
 
@@ -787,7 +866,9 @@ object CarPlayBridgeBootstrapManager {
         return CarPlayResidentProof.Binding(strictString(value, "role"), strictString(value, "bootId"),
             strictPid(value, "targetPid"), strictLong(value, "targetStartTime"), strictString(value, "revision"),
             strictString(value, "ticket"), strictString(value, "instance"), strictString(value, "scriptSha256"),
-            strictString(value, "runtimeDirectory"), strictString(value, "payloadDirectory")).also(CarPlayResidentProof::checkBinding)
+            strictString(value, "runtimeDirectory"), strictString(value, "payloadDirectory"),
+            requireNotNull(preflightEnvironment), prefs().getLong("cpBridgeExecDeadline_${strictString(value, "bootId")}-${strictPid(value, "targetPid")}-${strictLong(value, "targetStartTime")}_${strictString(value, "role")}", 0))
+            .also(CarPlayResidentProof::checkBinding)
     }
     private fun parseReceipt(value: JSONObject, exited: Boolean) = CarPlayResidentProof.Receipt(
         parseBinding(value), strictPid(value, "childPid"), strictLong(value, "childStartTime"),

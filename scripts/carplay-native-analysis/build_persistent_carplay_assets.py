@@ -14,6 +14,7 @@ from cold_passthrough_controller import (
     read_endpoint_bundle, sha256_bytes,
 )
 from make_cold_launcher import build_launcher
+from patch_bootstrap_injector import build as build_bootstrap_injector
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parents[1]
@@ -23,6 +24,8 @@ ELIGIBILITY_PATH = "/data/local/tmp/impulse-carplay-input/safety.json"
 SOURCE_FILES = (
     "build_persistent_carplay_assets.py",
     "build_endpoint_agent.py",
+    "patch_bootstrap_injector.py",
+    "testdata/frida-injector-17.5.2-permissive.json",
     "cold_passthrough_controller.py",
     "make_cold_launcher.py",
     "impulse_residency_peer.js",
@@ -49,6 +52,7 @@ ASSET_FILES = (
     "cold-launcher-template.js",
     "endpoint.js",
     "endpoint.js.manifest.json",
+    "cpbridge-inject",
 )
 
 
@@ -87,8 +91,8 @@ def build(native_lib: Path, output: Path, version_code: int = 74136) -> dict:
         raise ValueError("Use a fresh generated-assets destination; existing assets are never overwritten")
     native = read_native_library(native_lib)
     native_sha = sha256_bytes(native)
-    injector_sha = file_sha256(INJECTOR)
-    source_sha = source_sha256(injector_sha)
+    original_injector_sha = file_sha256(INJECTOR)
+    source_sha = source_sha256(original_injector_sha)
     revision = f"{version_code}-{native_sha[:12]}-{source_sha[:12]}"
     remote_directory = "/data/local/tmp/impulse-carplay/versions/" + revision
     bridge_path = remote_directory + "/libcarplay_video_bridge.so"
@@ -105,6 +109,7 @@ def build(native_lib: Path, output: Path, version_code: int = 74136) -> dict:
         stage = Path(temporary)
         (stage / ASSET_FILES[0]).write_bytes(native)
         (stage / ASSET_FILES[1]).write_text(launcher, encoding="utf-8")
+        injector_metadata = build_bootstrap_injector(INJECTOR, stage / "cpbridge-inject")
         build_endpoint(stage / "endpoint.js", bridge_path=bridge_path, status_mode=ENDPOINT_STATUS_PROCESS)
         read_endpoint_bundle(stage / "endpoint.js", bridge_path=bridge_path, status_mode=ENDPOINT_STATUS_PROCESS)
         manifest = {
@@ -117,8 +122,7 @@ def build(native_lib: Path, output: Path, version_code: int = 74136) -> dict:
             "runtimeDirectoryTemplate": runtime_template,
             "eligibilityPath": ELIGIBILITY_PATH,
             "sourceSha256": source_sha,
-            "injectorSha256": injector_sha,
-            "injectorSize": INJECTOR.stat().st_size,
+            **injector_metadata,
             "files": [
                 {"name": name, "sha256": file_sha256(stage / name), "size": (stage / name).stat().st_size}
                 for name in ASSET_FILES
