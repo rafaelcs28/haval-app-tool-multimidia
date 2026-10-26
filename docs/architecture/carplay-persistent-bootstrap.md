@@ -182,3 +182,9 @@ not evidence that the gate is open. Existing old processes beyond the bound fail
 without an extra restart. Root calls consume remaining time; fork, nonce and
 release have same-shell clock guards. Release also requires current identity,
 fresh quiescence and fresh resident samples. The actual OEM gate is unchanged.
+
+The144 source (`1740a814`) passed the complete JVM/Release suite on the authorized
+Mini; six new budget tests and the existing residency tests passed. The signed APK
+and public updater were independently verified. Remote installation retained the
+old process and kernel boot; activation and actual resident readiness remain
+pending the owner's reboot. Installation alone is not proof of an armed bridge.

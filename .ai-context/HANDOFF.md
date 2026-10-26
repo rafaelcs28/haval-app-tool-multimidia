@@ -1,3 +1,69 @@
+## Current handoff — 144 PUBLISHED + INSTALLED; owner reboot/activation pending
+
+Latest owner explicitly authorized remote INSTALL while moving because passenger
+coordinates; owner will reboot central when parked. Installation completed with
+PackageManager Success/exit0 using `pm install -r --dont-kill`. Installed registry
+is74144/UID10052; actual installed baseAPK size/hash match validated Mini artifact.
+App PID3133 preserved, kernel boot2044eaa6-bf1c-4bd2-8fb1-280e2365d80a unchanged.
+No full central reboot, manual app restart, callback injection, test, radio/task
+change or GWMpower command was issued. Old process/code remains running; do NOT
+claim144 active/READY yet. Owner reboot is the next step. No more install needed.
+
+143 current photo was genuine genericlocalservices; live EXACTvisibility helper
+failed OEM AWK while basics worked. Replaced parser with POSIX shell/grep and
+validated actual helper/guard on car BEFORE build:12cases real/hidden/visibleD0D3/
+ambiguous/empty/error/nonzero correct, no segfault. Same visual/quiescence/identity
+rules retained. Current143 safetyquiescent=false was separate and not bypassed.
+
+Recovered HISTORICAL142boot43a1bd0a: CLIexit0elapsed39160; valid resident proof was
+rejected after caller4s deadline at41086 while prior safety was eligible/quiettrue.
+Original nonce/samples had been overwritten later; exact initial timing unknown.
+144 uses conservative processbirth+9s proof/+10s release, actual sysconfHZ and cap
+by overall attempt; same-shell time checks before fork/nonce/release, fresh identity/
+quiescence/first sample and strict postreturn deadlines. No actual gate extension,
+extra restart or accepting late proof. Old cold-attach beyond bound fails honestly.
+Kernel AT_CLKTCK=100 read from target auxv. Receipt/hash/disposal/9hooks+Java guards
+remain. V9 through30e301fb, AA recovery, themes and bridge contracts unchanged.
+
+Independent source QA cleared both fixes.11visibility+31lifecycle Python/OEMlock/
+diffcheck PASS. Full JVM including22residentproof tests(sixnew), Release/R8/lint/
+production signing PASS on authorized Mini ONLY. Exact source1740a814c5df447836f2c9443504e0efeed41868,
+privatebranchrelease/impulse-74144-bootstrap-compat. Jobhaval-impulse-133-1740a814c5df4478-20261026T214752Z-30212 SUCCESS5m42s/83tasks,
+finished2026-10-26T21:53:50Z. Buildcontrols8 digestffb51eeec752bacd6ee930f17d21b9ba1115bb8833e0d293b6788f2ef68f4f22;
+archiveSHA82b77c177831b6697f0cc616692fdff4d00713c67974f2ce5907fe572415eb86. No coordinator Android/Gradle/Kotlin build.
+Fetched NEW artifacts/impulse-74144-bootstrap-compat-release-mini/; queueSHAverified.
+Actual code/name/cert/payload/controller/helper/feature markers/Default48 and
+unchanged OEMAA assets verified. APK74144/1.0.0.74.144-preview, 81650471bytes,
+SHA256 4807d148affc0e08ba610be52edcfd72a0c7dfcb7550ddab689fe69ca5c90326
+Production cert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0 unchanged. Payload74144-c8569e79199f-b54fa7c36655.
+Validator originalworkspace test-artifacts/install-133-persistent-20261025/validate_144.py.
+
+PUBLIC release https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.144-preview (release424812302).
+APK/SHA256SUMS/build-info.json only; public distribution tag uses048749ae, private
+source/history remainprivateorigin only. Whole unauthenticated publicAPK download
+and GitHubdigest match MiniAPK. TEN unchanged public theme bytes rechecked; one
+transient TLS reset recovered on retry. Default48/Minimalist8/ApexGT16 remain at
+artifactcommitb8662d26a4285f15f66d68bcee5ec7c7310ac1f0. OnlyAFTERAPKverify did fixed
+previewmanifest143→144 update; exact public bytes verified. Stable channel unchanged.
+Private publication evidence originalworkspace test-artifacts/publish-74144-20261026/.
+
+Remote downloaded exact publicAPK to/data/local/tmp/impulse-74144-reviewed-4807d148affc/,
+verified bytes/SHA before PM. Installer one-shot directory and rc/log retained;
+no retry/duplicate PM, no data clear/uninstall. Current installedAPK:
+/data/app/br.com.redesurftank.havalshisuku-OfCK4t6eVrN430kf-tXtjw==/base.apk
+Its exact SHA above proves production-signed artifact. Private plan/scripts/rc/
+package registry/PID/boot/hash receipts originalworkspace test-artifacts/install-74144-20261026/.
+Live diagnostics/packs/auxv evidence test-artifacts/143-local-services-20261026/;
+use run_readonly_compressed.py for large reads (legacy octal long-line packs failed).
+
+Next: tell owner144installed; reboot central when parked with phones disconnected,
+open Impulse and wait"Bridge preparada para esta sessão" before connecting iPhone
+USB/test. After owner reboot obtain NEWboot/currentattempt/ReadyRevision and fresh
+native+Java receipts; historical137READY and142failure must not be adopted. No more
+install or root restart now. Activation/nativeJNI/CarPlay map firstframe stillPENDING,
+not implied by package install or visibility test. If waiting, use precise144state
+and records, not another speculative build or repeated P/disconnection loop.
+
 ## ACTIVE — 144 compatibility fix frozen; install authorized, owner will reboot later
 
 Latest user explicitly authorized remote APK INSTALL NOW despite movement because

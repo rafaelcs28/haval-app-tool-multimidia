@@ -1,3 +1,14 @@
+## 2026-10-26 — 144 published, verified and remotely installed
+
+Fixed OEM visibility reader compatibility and initial proof budget within the
+conservative processbirth/gate bound. Exact reader passed on central.42Python tests,
+independent QA and full Mini JVM/Release/signature passed. Public APK/OTA verified.
+Installed74144 with PM Success and exact installedAPK hash4807d148affc0e08ba610be52edcfd72a0c7dfcb7550ddab689fe69ca5c90326.
+Same appPID3133 and kernelboot preserved using --dont-kill. Owner explicitly allowed
+installation during movement; no fullcentral reboot/test/injection/power command.
+Owner reboot when parked activates144; actual READY/JNI/map remains pending.
+CurrentHANDOFF contains source1740a814, build/public/install receipts and next steps.
+
 ## 2026-10-26 — 143 published and verified
 
 Integrated Netseek v9 through30e301fb and fixed HUD RPM bar colour application.
