@@ -294,6 +294,16 @@ Theme interactions occur via the global `window.Android` namespace and standard 
 | **Multi-Display** | `launchApp(packageName, displayId)` | JS → Host | Reserved compatibility surface; direct theme requests are blocked. |
 | **Multi-Display** | `killApp(packageName)` | JS → Host | Reserved compatibility surface; direct theme requests are blocked. |
 
+The app's optional `clusterShowNavigation` preference controls the theme's turn-by-turn
+card and defaults to enabled. When disabled, reads/subscriptions/pushes of
+`app.navigation.directions` return the existing inactive JSON; the raw source remains
+available to HUD and radar. Switching visibility re-publishes the current directions,
+and theme delivery deduplicates the effective visible value so a hide/show change is
+not lost when the raw JSON stays identical. Other telemetry and old theme methods keep
+their existing behavior. Default and Minimalist also expose a scoped
+`show_navigation_card` option (`showNavigationCard` state), default true, which hides
+only their navigation card and retains their independent radar alerts.
+
 Additive Android Auto CLUSTER telemetry (v1.0, no contract bump):
 
 - `app.androidauto.session` — `stopped` \| `active` from Autolink GET_LINK_STATUS 3/7/8.

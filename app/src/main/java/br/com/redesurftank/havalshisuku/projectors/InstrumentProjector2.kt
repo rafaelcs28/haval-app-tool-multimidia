@@ -29,6 +29,8 @@ import br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapCoordinator
 import br.com.redesurftank.havalshisuku.experimental.CarPlayClusterHostPolicy
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySecondaryClusterHost
 import br.com.redesurftank.havalshisuku.managers.AndroidAutoClusterController
+import br.com.redesurftank.havalshisuku.managers.AndroidAutoTelemetryKeys
+import br.com.redesurftank.havalshisuku.bridge.ThemeNavigationDirectionsPolicy
 import br.com.redesurftank.havalshisuku.managers.ClusterBackgroundSync
 import br.com.redesurftank.havalshisuku.managers.ServiceManager
 import br.com.redesurftank.havalshisuku.managers.VehiclePropertyReader
@@ -1747,9 +1749,20 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             // hidden or the main screen is "off", we still want the
             // WebView's internal state to stay current so it's correct
             // the moment visibility returns.
+            // A visibility toggle re-publishes the same raw directions. Compare the value
+            // the theme may see so off/on reaches JS immediately without changing the raw
+            // bus or the directions consumed by HUD/radar. Other telemetry keeps raw dedup.
+            val dedupValue = if (key == AndroidAutoTelemetryKeys.DIRECTIONS) {
+                ThemeNavigationDirectionsPolicy.valueForTheme(
+                        key,
+                        value,
+                        AndroidAutoClusterController.navigationShownOnTheme(),
+                        AndroidAutoClusterController.INACTIVE_DIRECTIONS_JSON
+                )
+            } else value
             val previous = lastSentValues[key]
-            if (previous == value) return
-            lastSentValues[key] = value
+            if (previous == dedupValue) return
+            lastSentValues[key] = dedupValue
 
             // Sport 0.16.44 consumes these rapidly-changing values through the legacy control()
             // channel. Keep only the latest sample inside one 30 fps frame so the UI Handler is

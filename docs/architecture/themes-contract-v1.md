@@ -229,3 +229,17 @@ Handshake constraint: CLUSTER must be advertised before the AAP session starts. 
 - Building Default but forgetting APK raw/assets paths leaves the car on stale HTML.
 - Building an OTA theme but not pushing `Themes/v1.0/` means the catalog never sees the update.
 - On case-insensitive disks, never introduce a parallel `DOCS/` folder beside `docs/`.
+
+## Optional turn-by-turn card visibility (2026-10-26 integration)
+
+Default1.4.48 and Minimalist1.0.8 retain the global AC focus API (bridge1.0.2),
+add a default-enabled scoped navigation-card option, and preserve the current layout.
+The app-wide option masks only the theme-facing directions read/push, using the
+existing inactive JSON. It does not change the raw navigation stream used by HUD,
+radar or projection. Effective-value dedup permits immediate off/on for an unchanged
+raw snapshot. No bridge methods or telemetry keys were removed or renamed; contract
+v1.0 and legacy Sport behavior remain compatible. ApexGT1.0.16 is unchanged.
+
+These rebuilt packages belong to the integration branch until a new release is
+requested. The published140 APK and its matching artifact-only catalogue remain
+frozen; do not distribute integration packages under their old version numbers.

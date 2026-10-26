@@ -1,3 +1,40 @@
+## Current handoff — Netseek v9 source integration, Android Debug validation next
+
+Latest request2026-10-26: "Teve update na v9 do netseek. Veja e puxa". Integrate
+source on integration/netseek-v9-20261026, based on published140/private8bf470b3.
+No new version number or release APK requested. Keep published140 APK/OTA and its
+matching publicthemes-preview catalogue frozen. No car commands or installation.
+
+Fetched and true-Git-merged Netseek v9 exact0fe2969c94faf3ee485222a8a619613abd1f53b8,
+old incorporatedancestor5ccd91e29bd2eafe651d4c072e13e59567801f49. Four commits:
+fbae25f1/f9a2c857: HUD nextturn default1km, larger2line trip, Sempre chevron follows
+road/softturnangles. Existing stored thresholds retained; HUDmodel also serves
+CarPlay but localtextOnly/unknownmaneuver guard retained.
+34eb92c6: optional global themeTBTcard control and scopedDefault/Minimalist option,
+both defaultenabled; onlytheme-facing directions become inactive, rawHUD/radar
+unchanged. 0fe2969c: afterturn route ends atnext realjunction (min5m, max120m,
+driveways ignored) rather than inventing path through an unknownnextturn.
+
+Resolved six conflicts by normal source regeneration and keeping BOTH localtextOnly
+and upstreamsoftturn tests. Preserve140PR165 OEMbuttons, PR166focus/bridge1.0.2,
+private-source/publiccompiledcatalog boundary and allCarPlaybootstrap/workflows.
+Defaultadvanced1.4.47→1.4.48, Minimalist1.0.7→1.0.8; ApexGT1.0.16 unchanged.
+NormalNodebuilds of both themes and aggregate npmcheck PASS, including46focuscases.
+IndependentQA confirmed6source/dist/APK/catalog byte-parity groups.
+
+Mapper found/fixed a real upstream integration bug: republishingidenticalrawJSON
+was dropped by InstrumentProjector2dedup BEFOREThemeBridge masking. Newpure
+ThemeNavigationDirectionsPolicy centralizes themevalue; dedup compares that while
+forwarding originalraw payload toexistingbridge/HUD/radar. FiveJVM regressions cover
+samepayload on/off/on, duplicates, hiddenupdates/latestrestore, initialread, realHUD
+arbiter andunrelatedkeys. No newlisteners/lifecycle. Backcompatreview+CarPlayguard
+PASS; fullJVM awaits authorizedMacMiniDebug ONLY, not local Kotlin/Gradle.
+
+Next: commit audited merge, Mini Debug/fullJVM, inspectresult/artifacts, updatefinal
+handoff andpush integrationbranch toPRIVATEorigin rafaelcs28/haval-impulse. Do not
+publish a newAPK or update publicthemes/OTA as part of sourcepull. PhysicalHUD/map/
+newtoggle integration remains untested. Published140 remains last verified release.
+
 ## Current handoff — 140 PUBLISHED: PR165/166, matching themes and OTA verified
 
 Latest request: "Da pra puxar e gerar140?" COMPLETED. Owner installs himself;

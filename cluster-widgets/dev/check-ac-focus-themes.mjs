@@ -138,7 +138,7 @@ for (const focus of ['temp', 'fan']) {
     }
 }
 assert(minimalist.includes("window.removeEventListener('cluster-ac-focus-bridge-ready', rehydrateMockAcFocus);"));
-for (const [name, version] of [['default', '1.4.47'], ['minimalist', '1.0.7'], ['ApexGT', '1.0.16']]) {
+for (const [name, version] of [['default', '1.4.48'], ['minimalist', '1.0.8'], ['ApexGT', '1.0.16']]) {
     const manifest = read(`source/v1.0/${name}/theme.xml`);
     assert(manifest.includes(`<version>${version}</version>`));
     assert(manifest.includes('<minBridgeVersion>1.0.2</minBridgeVersion>'));

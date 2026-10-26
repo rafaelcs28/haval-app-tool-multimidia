@@ -1,3 +1,9 @@
+## 2026-10-26 — Integrate four newer Netseek v9 commits
+
+- True merge upstream5ccd91e2→0fe2969c onto140 integrationbranch: HUD arrows/range/trip, optionalthemeTBTcard toggle, route-tail junction bound. Preserved OEMbuttons/ACfocus/catalog and localCarPlay textOnly guard.
+- Resolved generated/test conflicts via source builds, retaining both testpaths and advancing Default48/Minimalist8; aggregate Node suite and independentbyteparity pass.
+- Fixed upstream identical-directions dedup issue so globaltheme card toggle applies immediately while rawHUD/radar stay unchanged. Added five JVM regressions; MiniDebug/fullJVM next. No release or vehicle action.
+
 ## 2026-10-25 — 140 signed, published and fully verified
 
 - Exact source3dcbc3b1: full JVM/signedRelease/R8/lint passed on authorizedMini in5m47s/83tasks. APK74140 SHA-256 5588b006d48a0192e0bcf37483daa41a3d476662c0e560595a71e8f6488e7dea, 81616399 bytes, production certificate unchanged.
