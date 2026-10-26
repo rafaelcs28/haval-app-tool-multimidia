@@ -37,6 +37,7 @@ BOOTSTRAP_SOURCE_FILES = (
     "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeBootstrapManager.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBridgeQuiescence.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayBluetoothQuiescence.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/managers/CarPlayQuiescenceReading.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBootstrapRoot.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBridgeBootstrapPolicy.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlaySafetyPublicationGate.kt",

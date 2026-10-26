@@ -1,3 +1,44 @@
+## ACTIVE145 — source FROZEN and QA clear; signed Mini build next, then field/OFF
+
+User explicitly requests FINISH/GEnERATE ready-to-test CarPlay145; after completion,
+GWM turnON, install, central reboot, validate and GWM turnOFF. CURRENT OPEN AIR
+confirmed by user. Do not request these approvals again. No GWM/car action in145yet;
+lastconfirmedvehicleOFF. Minimize powered time: build/validate/transport BEFORE ON.
+
+Branchrelease/impulse-74145-carplay-readiness fromf691cad0 includes latestv9edc0cc61.
+Source frozen, independentQA clear.145 adds same-sample readDetailed diagnostics
+through EXISTING DCM/BT readers, preserves Boolean admission/firmware/binds/TX/
+shortcircuits/windows. New private Reading/Reason and bounded numeric/bool factmaps,
+no names/MAC/serial/path. Manager publishes samequiet/safety, logs q_ fields with
+stable dedup, unknownrecord UI no longer claims activephone. No Frida diagnostic
+agent, newcallbacks, recovery, P/speed change, AA/theme/resolution/contractchange.
+New Reading included in source hash and Gradle inputs; version74145preview.
+43 portable tests(32lifecycle+11visibility), OEMlock/diffcheck PASS;4newJVM diagnostics
+tests await Mini. Source review cleared; no knownblockingbug; actualREADY unproven.
+
+Next immutablecommit/sourceaudit/buildcontrols review (only145version+newinput),
+exactallowlist and SIGNED RELEASE145 viaMiniONLY. Validate actualproductioncert/
+version/hash/payload/unchangedOEMassets. Prefer private temporary HTTPS byte-exact
+144->145 transport to install candidate BEFORE final publicOTA. No public145yet;
+previewcurrently144. Public release/version promotion only after exactartifactchecks,
+and describe fieldreadiness honestly. Use new currentboot facts if stillwaiting;
+finish actualprep beforeclaiming ready. Owner will iPhone test later, not now.
+
+Operation evidence originalworkspace test-artifacts/release-74145-20261026/ includes
+explicitauthorization/location, GWM on/off helper NOTRUN, validate_145.py. Fresh cloud
+powerstatus/correctconfiguredvehicle and freshlocalP/0beforeinstall/reboot. One powerON,
+onePackageinstall/reboot ifsuccessful, then ALWAYS GWMoff verification evenifprepfailed.
+Telnet100.111.14.79:23; helpers install-74144-20261026/run_authorized_script.py and
+143-local-services-20261026/run_readonly_compressed.py. Legacycollectlongline truncates.
+
+Delta builder (noAndroidbuild/repack/sign) originalworkspace
+ test-artifacts/install-133-persistent-20261025/build_transport_delta.py creates exact
+MiniAPKbytes with full localbytecomparison. Old144APKsource/hash known4807d148..., remote
+/data/local/tmp/impulse-74144-reviewed-4807d148affc/app.apk or registeredbaseAPK hashverify.
+PreviousHTTPSmetadata transport-https.json samefolder; publicroot/var/lib/loca-driver-downloads.
+Use new randomtransportdir, onlycompressedAPKliterals; validate full targetSHA beforePM.
+No earlier unsafe diagnostic prototype may be executed. Agentfiles FROZEN, noneediting.
+
 ## Current handoff — latest v9 integrated and Mini Debug/JVM PASS
 
 Owner requested latest Netseekv9 commits. Fetched exact branch feature/new-screen-enhancements-v9

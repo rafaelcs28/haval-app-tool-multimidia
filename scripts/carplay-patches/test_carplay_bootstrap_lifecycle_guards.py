@@ -412,7 +412,7 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
 
     def test_retained_records_require_independent_profiled_physical_bluetooth_proof(self):
         source = QUIESCENCE.read_text()
-        self.assertIn("CarPlayBluetoothQuiescence.read(context, online.retainedAddresses)", source)
+        self.assertIn("CarPlayBluetoothQuiescence.readDetailed(context, online.retainedAddresses)", source)
         self.assertIn("activeEmpty != true -> null", source)
         bluetooth = BLUETOOTH.read_text()
         self.assertIn('APK_SHA256 = "c99e49b47704e610c044ab01aa530ca451784e9e78885b11cad1c1f45518eac0"', bluetooth)
@@ -420,7 +420,7 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertIn("started - current.at < SETTLE_MS", bluetooth)
         self.assertIn("for (profile in 0..4)", bluetooth)
         self.assertIn("call(binder, 14, 1", bluetooth)
-        self.assertIn("if (before != after) return null", bluetooth)
+        self.assertIn("if (before != after) return finish(null, CarPlayQuiescenceReason.BT_DEVICE_SET_CHANGED)", bluetooth)
         self.assertIn("val addresses = before + retained", bluetooth)
         self.assertIn("devices(binder, 13, -1)", bluetooth)
         self.assertIn("call(binder, 4, 0", bluetooth)
@@ -429,6 +429,33 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertNotRegex(bluetooth, r"\bLog\.")
         self.assertNotIn("getUsbSerialNumber", source)
         self.assertNotIn("getWifiAddr", source)
+
+    def test_detailed_diagnostics_reuse_one_observation_without_authorizing_safety(self):
+        source = QUIESCENCE.read_text()
+        bluetooth = BLUETOOTH.read_text()
+        self.assertIn("fun read(context: Context): Boolean? = readDetailed(context).quiet", source)
+        self.assertIn("fun read(context: Context, retainedAddresses: Set<String>): Boolean? = readDetailed(context, retainedAddresses).quiet", bluetooth)
+        detailed = source.split("internal fun readDetailed", 1)[1].split("private fun requestBinding", 1)[0]
+        self.assertEqual(detailed.count("readOnlineDevicesEmpty("), 1)
+        self.assertEqual(detailed.count("readActiveProjectionsEmpty("), 1)
+        self.assertEqual(detailed.count("CarPlayBluetoothQuiescence.readDetailed("), 1)
+        self.assertIn("!online.absentOrRetained -> false", detailed)
+        self.assertIn("online.retainedAddresses.isEmpty() -> true", detailed)
+        self.assertIn("activeEmpty != true -> null", detailed)
+        self.assertIn("radioEmpty == false || activeEmpty == false -> false", detailed)
+        self.assertIn("radioEmpty == true && activeEmpty == true -> true", detailed)
+        self.assertIn("if (fresh || observed == false) observed else null", detailed)
+
+        publish = function_source(self.bootstrap, "publishSafety")
+        self.assertEqual(publish.count("CarPlayBridgeQuiescence.readDetailed("), 1)
+        self.assertNotIn("CarPlayBridgeQuiescence.read(", publish)
+        self.assertIn("val quiet = reading.quiet", publish)
+        eligibility = publish.split("val eligible =", 1)[1].split("val packet =", 1)[0]
+        self.assertIn("quiet == true", eligibility)
+        self.assertIn("System.currentTimeMillis() - beginWall in 0..2500", eligibility)
+        self.assertIn("SystemClock.elapsedRealtime() - beginElapsed in 0..2500", eligibility)
+        self.assertNotIn("diagnostics", eligibility)
+        self.assertNotIn("reading.", eligibility)
 
     def test_absent_host_is_clear(self):
         self.assertEqual(self.run_probe("", {}, pidof_status=1), "bridge-map-clear")

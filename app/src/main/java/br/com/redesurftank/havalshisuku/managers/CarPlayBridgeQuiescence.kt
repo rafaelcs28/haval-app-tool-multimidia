@@ -50,27 +50,45 @@ object CarPlayBridgeQuiescence {
     private var firmwareCheck: FirmwareCheck? = null
 
     /** Call only from the background publisher; binding is posted without waiting for it. */
-    fun read(context: Context): Boolean? {
+    fun read(context: Context): Boolean? = readDetailed(context).quiet
+
+    internal fun readDetailed(context: Context): CarPlayQuiescenceReading {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             synchronized(stateLock) { window.reset() }
-            return null
+            return CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.MAIN_THREAD)
         }
         return synchronized(readLock) {
+            val diagnostics = linkedMapOf<String, Any>()
             requestBinding(context.applicationContext)
-            val service = synchronized(stateLock) { boundService } ?: return@synchronized null
+            val service = synchronized(stateLock) { boundService } ?: return@synchronized CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.DCM_BINDER_UNAVAILABLE)
             if (!verifyFirmware(context, service.epoch)) {
                 synchronized(stateLock) { window.reset() }
-                return@synchronized null
+                return@synchronized CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.DCM_FIRMWARE_UNVERIFIED)
             }
             val startedAt = SystemClock.elapsedRealtime()
-            val online = readOnlineDevicesEmpty(service.binder)
-            val activeEmpty = readActiveProjectionsEmpty(service.binder)
+            val online = readOnlineDevicesEmpty(service.binder, diagnostics)
+            val activeEmpty = readActiveProjectionsEmpty(service.binder, diagnostics)
+            diagnostics["dcm_online_result_known"] = online != null
+            diagnostics["dcm_active_result_known"] = activeEmpty != null
+            var bluetooth: CarPlayQuiescenceReading? = null
             val radioEmpty = when {
                 online == null -> null
                 !online.absentOrRetained -> false
                 online.retainedAddresses.isEmpty() -> true
                 activeEmpty != true -> null
-                else -> CarPlayBluetoothQuiescence.read(context, online.retainedAddresses)
+                else -> CarPlayBluetoothQuiescence.readDetailed(context, online.retainedAddresses)
+                    .also { bluetooth = it }.quiet
+            }
+            bluetooth?.diagnostics?.forEach { (key, value) ->
+                if (key != "reason") diagnostics[key] = value
+            }
+            val sourceReason = when {
+                online?.absentOrRetained == false -> CarPlayQuiescenceReason.DCM_RECORD_NOT_RETAINED
+                activeEmpty == false -> CarPlayQuiescenceReason.DCM_ACTIVE_PROJECTION
+                bluetooth != null -> CarPlayQuiescenceReason.valueOf(bluetooth!!.diagnostics.getValue("reason") as String)
+                online == null -> CarPlayQuiescenceReason.DCM_ONLINE_REPLY_UNKNOWN
+                activeEmpty == null -> CarPlayQuiescenceReason.DCM_ACTIVE_PROJECTION_UNKNOWN
+                else -> CarPlayQuiescenceReason.QUIET
             }
             val completedAt = SystemClock.elapsedRealtime()
             val observed = when {
@@ -81,13 +99,22 @@ object CarPlayBridgeQuiescence {
             synchronized(stateLock) {
                 if (boundService !== service || !service.binder.isBinderAlive) {
                     window.reset()
-                    null
+                    CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.DCM_BINDER_CHANGED, diagnostics)
                 } else {
                     // Long/blocking transactions cannot contribute stale absence evidence.
                     val fresh = completedAt >= startedAt &&
                         completedAt - startedAt <= CarPlayBridgeQuiescenceWindow.MAX_SAMPLE_GAP_MS
-                    window.observe(service.epoch, service.boundAtMs, completedAt,
+                    val quiet = window.observe(service.epoch, service.boundAtMs, completedAt,
                         if (fresh || observed == false) observed else null)
+                    diagnostics["dcm_sample_fresh"] = fresh
+                    val reason = when {
+                        quiet == true -> CarPlayQuiescenceReason.QUIET
+                        quiet == false -> sourceReason
+                        !fresh -> CarPlayQuiescenceReason.DCM_SAMPLE_STALE
+                        observed == true -> CarPlayQuiescenceReason.DCM_SETTLING
+                        else -> sourceReason
+                    }
+                    CarPlayQuiescenceDiagnostics.reading(quiet, reason, diagnostics)
                 }
             }
         }
@@ -157,7 +184,7 @@ object CarPlayBridgeQuiescence {
         runCatching { context.unbindService(candidate) }
     }
 
-    private fun readOnlineDevicesEmpty(binder: IBinder): OnlineSnapshot? =
+    private fun readOnlineDevicesEmpty(binder: IBinder, diagnostics: MutableMap<String, Any>): OnlineSnapshot? =
         transactRead(binder, GET_ONLINE_DEVICES) { reply ->
             // AIDL's out-Bundle presence marker must be present, not a null/default reply.
             if (reply.readInt() != 1) return@transactRead null
@@ -167,27 +194,42 @@ object CarPlayBridgeQuiescence {
             // Force complete unparcelling, including every value, before trusting emptiness.
             val entries = keys.map { devices.get(it) }
             if (entries.any { it !is ConnDevice }) return@transactRead null
+            diagnostics["dcm_record_count"] = entries.size
+            diagnostics["dcm_records_truncated"] = entries.size > CarPlayQuiescenceDiagnostics.MAX_RECORDS
             val addresses = LinkedHashSet<String>()
-            for (entry in entries) {
+            for ((index, entry) in entries.withIndex()) {
                 val device = entry as ConnDevice
-                val address = RetainedBluetoothDevicePolicy.addressIfCandidate(
-                    RetainedBluetoothDevicePolicy.Facts(device.deviceType, device.accepted,
+                val facts = RetainedBluetoothDevicePolicy.Facts(device.deviceType, device.accepted,
                         device.deviceConnectedState, device.connectedTypeState,
                         device.availableCapabilitys, device.activeCapability,
                         device.activeCapabilityState, device.btAddr, device.isInUsbDeviceMode,
-                        listOf(device.usbHidNode, device.iapNode, device.usbNcmNode)))
+                        listOf(device.usbHidNode, device.iapNode, device.usbNcmNode))
+                if (index < CarPlayQuiescenceDiagnostics.MAX_RECORDS) {
+                    CarPlayQuiescenceDiagnostics.record(facts).forEach { (key, value) ->
+                        diagnostics["dcm_record_${index}_$key"] = value
+                    }
+                }
+                val address = RetainedBluetoothDevicePolicy.addressIfCandidate(facts)
                     ?: return@transactRead OnlineSnapshot(false, emptySet())
                 addresses.add(address)
             }
             OnlineSnapshot(true, addresses)
         }
 
-    private fun readActiveProjectionsEmpty(binder: IBinder): Boolean? =
+    private fun readActiveProjectionsEmpty(binder: IBinder, diagnostics: MutableMap<String, Any>): Boolean? =
         transactRead(binder, GET_ACTIVE_PROJECTIONS) { reply ->
             // Exact profiled server: null ONLY when mProjectionConnMap is empty.
             // An empty non-null list can contain pending preconnects without an active device.
             val listPosition = reply.dataPosition()
-            when (val count = reply.readInt()) {
+            val count = reply.readInt()
+            diagnostics["dcm_active_list_count"] = count
+            diagnostics["dcm_active_list_shape"] = when {
+                count == -1 -> CarPlayProjectionListShape.NULL
+                count == 0 -> CarPlayProjectionListShape.EMPTY
+                count > 0 -> CarPlayProjectionListShape.NONEMPTY
+                else -> CarPlayProjectionListShape.INVALID
+            }.name
+            when (count) {
                 -1 -> return@transactRead true
                 0 -> return@transactRead null
                 else -> if (count < 0) return@transactRead null

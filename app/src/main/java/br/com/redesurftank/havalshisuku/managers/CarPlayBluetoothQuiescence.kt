@@ -35,51 +35,82 @@ internal object CarPlayBluetoothQuiescence {
     private var lastBindAt = -SETTLE_MS
     private var firmware: Firmware? = null
 
-    fun read(context: Context, retainedAddresses: Set<String>): Boolean? {
-        if (Looper.myLooper() == Looper.getMainLooper()) return null
+    fun read(context: Context, retainedAddresses: Set<String>): Boolean? = readDetailed(context, retainedAddresses).quiet
+
+    internal fun readDetailed(context: Context, retainedAddresses: Set<String>): CarPlayQuiescenceReading {
+        if (Looper.myLooper() == Looper.getMainLooper())
+            return CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.MAIN_THREAD)
         if (retainedAddresses.isEmpty() || retainedAddresses.size > MAX_DEVICES ||
-            retainedAddresses.any { RetainedBluetoothDevicePolicy.normalizeAddress(it) != it }) return null
+            retainedAddresses.any { RetainedBluetoothDevicePolicy.normalizeAddress(it) != it })
+            return CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.BT_INPUT_UNKNOWN)
         return synchronized(readLock) {
+            val diagnostics = linkedMapOf<String, Any>("bt_retained_count" to retainedAddresses.size)
             requestBinding(context.applicationContext)
-            val current = synchronized(stateLock) { bound } ?: return@synchronized null
+            val current = synchronized(stateLock) { bound } ?: return@synchronized CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.BT_BINDER_UNAVAILABLE, diagnostics)
             val started = SystemClock.elapsedRealtime()
-            if (started - current.at < SETTLE_MS || !verifyFirmware(context, current.epoch)) return@synchronized null
-            val observed = readDisconnected(current.binder, retainedAddresses)
+            if (started - current.at < SETTLE_MS || !verifyFirmware(context, current.epoch)) return@synchronized CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.BT_SETTLING_OR_FIRMWARE_UNVERIFIED, diagnostics)
+            val observed = readDisconnected(current.binder, retainedAddresses, diagnostics)
             val ended = SystemClock.elapsedRealtime()
             synchronized(stateLock) {
-                if (bound !== current || !current.binder.isBinderAlive || ended < started ||
-                    ended - started > MAX_READ_MS) null else observed
+                when {
+                    bound !== current || !current.binder.isBinderAlive ->
+                        CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.BT_BINDER_CHANGED, diagnostics)
+                    ended < started || ended - started > MAX_READ_MS ->
+                        CarPlayQuiescenceDiagnostics.reading(null, CarPlayQuiescenceReason.BT_SAMPLE_STALE, diagnostics)
+                    else -> CarPlayQuiescenceDiagnostics.reading(observed,
+                        CarPlayQuiescenceReason.valueOf(diagnostics.getValue("bt_reason") as String), diagnostics)
+                }
             }
         }
     }
 
-    private fun readDisconnected(binder: IBinder, retained: Set<String>): Boolean? {
-        val state = adapterState(binder) ?: return null
-        if (state == 10) return if (adapterState(binder) == 10) true else null
-        if (state != 12) return null
-        val before = devices(binder, 12) ?: return null
+    private fun readDisconnected(binder: IBinder, retained: Set<String>, diagnostics: MutableMap<String, Any>): Boolean? {
+        fun finish(quiet: Boolean?, reason: CarPlayQuiescenceReason): Boolean? {
+            diagnostics["bt_reason"] = reason.name
+            return quiet
+        }
+        val state = adapterState(binder) ?: return finish(null, CarPlayQuiescenceReason.BT_ADAPTER_REPLY_UNKNOWN)
+        diagnostics["bt_adapter_state"] = state
+        if (state == 10) {
+            val after = adapterState(binder)
+            if (after != null) diagnostics["bt_adapter_after"] = after
+            return if (after == 10) finish(true, CarPlayQuiescenceReason.BT_DISCONNECTED)
+                else finish(null, CarPlayQuiescenceReason.BT_ADAPTER_CHANGED)
+        }
+        if (state != 12) return finish(null, CarPlayQuiescenceReason.BT_ADAPTER_NOT_READY)
+        val before = devices(binder, 12) ?: return finish(null, CarPlayQuiescenceReason.BT_DEVICE_REPLY_UNKNOWN)
+        diagnostics["bt_known_before_count"] = before.size
         val addresses = before + retained
-        if (addresses.isEmpty() || addresses.size > MAX_DEVICES) return null
+        diagnostics["bt_queried_count"] = addresses.size
+        if (addresses.isEmpty() || addresses.size > MAX_DEVICES) return finish(null, CarPlayQuiescenceReason.BT_DEVICE_SET_UNKNOWN)
         // -1 aggregates all connection managers. Empty is supplementary, never readiness proof.
-        val connected = devices(binder, 13, -1) ?: return null
-        if (connected.isNotEmpty()) return false
-        for (address in addresses) {
+        val connected = devices(binder, 13, -1) ?: return finish(null, CarPlayQuiescenceReason.BT_AGGREGATE_REPLY_UNKNOWN)
+        diagnostics["bt_aggregate_before_count"] = connected.size
+        if (connected.isNotEmpty()) return finish(false, CarPlayQuiescenceReason.BT_AGGREGATE_CONNECTED)
+        for ((index, address) in addresses.withIndex()) {
             // Exact backend has five real proxies; PAN index 5 is unsupported by TX14.
             for (profile in 0..4) {
                 val stateAtProfile = call(binder, 14, 1, {
                     it.writeString(address); it.writeInt(profile)
-                }) { it.readInt() } ?: return null
+                }) { it.readInt() } ?: return finish(null, CarPlayQuiescenceReason.BT_PROFILE_REPLY_UNKNOWN)
+                diagnostics["bt_device_${index}_profile_$profile"] = stateAtProfile
                 when (RetainedBluetoothDevicePolicy.profileAbsence(stateAtProfile)) {
                     true -> Unit
-                    false -> return false
-                    null -> return null
+                    false -> return finish(false, CarPlayQuiescenceReason.BT_PROFILE_NOT_DISCONNECTED)
+                    null -> return finish(null, CarPlayQuiescenceReason.BT_PROFILE_STATE_UNKNOWN)
                 }
             }
         }
-        val after = devices(binder, 12) ?: return null
-        if (before != after) return null
-        if (devices(binder, 13, -1)?.isEmpty() != true) return null
-        return if (adapterState(binder) == 12) true else null
+        val after = devices(binder, 12) ?: return finish(null, CarPlayQuiescenceReason.BT_DEVICE_REPLY_UNKNOWN)
+        diagnostics["bt_known_after_count"] = after.size
+        if (before != after) return finish(null, CarPlayQuiescenceReason.BT_DEVICE_SET_CHANGED)
+        val connectedAfter = devices(binder, 13, -1)
+        if (connectedAfter != null) diagnostics["bt_aggregate_after_count"] = connectedAfter.size
+        if (connectedAfter?.isEmpty() != true) return finish(null, CarPlayQuiescenceReason.BT_AGGREGATE_CHANGED)
+        val adapterAfter = adapterState(binder)
+        if (adapterAfter != null) diagnostics["bt_adapter_after"] = adapterAfter
+        return if (adapterAfter == 12) finish(true, CarPlayQuiescenceReason.BT_DISCONNECTED)
+            else finish(null, CarPlayQuiescenceReason.BT_ADAPTER_CHANGED)
     }
 
     private fun adapterState(binder: IBinder): Int? =

@@ -1,3 +1,12 @@
+## 2026-10-26 — 145 same-sample preparation diagnostics, source frozen
+
+Owner requested ready-to-test145 and GWM ON/install/reboot/OFF; openairconfirmed.
+Added detailed private facts to existing DCM/BT reads, no criteria/bind/TX changes.
+Manager keeps samequiet/safety and stable waitdedup; unknownrecords get neutral UI.
+43portable tests/OEMlock/independentQA PASS;4newJVMtests await signedMini build.
+Includesv9through edc0cc61. No car action or publication yet. CurrentHANDOFF has
+exact authorized workflow and private operation evidence.
+
 ## 2026-10-26 — integrate two further Netseek v9 HUD commits
 
 Merged13e0341b/edc0cc61 without conflicts, preserving local CarPlay/AA/RPM guards.

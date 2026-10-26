@@ -1,3 +1,11 @@
+## ACTIVE145 — finish signed build and authorized field install/reboot, then OFF
+
+Owner asked ready-to-test version and explicitly GWM ON/install/reboot/OFF;
+OPEN AIR confirmed. Finish diagnostics/QA/immutable Mini signed145 before powerON.
+Then exact install + currentboot physicalprep validation; if blocked use new reason,
+never claim READY without proof. Always GWM OFF verified. Current HANDOFF contains
+ownership/files/transport/authorization receipts; no car action yet.
+
 ## Current next step — v9 source ready for the next requested release
 
 Two further v9 commits through edc0cc61 integrated on private branch

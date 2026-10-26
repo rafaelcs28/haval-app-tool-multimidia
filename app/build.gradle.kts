@@ -9,9 +9,9 @@ plugins {
 
 val appVersionCode = providers.gradleProperty("appVersionCode")
     .map(String::toInt)
-    .orElse(74144)
+    .orElse(74145)
 val appVersionName = providers.gradleProperty("appVersionName")
-    .orElse("1.0.0.74.144-preview")
+    .orElse("1.0.0.74.145-preview")
 val impulseReportSupabaseUrl =
     providers.gradleProperty("impulseReportSupabaseUrl")
         .orElse("https://eymyarugcfcwkezqjiba.supabase.co")
@@ -278,7 +278,8 @@ mapOf("Debug" to "Debug", "Release" to "RelWithDebInfo").forEach { (buildType, n
         inputs.file(layout.projectDirectory.file("src/main/res/raw/fridainject"))
         inputs.files(fileTree(layout.projectDirectory.dir("src/main/java/br/com/redesurftank/havalshisuku")) {
             include("managers/CarPlayBridgeBootstrapManager.kt", "managers/CarPlayBridgeQuiescence.kt",
-                "managers/CarPlayBluetoothQuiescence.kt", "experimental/CarPlayBootstrapRoot.kt",
+                "managers/CarPlayBluetoothQuiescence.kt", "managers/CarPlayQuiescenceReading.kt",
+                "experimental/CarPlayBootstrapRoot.kt",
                 "experimental/CarPlayBridgeBootstrapPolicy.kt", "experimental/CarPlaySafetyPublicationGate.kt",
                 "experimental/CarPlayResidentProof.kt", "experimental/CarPlayProjectionVisibilityProbe.kt")
         })

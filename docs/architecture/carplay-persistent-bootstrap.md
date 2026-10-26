@@ -1,5 +1,23 @@
 # Preparo CarPlay local — versões 133 a 139
 
+## Diagnóstico da espera — 145
+
+A 145 usa a mesma leitura DCM/Bluetooth para decidir a quiescência e registrar
+o motivo da espera. Distingue registro DCM fora da assinatura retida, projeção
+ativa e agregado/perfil Bluetooth. Os critérios de admissão, firmware verificado,
+transações, bindings e janelas de ausência permanecem iguais.
+
+O evento privado `carplay_preparation_wait` inclui campos `q_` com enums,
+contagens, máscaras e booleanos limitados. Não contém MAC, nome, serial, caminhos
+dos nodes ou texto de exceções OEM. A deduplicação considera os fatos estáveis,
+sem relógios ou duração bruta. Os detalhes não entram no pacote de elegibilidade
+consumido pelo nativo. Um registro desconhecido continua bloqueando o preparo,
+com mensagem neutra em vez de afirmar conexão física de um telefone.
+
+O novo `CarPlayQuiescenceReading.kt` participa do digest do controlador e dos
+inputs Gradle. O diagnóstico não exige um agente Frida adicional. Compilação e
+testes não substituem a confirmação READY de uma identidade nova na central.
+
 A versão 133 inclui a biblioteca ARM64, o interceptor frio e o agente Java ESM
 como assets verificados do APK. O Mac Mini compila a biblioteca e monta o pacote
 em cada build imutável. Não há npm, Python, download ou controlador VPS na central.

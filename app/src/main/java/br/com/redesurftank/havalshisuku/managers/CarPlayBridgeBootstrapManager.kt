@@ -65,7 +65,7 @@ object CarPlayBridgeBootstrapManager {
         val directory get() = "$ROOT/runtime/$key"
     }
     private data class Safety(val wall: Long = 0, val elapsed: Long = 0,
-        val quiescent: Boolean? = null)
+        val quiescent: Boolean? = null, val diagnostics: Map<String, Any> = emptyMap())
     private data class Payload(val revision: String, val directory: String,
         val manifest: JSONObject, val source: File) {
         val bridge get() = "$directory/libcarplay_video_bridge.so"
@@ -152,8 +152,9 @@ object CarPlayBridgeBootstrapManager {
         if (!inFlight.get() && mutableStatus.value.state in setOf("ready", "blocked", "failed")) return
         val beginWall = System.currentTimeMillis()
         val beginElapsed = SystemClock.elapsedRealtime()
-        val quiet = CarPlayBridgeQuiescence.read(requireNotNull(context))
-        safety = Safety(beginWall, beginElapsed, quiet)
+        val reading = CarPlayBridgeQuiescence.readDetailed(requireNotNull(context))
+        val quiet = reading.quiet
+        safety = Safety(beginWall, beginElapsed, quiet, reading.diagnostics)
         val attempt = activeAttempt
         val identity = attempt?.identity
         val eligible = isAutomaticEnabled() && inFlight.get() && identity != null && quiet == true &&
@@ -313,13 +314,15 @@ object CarPlayBridgeBootstrapManager {
         }
         val cpVisual = if (observed.visualEvidenceKnown) observed.cpVisual.toString() else "unknown"
         val aaVisual = if (observed.visualEvidenceKnown) observed.aaVisual.toString() else "unknown"
-        val signature = listOf(reason.name, current.quiescent, cpVisual, aaVisual, ageBucket).joinToString("|")
+        val diagnosticSignature = current.diagnostics.toSortedMap().entries.joinToString("|") { "${it.key}=${it.value}" }
+        val signature = listOf(reason.name, current.quiescent, cpVisual, aaVisual, ageBucket,
+            diagnosticSignature).joinToString("|")
         if (signature != lastWaitSignature) {
             lastWaitSignature = signature
             ClusterPersistentEventLogger.log("carplay_preparation_wait", mapOf(
                 "reason" to reason.name, "quiescent" to current.quiescent,
                 "cp_visual" to cpVisual, "aa_visual" to aaVisual, "observation_age" to ageBucket
-            ))
+            ) + current.diagnostics.mapKeys { "q_${it.key}" })
         }
         report("waiting", when {
             reason == Policy.Reason.OBSERVATION_NOT_FRESH -> "Aguardando uma leitura recente dos serviços de projeção"
@@ -328,7 +331,11 @@ object CarPlayBridgeBootstrapManager {
             observed.cpVisual -> "Aguardando liberação da tela do CarPlay"
             observed.aaVisual -> "Aguardando liberação da tela do Android Auto"
             current.quiescent == null -> "Aguardando confirmação dos serviços de projeção"
-            current.quiescent == false -> "A central informa uma conexão ou projeção ativa"
+            current.quiescent == false -> when (current.diagnostics["reason"]) {
+                "DCM_ACTIVE_PROJECTION" -> "Aguardando liberação da projeção na central"
+                "BT_AGGREGATE_CONNECTED", "BT_PROFILE_NOT_DISCONNECTED" -> "Aguardando desconexão dos perfis Bluetooth"
+                else -> "Aguardando confirmação de desconexão pela central"
+            }
             else -> "Aguardando confirmação dos serviços de projeção"
         })
     }
