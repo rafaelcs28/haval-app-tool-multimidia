@@ -71,3 +71,38 @@ The modified component's notice/license are bundled under
 `assets/licenses/frida-bootstrap-injector/`. The eventual release also includes
 `frida-bootstrap-source.tar.gz` containing its reproduction tool, profile and
 upstream notices, without private application history.
+
+## Field follow-up and console transport
+
+The second private 145 (source `0d649c14`) passed initialization and native CLI
+exit/resident ARMED proof on the head unit. The original policy hash and
+`system_server` PID/start stayed unchanged throughout. Preparation then failed
+while reading a later resident response, with `Local root command timed out`.
+It did not reach READY. Automatic preparation was paused and GWM OFF freshly
+confirmed at 23:42:28 UTC; no public 145 was promoted.
+
+The exact timeout cause was not captured. A Linux PTY test did not reproduce the
+hypothesis that the old multiline octal input necessarily overflows the console.
+Source inspection did identify avoidable transport costs: octal expands input
+fourfold, and the completion regex was rebuilt and rescanned the entire response
+on every read, including possible single-byte reads in Commons Net 3.12.
+
+The controller now sends gzip/hex input using the utilities already verified on
+this head unit. Small commands use one line below 3800 bytes. Larger commands
+append hex to a same-session shell variable in bounded lines; each append has a
+unique anchored acknowledgement that must arrive before the next line is sent.
+Only the final packet decodes the complete frame into a variable and executes it
+after gzip/CRC success. No remote staging file, new injector, or command retry is
+introduced. A timeout or missing acknowledgement closes the connection; Shizuku
+fallback remains restricted to a failed connection before any execution starts.
+The existing read deadline includes packet acknowledgements and elapsed upload
+time, without increasing cold proof or gate deadlines. Socket writes themselves
+have no separate cancellation timeout; each packet is bounded to limit that work. Input and cumulative responses remain bounded.
+
+Completion patterns are compiled once and scan only newly received data plus a
+marker-sized overlap. Echoed packet text cannot satisfy anchored output markers.
+Timeout diagnostics contain only packet number, byte/character counts and whether
+the actual begin frame was seen. Six JVM tests exercise shell round trips,
+nonzero status, corrupt-packet nonexecution, multipart admission, input bounds and
+fragmented/echoed output; they execute only on the authorized Mini. Actual full
+preparation and preparation after a new boot still require field evidence.

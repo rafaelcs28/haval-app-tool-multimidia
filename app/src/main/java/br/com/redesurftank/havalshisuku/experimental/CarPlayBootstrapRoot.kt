@@ -11,6 +11,7 @@ import java.net.SocketTimeoutException
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.GZIPOutputStream
 
 /** Local transports only. No remote host, credentials, downloads or vehicle commands. */
 internal class CarPlayBootstrapRoot {
@@ -23,16 +24,11 @@ internal class CarPlayBootstrapRoot {
             cpb_rc=§?
             printf '\n${tag}_end=%s\n' "§cpb_rc"
         """.trimIndent().replace('§', '$')
-        // The console lowercases typed input. Octal framing preserves paths and -R.
-        // Keep every terminal input line below canonical TTY limits, including
-        // long identity/guard commands. Each chunk only contains octal digits.
-        val wire = "{\n" + framed.toByteArray(StandardCharsets.US_ASCII).toList().chunked(512)
-            .joinToString("") { chunk ->
-                val octal = chunk.joinToString("") {
-                    "\\" + (it.toInt() and 255).toString(8).padStart(3, '0')
-                }
-                "printf '%b' '$octal'\n"
-            } + "} | sh\n"
+        // Decode completely before executing, so a damaged packet cannot execute
+        // a partially decoded command. Lowercase-safe input stays below TTY limits.
+        val packets = wirePackets(framed, tag)
+        val completed = Regex("(?m)^${tag}_end=[0-9]+\r?\n")
+        val decodeFailed = Regex("(?m)^${tag}_decode_failed\r?\n")
         val client = TelnetClient()
         var executionStarted = false
         try {
@@ -40,21 +36,38 @@ internal class CarPlayBootstrapRoot {
             client.connect("127.0.0.1", 23)
             executionStarted = true
             client.soTimeout = 200
-            client.outputStream.write(wire.toByteArray(StandardCharsets.US_ASCII))
-            client.outputStream.flush()
             val buffer = ByteArray(8192)
             val result = StringBuilder()
             val deadline = SystemClock.elapsedRealtime() + timeoutMs
-            while (SystemClock.elapsedRealtime() < deadline) {
-                try {
-                    val count = client.inputStream.read(buffer)
-                    if (count < 0) break
-                    result.append(String(buffer, 0, count, StandardCharsets.UTF_8))
-                    if (result.length > 1_048_576) error("Root response too large")
-                    if (Regex("(?m)^${tag}_end=[0-9]+\r?\n").containsMatchIn(result)) return parse(result.toString(), tag)
-                } catch (_: SocketTimeoutException) { /* bounded read */ }
+            for ((index, packet) in packets.withIndex()) {
+                check(SystemClock.elapsedRealtime() < deadline) { "Root packet deadline expired before upload" }
+                client.outputStream.write(packet.wire.toByteArray(StandardCharsets.US_ASCII))
+                client.outputStream.flush()
+                val expected = packet.acknowledgement?.let { Regex("(?m)^${Regex.escape(it)}\r?\n") } ?: completed
+                var acknowledged = false
+                while (SystemClock.elapsedRealtime() < deadline) {
+                    try {
+                        val count = client.inputStream.read(buffer)
+                        check(count >= 0) { "Local root console closed before its response" }
+                        val previousSize = result.length
+                        result.append(String(buffer, 0, count, StandardCharsets.UTF_8))
+                        if (result.length > 1_048_576) error("Root response too large")
+                        val scanStart = completionScanStart(previousSize, tag)
+                        if (expected.find(result, scanStart) != null) {
+                            acknowledged = true
+                            break
+                        }
+                        if (decodeFailed.find(result, scanStart) != null)
+                            error("Local root packet could not be decoded; command was not executed")
+                    } catch (_: SocketTimeoutException) { /* same bounded deadline */ }
+                }
+                check(acknowledged) {
+                    "Local root command timed out (packet=${index + 1}/${packets.size}, " +
+                        "wireBytes=${packet.wire.length}, receivedChars=${result.length}, " +
+                        "beginSeen=${result.indexOf("${tag}_begin") >= 0})"
+                }
             }
-            error("Local root command timed out")
+            return parse(result.toString(), tag)
         } catch (error: Exception) {
             // The same local operation can use Shizuku when Telnet is unavailable.
             // Never retry a command whose execution already began: that could duplicate
@@ -107,6 +120,36 @@ internal class CarPlayBootstrapRoot {
     }
 
     companion object {
+        internal fun completionScanStart(previousSize: Int, tag: String): Int =
+            maxOf(0, previousSize - tag.length - 32)
+
+        internal data class WirePacket(val wire: String, val acknowledgement: String? = null)
+
+        internal fun wirePackets(framed: String, tag: String): List<WirePacket> {
+            require(tag.matches(Regex("cpb_[a-f0-9]{32}")))
+            require(framed.length <= 131_072 && framed.all { it.code in 1..127 }) { "Invalid root frame" }
+            val compressed = ByteArrayOutputStream().also { bytes ->
+                GZIPOutputStream(bytes).use { it.write(framed.toByteArray(StandardCharsets.US_ASCII)) }
+            }.toByteArray()
+            val hex = compressed.joinToString("") { "%02x".format(it.toInt() and 255) }
+            require(hex.length <= 65_536) { "Root frame exceeds the bounded upload size" }
+            fun decode(source: String) =
+                "if cpb_decoded=\$(printf '%s' $source | toybox xxd -r -p | gzip -d); then " +
+                    "printf '%s\\n' \"\$cpb_decoded\" | sh; " +
+                    "else printf '\\n${tag}_decode_failed\\n'; fi; unset cpb_packet cpb_decoded\n"
+            val compact = decode("'$hex'")
+            if (compact.length < 3800) return listOf(WirePacket(compact))
+            // Each append executes and is acknowledged before sending another line.
+            // Only the last packet decodes/executes the command, without remote files.
+            val packets = hex.chunked(2000).mapIndexed { index, chunk ->
+                val assignment = if (index == 0) "cpb_packet='$chunk'" else "cpb_packet=\"\${cpb_packet}$chunk\""
+                val acknowledgement = "${tag}_part=$index"
+                WirePacket("$assignment; printf '\\n$acknowledgement\\n'\n", acknowledgement)
+            } + WirePacket(decode("\"\$cpb_packet\""))
+            check(packets.all { it.wire.length < 3800 })
+            return packets
+        }
+
         fun quote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
     }
 }

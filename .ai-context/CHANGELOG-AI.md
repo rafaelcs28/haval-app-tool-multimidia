@@ -1,3 +1,13 @@
+## 2026-10-26 — 145 native initialization passed; confirmation transport correction
+
+Second private145 passed signed Mini/JVM build and exact installed APK verification.
+Native preflight/CLI exit0/ARMED proof passed; policy and framework stayed unchanged.
+Later resident-response command timed out. Automatic preparation paused and fresh
+GWM OFF confirmed23:42:28Z. No READY/public145. Added bounded acknowledged compact
+root packets and incremental completion scanning; six JVM tests await Mini. The
+precise field timeout cause is not established; PTY-overflow hypothesis was not
+reproduced. See architecture policy-preservation document and current HANDOFF.
+
 ## 2026-10-26 — 145 loader correction, field validation pending
 
 First private candidate passed quiescence but lost Android framework during stock

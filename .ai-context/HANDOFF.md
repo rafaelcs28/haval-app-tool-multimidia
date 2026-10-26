@@ -1,3 +1,39 @@
+## Current 145 transport correction — pending review/Mini, vehicle OFF
+
+Root transport now uses CRC-checked gzip/hex packets with same-session append ACKs
+for commands over the single-line bound. Patterns are compiled once and scanned
+incrementally. No timeout/retry/gate deadline expansion. Six new JVM tests await
+Mini; source cp_141_deadline_review doing read-only review. Source0d649c14's field
+result below is unchanged: native ARM/exit0 and stable framework/policy, but later
+root response timeout and no READY. Vehicle OFF confirmed23:42:28Z, auto prepFALSE.
+No public145. Need reviewed immutable commit and signed Mini build, then authorized
+ON/install/enable/current-boot READY/reboot/new-boot READY/OFF before promotion.
+
+## Current 145 field result — vehicle OFF, native loads; root confirmation times out
+
+Second private145 source0d649c14, Mini signed Release PASS5m44s, fullJVM passed.
+Actual APK104320931 bytes SHA4b848eb95ee67ee368936edbf15e6677d55cb9a704b62dd4d3100137d0cfacbc,
+production certificate verified. Private evidence originalworkspace/test-artifacts/
+release-74145-policy-preserved-20261026/. Payload74145-4f7ab2940517-cdf07272facd.
+Installed exact APK and enabled through OWN receiver. New injector preflight passed;
+native CLI exit0 and fresh ARMED resident response passed. SELinux policy unchanged,
+system_server1914/start645 and app14475 stable. No framework restart.
+
+Preparation still FAILED: Local root command timed out at Manager978, resident
+response root call, inside observe551 -> recoverAttempt686 -> attempt663. Mapping
+fetched read-only from Mini, private mapping.txt. Target16812/start15452 ticks;
+response samples162260/162510, failure167084. Exact wire/stdout on timeout not saved.
+Native eventually released safely after eligibility revoked; no READY/Java launch.
+Do not misattribute historical137READY or claim ready. Root transport/response loop
+needs investigation. cp_141_deadline_review is doing read-only source review.
+
+Automatic preparation paused via OWN receiver, false VERIFIED; gate empty. GWM OFF
+accepted23:42:13Z and fresh engine0 confirmed23:42:28Z. No full reboot requested in
+this cycle because preparation failed first. Vehicle OFF; no public145/OTA yet.
+User still authorizes finish145 and ON/install/reboot/validate/OFF, open air confirmed.
+Need correct remaining issue offline, immutable Mini build and actual READY/new-boot
+proof before publication. Preserve separate patched injector policy fix and deadlines.
+
 ## Current 145 correction — source reviewed; vehicle OFF; signed Mini build next
 
 The first private 145 failed during native injector initialization: the SELinux
