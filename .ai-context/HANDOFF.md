@@ -1,3 +1,67 @@
+## Current handoff — 141 PUBLISHED/OTA verified; field validation still pending
+
+Owner's140 screenshot after restart showedinterruptedprep. Readonly live capture
+confirmed140/currentbootb753f2ea/OEM8544-start3549. Birth/exit0worked, nativepeerwas
+stillresident/fresh but statefailed0/pinnedfalse/eligibilitylost; app reportedmissing
+nativeproof. NoJava launch, noPhoneUSBobserved. Fieldcause/order remainsUNKNOWN:
+oldfailure code overwrotepriorpacket. Never blamephone/Bluetooth or claim140READY.
+No vehicle mutation, retry, injection, install, reboot or power command was issued.
+Finalorderingquerytimedout; no morecarcalls. Owner was told hecanleave/testlater.
+Privatefieldsummary: originalworkspace test-artifacts/140-photo-interrupted-20261026/.
+
+141 addresses independently verified SOURCE premature-abort paths: ARMEDJS before
+C++SOmapping, and missing/unfinished proof treated asfatal after one shortpoll.
+TypedPending stays in SAMEticket/attempt/deadline; knownARMED/noSO canwait, startup
+receipts pending onlywith just-admitted/attestedsupervisor. Terminalidentity/hash/
+receipt/disposal/nativefailure/unknownphase/foreignmapping staysfatal. Noncereuse
+prevents two-sample starvation. Bothsamples/BOTHroles revalidatedjointlyfresh after
+finalidentity check; noREADYafterdeadline. Existing4s/15s/330s budgets andquiescence
+remain; noextralaunch/unload/retry, no P/speed gate restored. Bounded4096parsed/
+whitelistedpreFailureSafety captured UNDERlock BEFOREcancel/overwrite, withtimes.
+No nativeJS/helper/protocol/lifecycle change. IndependentQA no remainingblockers.
+
+Includes previously validatedNetseekv9 fourcommits through0fe2969c: HUDarrows/range/
+2linetrip, themeTBTswitches andpostturnjunctiontail. Keeps140OEMbuttons/ACfocus/
+bridge1.0.2/contractv1.0/catalog discipline. Default48/Minimalist8/ApexGT16 compiled
+packages alreadypassed Node/46focus/byteparity; all are now published for141.
+
+Exact signedMini SOURCE e6b81fa8215bb2d123a03c932379f4354d15d02b, privatebranchrelease/impulse-74141-v9.
+Jobhaval-impulse-133-e6b81fa8215bb2d1-20261026T091527Z-14193: SUCCESS5m44s/83tasks, finished2026-10-26T09:21:26Z.
+FullJVM including16residentproofcases, Release/R8/lint/production signing passed.
+25Python lifecyclecases andCarPlayOEMregressionlock passed. No Android/Gradle/Kotlin
+build onVPS. One SSHstatusquerytimedoutnearR8; queuecontinued andlaterfetchsucceeded.
+APK74141/1.0.0.74.141-preview, 81634083bytes, SHA-256:
+00b5760d78933e694f2d0a5e0ec4a3c120b94c99966225717d620bd1438ec5e7
+Certificate5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0 unchanged productionidentity.
+Payloadrevision74141-93d2184c1e33-763540956e51. ExactAPKcode/name/cert/source/payloadhashes,
+Default48HTML/manifest bytes andretainedACfocus JSmethods verified.
+
+PUBLICrelease https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.141-preview
+Release424048097, APKasset677643701; APK/SHA256SUMS/build-info.json uploaded.
+GitHubdigest ANDcomplete unauthenticatedpublicAPKdownload matchMiniAPK. TENpublic
+compiledthemefiles independentlyverified; artifactcommitb8662d26a4285f15f66d68bcee5ec7c7310ac1f0
+fastforwardedfrompublicfeb9a001 historyONLY, no privatecode/history/sourcepublished.
+OnlyTHEN fixed app-latest/app-preview.json advanced140→141 and exactpublicbytes were
+independentlychecked. Stablechannel unchanged. Private sourcebranch onlypushed to
+PRIVATErafaelcs28/haval-impulse; distributiontagusesexistingPUBLIC048749ae pattern.
+
+Privateevidence under /root/projects/haval-impulse:
+- artifacts/impulse-74141-pending-proof-release-mini/: APK/buildlog/metadata/queueSHA/
+  validation.json. Newfetchdirverified.
+- test-artifacts/publish-74141-20261026/: fullpublicAPK, before/afterOTA, verified
+  publicationreceipt, buildinfo/queue, notes, checksums andTENthemeSHA/sizeproofs.
+- test-artifacts/theme-catalog-74141-20261026/: cleanpubliccompiled-onlyGitclone.
+- test-artifacts/install-133-persistent-20261025/validate_141.py.
+
+Next OWNERinstall141 viaInformações→BuscarAtualizações WHENconvenient. Restartwhole
+centralwithphonesdisconnected, wait"Bridge preparada para esta sessão", THENiPhoneUSB/
+primaryCarPlay andtest. UpdateinstalledMinimalist fromthemeUIifused; Defaultisbundled.
+Do NOT holdowneratcarforbuild oraskrepeatparking/disconnectionquestions. No root
+remoteinstall/rebootauthorizedbylatestphoto. Installedlastconfirmed140, not141.
+Actual141boot/JNI/map remainPENDING, fieldcausalorderunknown; neverclaimphysicalfix.
+IfnewfailurecollectpreFailureSafety+times BEFOREsuggestinganotherbuild. 138+ clients
+normallyexit; neveruse137externalPIDownercriteria. No releasework remains for141.
+
 ## 2026-10-26 — 141 fix ready for immutable audit and signed Mini validation
 
 Follow-up to owner's140 interrupted-preparation photo. Resident launch/birth and

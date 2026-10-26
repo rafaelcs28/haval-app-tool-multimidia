@@ -1,3 +1,16 @@
+## Current status — 141 published/verified, owner installation and field test pending
+
+141 preserves same-attempt preparation for typedpending proofs/ARMEDbeforeSOmapping,
+keeps fatal guards/strictjointfreshness/deadlines, and savespreFailureSafety. FullMini
+JVM/signedRelease plus source/lifecyclechecks pass. APKpublicSHA, tenmatchingtheme
+assets andfixedpreviewmanifest verified; privatecode/history remainprivate.
+
+Ownerinstalled140 thenrestarted;140failed. Residentpeerworked, precisecausalorder
+unknown. Lastconfirmedinstalled140; no remoteinstall/reboot orcarwrite. Ownercan
+install141later, restartwithphonesdisconnected andwaitREADYbeforeCarPlaytest.
+Physical141boot/JNI/map stillpending. Includes Netseekv9 through0fe2969c andthemes
+Default48/Minimalist8/ApexGT16. CurrentHANDOFF hasreceipts. Olderentries historical.
+
 ## Current status — Netseek v9 through0fe2969c integrated and tested
 
 Source integration/netseek-v9-20261026 includes four new HUD/theme-card/map-route

@@ -1,3 +1,10 @@
+## 2026-10-26 — 141 signed and published, independently verified
+
+- Mini e6b81fa8 fullJVM (16residentproofcases)/Release/R8/lint/signing passed5m44s/83tasks. SourceQA,25Pythonlifecyclecases andCarPlayregressionlock passed; no coordinatorAndroidbuild.
+- APK74141 SHA-256 00b5760d78933e694f2d0a5e0ec4a3c120b94c99966225717d620bd1438ec5e7, 81634083bytes; productioncert/source/payload/Default48bytes verified. Includes latestvalidatedNetseekv9 integration.
+- Published APK/checksum/buildmetadata andmatchingcompiledcatalog(Default48/Minimalist8/ApexGT16) without privatehistory. FullpublicAPK SHA andTENthemebytes verified, then fixedpreview140→141 updatedLAST and exactpublicmanifestchecked.
+- 140fieldcause/orderunknown. Fix addresses proven sourcepremature-abort paths andretainspriorfailure evidence; actual141boot/JNI/mapvalidationpending. No vehiclemutations; ownerinstallswhenconvenient.
+
 ## 2026-10-26 — 140 field diagnosis and 141 resident-proof correction
 
 - Read-only140bootcapture proves validbirth/exit0 and stillresponsivepeer; nativeeligibilityfailure/appgenericprooferror captured. Fieldcausalorder unknown; no phoneUSB observed, no vehicle modifications.
