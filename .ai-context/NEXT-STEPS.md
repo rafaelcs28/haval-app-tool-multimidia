@@ -1,3 +1,10 @@
+## Current next step — validate v9 source integration on authorized Mini
+
+Two newv9commits integrated through edc0cc61; source branchintegration/netseek-v9-20261026-edc0cc61.
+Finish immutable audited Debug/JVM validation, record results and retain source for
+next release. No version bump or production release requested. Keep144quiescence
+investigation and vehicleOFF state unchanged. Detailed source/guards in HANDOFF.
+
 ## Current next step — granular DCM/BT evidence before a functional fix
 
 Offline investigation is complete for available144 evidence. Add/collect distinct
