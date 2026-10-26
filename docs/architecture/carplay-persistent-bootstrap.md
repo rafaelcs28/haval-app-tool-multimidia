@@ -145,3 +145,24 @@ obrigatórios; não há reinjeção, relaxamento de quiescência ou novo bloquei
 31 fixtures locais de ciclo de vida/recibos, suíte JVM completa e Release
 assinada passaram; build somente no Mini, commit `c4ca6523`. A 142 está publicada
 e verificada no atualizador. Boot real continua separado e pendente.
+
+## 143 — Explicit hidden tasks and preparation diagnostics
+
+An OEM `am stack list` can retain a projection task with `visible=false` after
+its UI closes. Counting the package anywhere in that response incorrectly treated
+the hidden task as an active screen. The shared visibility probe now accepts only
+well-formed, explicitly hidden tasks as negative visual evidence. Visible, missing,
+ambiguous, malformed or oversized evidence continues to block. Non-projection
+metadata does not manufacture a projection screen. The observer and the final
+same-root idle-host guard use the same probe.
+
+This does not prove phone disconnection: independent DCM/Bluetooth quiescence and
+all identity, integrity and eligibility checks remain mandatory. Waiting messages
+distinguish missing confirmation, stale evidence, visible screens and a connection
+reported by the central. Private diagnostic events use deduplicated reason enums,
+booleans and age buckets; no device identifiers are logged.
+
+The false positive was reproduced using an archived real141 stack response. The
+owner reported the same generic waiting screen on142, but current remote reads
+timed out, so that specific incident remains unconfirmed. Source fixtures pass;
+Mini validation and physical143 testing are separate pending steps.

@@ -1,3 +1,35 @@
+## 2026-10-26 — 143 integrating new v9 and investigating142 preparation wait
+
+Owner requested newv9pull/update, then reported installed142 still waitingforphone
+absence/projectionservices (samegenericUI). Telnet andVPNping boundedreads didnot
+respond; optional currentnetworkquestion pending. No car mutations/retestrequests.
+Do not infer connectedphone or claim actual142fieldcause without currentevidence.
+Ownerreport private originalworkspace test-artifacts/142-prep-waiting-20261026/.
+
+Newupstream30e301fb00f30bafa0f540206fca48f3e2fe912e (singlecommitafter0fe2969c)
+mergedwithoutconflicts over142a956ad64 onrelease/impulse-74143-v9, notcommittedyet.
+IncludesHUDcolors/Blue, circularpowerarcs/segmentedRPM, realEVpercentfallbackV×I,
+3Dmapbehindcar/fade/roundaboutroute. Prefs8colorfields additive; no bridge/theme
+contract changes, no clusterresolution change. Retains localtextonlyCarPlayguard,
+rawAApriority and142runtimefixes. QAclear onintegration; narrowRPMBARScolorfix
+added(model/renderer/3JVMcases) tohonornewpicks/Bluewhilepreservingwhite/reddefaults.
+ThemesDefault48/Minimalist8/ApexGT16 unchanged, nofrontendbuild/catalogpushneeded.
+
+FoundindependentCPsourcefalsepositive: observe/warmkillguard countALL projection
+tasks inamstacklist includingexplicitvisible=false. Archivedreal141AapActivity is
+hiddenandstillcounted. Thiscanholdpreparation despiteclosedUI; notprovenaslatest
+142fieldcause. Preparing sharedstrict visualtaskprobe: onlywellformedexplicitfalse
+may beignored; visibletrue/ambiguous/truncated/error blocks. DCM/BTquiescence,
+identity, safetygate, process actions anddeadlines remain. Honestwaitmessages/
+boundedprivatewaitreason diagnostics alsoinprogress. No bypass ofrealconnections.
+IndependentQA reviewingparser/fixtures; notfrozen/validatedyet.
+
+Next freezeafterreview, source31+newfixtures/OEMregressionlock, immutablecommit
+andaudit, fullJVM/signedRelease143 onauthorizedMiniONLY, verifyAPKproductioncert/
+source/payload andpublicdownload, thenfixedpreviewmanifestLAST. NoVPSAndroidbuild.
+Currentpublicrelease/OTA remains142 while143workinprogress; installationownerlater.
+PhysicalHUDnewgeometry/roundabout,143bootstrap andCPmap/JNI validation pending.
+
 ## Current handoff — 142 published and independently verified; physical test pending
 
 Owner confirmed141 installed and full AAmap disappearing when leaving primaryUI.

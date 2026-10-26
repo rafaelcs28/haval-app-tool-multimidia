@@ -8,7 +8,9 @@ import android.util.Log
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.R
+import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
+import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeBootstrapPolicy as Policy
@@ -51,6 +53,7 @@ object CarPlayBridgeBootstrapManager {
     private var installedRevision: String? = null
     private var verifiedServiceBoot: String? = null
     private var nextReadyCheckAt = 0L
+    private var lastWaitSignature: String? = null // worker-only; log evidence changes, not every poll
     // Worker-confined. Keep a pending nonce until its lease expires, allowing the peer to finish.
     private val pendingChallenges = mutableMapOf<String, CarPlayResidentProof.Challenge>()
     private val startingBindings = mutableMapOf<String, CarPlayResidentProof.Binding>()
@@ -70,7 +73,8 @@ object CarPlayBridgeBootstrapManager {
         val native: JSONObject, val endpointArmed: Boolean, val nativeOwner: Int, val javaOwner: Int,
         val cpVisual: Boolean, val aaVisual: Boolean,
         val nativeProof: CarPlayResidentProof.Sample? = null,
-        val javaProof: CarPlayResidentProof.Sample? = null)
+        val javaProof: CarPlayResidentProof.Sample? = null,
+        val visualEvidenceKnown: Boolean = false)
 
     private fun prefs() = requireNotNull(context).getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
     @JvmStatic fun isAutomaticEnabled(): Boolean = runCatching {
@@ -129,7 +133,7 @@ object CarPlayBridgeBootstrapManager {
                 .remove("cpBridgeAttemptPhase").commit())
             nextReadyCheckAt = 0
             safety = Safety()
-            report("waiting", "Aguardando telefone desconectado e serviços de projeção livres")
+            report("waiting", "Aguardando confirmação dos serviços de projeção")
             } catch (error: Exception) {
                 Log.w(TAG, "Failure reset deferred; current session is preserved", error)
                 report("blocked", "A sessão atual deve terminar antes de repetir o preparo")
@@ -247,13 +251,14 @@ object CarPlayBridgeBootstrapManager {
             }
             verifiedServiceBoot = id.boot
         }
+        val observationAgeMs = if (current.elapsed > 0) SystemClock.elapsedRealtime() - current.elapsed else null
         val decision = Policy.evaluate(Policy.Snapshot(
             enabled = true, rootReady = true, assetsVerified = true, bootIdentityKnown = id != null,
             processPresent = id != null, processIdentityMatches = id != null &&
                 (observed.mappedPath == null || sameImage), phase = phase,
             ownersAlive = ownsNative && (phase != Policy.Phase.READY || ownsJava),
             hasBridgeMapping = observed.mappedPath != null, coldModulesAbsent = observed.cold,
-            observationAgeMs = if (current.elapsed > 0) SystemClock.elapsedRealtime() - current.elapsed else null,
+            observationAgeMs = observationAgeMs,
             carPlayActive = if (observed.cpVisual) true else current.quiescent?.not(),
             androidAutoActive = if (observed.aaVisual) true else current.quiescent?.not(),
             attemptsThisBoot = if (bootAttempt) 1 else 0,
@@ -291,10 +296,39 @@ object CarPlayBridgeBootstrapManager {
                 })
                 nextReadyCheckAt = SystemClock.elapsedRealtime() + 30_000
             }
-            Policy.Action.WAIT_SAFE -> report("waiting", "Aguardando telefone desconectado e serviços de projeção livres")
+            Policy.Action.WAIT_SAFE -> reportPreparationWait(decision.reason, observed, current, observationAgeMs)
             Policy.Action.WAIT_PROCESS -> report("waiting", "Aguardando os serviços do CarPlay")
             else -> report("waiting", "Aguardando os serviços locais da central")
         }
+    }
+
+    private fun reportPreparationWait(reason: Policy.Reason, observed: Observation, current: Safety, ageMs: Long?) {
+        val ageBucket = when {
+            ageMs == null -> "missing"
+            ageMs < 0 -> "future"
+            ageMs <= Policy.MAX_OBSERVATION_AGE_MS -> "fresh"
+            else -> "stale"
+        }
+        val cpVisual = if (observed.visualEvidenceKnown) observed.cpVisual.toString() else "unknown"
+        val aaVisual = if (observed.visualEvidenceKnown) observed.aaVisual.toString() else "unknown"
+        val signature = listOf(reason.name, current.quiescent, cpVisual, aaVisual, ageBucket).joinToString("|")
+        if (signature != lastWaitSignature) {
+            lastWaitSignature = signature
+            ClusterPersistentEventLogger.log("carplay_preparation_wait", mapOf(
+                "reason" to reason.name, "quiescent" to current.quiescent,
+                "cp_visual" to cpVisual, "aa_visual" to aaVisual, "observation_age" to ageBucket
+            ))
+        }
+        report("waiting", when {
+            reason == Policy.Reason.OBSERVATION_NOT_FRESH -> "Aguardando uma leitura recente dos serviços de projeção"
+            !observed.visualEvidenceKnown -> "Aguardando confirmação das telas de projeção"
+            observed.cpVisual && observed.aaVisual -> "Aguardando liberação das telas do CarPlay e Android Auto"
+            observed.cpVisual -> "Aguardando liberação da tela do CarPlay"
+            observed.aaVisual -> "Aguardando liberação da tela do Android Auto"
+            current.quiescent == null -> "Aguardando confirmação dos serviços de projeção"
+            current.quiescent == false -> "A central informa uma conexão ou projeção ativa"
+            else -> "Aguardando confirmação dos serviços de projeção"
+        })
     }
 
     private fun extractPayload(): Payload {
@@ -381,10 +415,8 @@ object CarPlayBridgeBootstrapManager {
               printf 'bridge='; grep 'libcarplay_video_bridge.so' /proc/§p/maps | head -n 1; echo
             fi
             if [ ${if (includeVisuals) "1" else "0"} = 1 ]; then
-              cpb_stacks=§(am stack list 2>/dev/null) || exit 1
-              printf '%s\n' "§cpb_stacks" | grep -q 'Stack id=' || exit 1
-              printf 'cp_visual='; printf '%s\n' "§cpb_stacks" | grep -c 'com.ts.carplay.app' || true
-              printf 'aa_visual='; printf '%s\n' "§cpb_stacks" | grep -e 'com.google.android.projection.gearhead' -e 'com.ts.androidauto' -c || true
+              ${CarPlayProjectionVisibilityProbe.capture()}
+              printf '%s\n' "§cpb_projection_visuals"
             fi
             true
         """))
@@ -397,7 +429,8 @@ object CarPlayBridgeBootstrapManager {
             if (it.contains("(deleted)")) "deleted" else it.split(Regex("\\s+")).getOrNull(5)
         }
         if (id == null) return Observation(null, null, mapped, JSONObject(), false, 0, 0,
-            values["cp_visual"] != "0", values["aa_visual"] != "0")
+            values["cp_visual"] != "0", values["aa_visual"] != "0",
+            visualEvidenceKnown = values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
         val run = id.directory
         val details = root.run(script("""
             printf 'native='; if [ -f ${q("$run/cold-state.json")} ]; then cat ${q("$run/cold-state.json")}; else echo '{}'; fi
@@ -449,7 +482,8 @@ object CarPlayBridgeBootstrapManager {
         return Observation(id, values["cold"]?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
             mapped, nativeState, javaProof?.armed == true,
             owner("native_owner"), owner("java_owner"), values["cp_visual"] != "0", values["aa_visual"] != "0",
-            nativeProof, javaProof)
+            nativeProof, javaProof,
+            values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
     }
 
     private fun attempt(bundle: Payload, before: Observation, action: Policy.Action) {
@@ -486,9 +520,7 @@ object CarPlayBridgeBootstrapManager {
                 root.run(script("""
                     test "§(cat /proc/sys/kernel/random/boot_id)" = ${q(original.boot)} || exit 1
                     test "§(pidof com.ts.carplay)" = ${original.pid} || exit 1
-                    cpb_stacks=§(am stack list 2>/dev/null) || exit 1
-                    printf '%s\n' "§cpb_stacks" | grep -q 'Stack id=' || exit 1
-                    if printf '%s\n' "§cpb_stacks" | grep -q -e com.ts.carplay.app -e com.google.android.projection.gearhead -e com.ts.androidauto; then exit 1; fi
+                    ${CarPlayProjectionVisibilityProbe.requireClear()}
                     test -r /proc/${original.pid}/maps || exit 1
                     grep -q libcarplay_video_bridge.so /proc/${original.pid}/maps
                     test §? = 1 || exit 1

@@ -41,6 +41,7 @@ BOOTSTRAP_SOURCE_FILES = (
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayBridgeBootstrapPolicy.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlaySafetyPublicationGate.kt",
     "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayResidentProof.kt",
+    "app/src/main/java/br/com/redesurftank/havalshisuku/experimental/CarPlayProjectionVisibilityProbe.kt",
 )
 ASSET_FILES = (
     "libcarplay_video_bridge.so",

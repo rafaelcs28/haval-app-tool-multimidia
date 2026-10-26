@@ -45,3 +45,14 @@ Themes are **self-contained** Web apps under contract `v1.0`. The host does not 
 
 - Which firmwares/models are primary targets.
 - How long `noncontract/` themes remain supported in the field.
+
+## 2026-10-26 — v9 HUD update integrated for143
+
+Upstream `30e301fb` adds configurable HUD colours, circular power arcs, segmented
+RPM, and roundabout route geometry. Existing saved HUD settings remain valid;
+new colour preferences have defaults. The EV power percentage uses the existing
+vehicle telemetry key, with voltage/current calculation as fallback. Theme
+contractv1.0, bridge1.0.2, cluster resolution and installed theme assets stay
+unchanged. A local correction applies RPM colour choices to the bar gauge while
+preserving its original white/red defaults. Full Mini validation is pending
+source freeze; actual HUD geometry and maps require field validation.
