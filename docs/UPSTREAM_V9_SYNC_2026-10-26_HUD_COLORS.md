@@ -26,3 +26,12 @@ not run as part of these portable checks.
 
 This source sync does not publish a production APK, update OTA metadata, install
 on the vehicle or resolve the separate 144 DCM/Bluetooth preparation diagnosis.
+
+## Mini validation result
+
+Source `5a8f6b18edd41ee01ce00fd32e3e1f587c4aed6b` passed the full JVM suite and
+`assembleDebug` on job `haval-impulse-133-5a8f6b18edd41ee0-20261026T223542Z-1850`.
+Finished 2026-10-26 22:38:38 UTC: 2m36s, 49 tasks executed. Fetched artifacts and
+checksums verified; Debug APK SHA-256 `98b7aacb7dfdc5ed57a0707de2bf3d237ced39245db1d7d870db0dd870166fde`.
+The source delta has the same stable patch ID as upstream's two commits.
+No production publication, version change, instrumentation run or vehicle action.

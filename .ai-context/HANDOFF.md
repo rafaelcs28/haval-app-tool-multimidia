@@ -1,16 +1,32 @@
-## Current handoff — new v9 edc0cc61 integrated; Mini Debug validation pending
+## Current handoff — latest v9 integrated and Mini Debug/JVM PASS
 
-Owner requested latest Netseekv9 commits. Fetched exact branchfeature/new-screen-enhancements-v9
+Owner requested latest Netseekv9 commits. Fetched exact branch feature/new-screen-enhancements-v9
 through edc0cc610cc5540809e6862b1b3d958ab4bb02ae. Two commits after30e301fb:
-13e0341b (direction arrow three modes and uniform blue) and edc0cc61 (custom HSV
-colour picker, compact part chips, plain power ticks). Merged without conflicts
-on integration/netseek-v9-20261026-edc0cc61 from privateHEAD84222b17.
-Seven source/test files changed; Impulse RPMbarcolour fix, text-only CarPlay guard,
-AA recovery, preparation144, themes, bridge contracts and resolution preserved.
-42 portable CarPlay regression tests + OEM regression lock + diffcheck PASS.
-Full JVM/Android validation requires authorized Mini Debug on immutable commit.
-No version bump, production APK/OTA publication, installation or vehicle action.
-Car remainsOFF. Quiescence144 issue remains unresolved; see investigation below.
+13e0341b (three direction-arrow modes/uniform blue) and edc0cc61 (HSV custom colours,
+compact part chips, plain power ticks). Conflict-free true merge source
+5a8f6b18edd41ee01ce00fd32e3e1f587c4aed6b, private branch
+integration/netseek-v9-20261026-edc0cc61, pushed origin. Exact functional delta
+stablepatchID b606ab3f72aae1124f2aae313533f6f63658b629 matches upstream delta.
+Seven source/test files changed. Local RPMbar/default redline, text-only CP guard,
+AA recovery, preparation144, themes, bridge contract and resolutions preserved.
+
+42 portable CarPlay regression tests/OEMlock/diffcheck PASS. Audited immutable tree:
+1249 tracked files,1145 content files,8 unchanged buildcontrols digest
+ffb51eeec752bacd6ee930f17d21b9ba1115bb8833e0d293b6788f2ef68f4f22.
+Mini job haval-impulse-133-5a8f6b18edd41ee0-20261026T223542Z-1850 SUCCESS,
+full JVM tests/assembleDebug passed2m36s/49tasks, finished22:38:38Z26Oct.
+ArchiveSHA e8b4f16ca3ed471285036577de7e6fdcc8ab425b51b2346a7780f9790914aadc.
+Fetched NEW originalworkspace artifacts/v9-edc0cc61-debug-mini-20261026/,
+checksums verified. DebugAPK SHA98b7aacb7dfdc5ed57a0707de2bf3d237ced39245db1d7d870db0dd870166fde,
+bytes157019757; code74144 unchanged. This is Debug VALIDATION, not a
+production release. Android instrumentation and physical HUD not executed.
+
+No version bump/publicAPK/OTA/install/vehicle action. Vehicle remainsOFF; do not
+wake for source sync.144 quiescence diagnosis remains unresolved and unchanged.
+Next release can build from this integration plus reviewed fixes, with a new
+version only when requested. Private receipts originalworkspace
+test-artifacts/v9-sync-edc0cc61-20261026/. Sync doc
+ docs/UPSTREAM_V9_SYNC_2026-10-26_HUD_COLORS.md. Prior investigation follows.
 
 ## Current handoff — offline 144 investigation complete; exact branch not captured
 

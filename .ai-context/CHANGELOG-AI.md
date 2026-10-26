@@ -3,7 +3,8 @@
 Merged13e0341b/edc0cc61 without conflicts, preserving local CarPlay/AA/RPM guards.
 Adds custom HUD colours, uniform blue, three direction-arrow modes, compact chips
 and plain power ticks.42portable regression tests/OEMlock/diffcheck PASS.
-Full JVM/Debug validation queued next on authorized Mini. No public release/car action.
+Full JVM/Debug validation PASS on authorized Mini, source5a8f6b18, job ending1850,
+2m36s/49tasks. Fetched DebugAPK/checksums verified; no public release/car action.
 
 ## 2026-10-26 — offline investigation of 144 preparation wait
 

@@ -1,9 +1,11 @@
-## Current next step — validate v9 source integration on authorized Mini
+## Current next step — v9 source ready for the next requested release
 
-Two newv9commits integrated through edc0cc61; source branchintegration/netseek-v9-20261026-edc0cc61.
-Finish immutable audited Debug/JVM validation, record results and retain source for
-next release. No version bump or production release requested. Keep144quiescence
-investigation and vehicleOFF state unchanged. Detailed source/guards in HANDOFF.
+Two further v9 commits through edc0cc61 integrated on private branch
+integration/netseek-v9-20261026-edc0cc61. Full JVM/Debug Mini and42 portable tests
+PASS; source5a8f6b18, artifacts/receipts in HANDOFF. No version bump or production
+APK/OTA update. Physical HUD/custom colour UI still needs later field validation.
+Quiescence144 investigation remains pending fresh discriminating evidence.
+VehicleOFF; no wake/install/test from this source sync.
 
 ## Current next step — granular DCM/BT evidence before a functional fix
 
