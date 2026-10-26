@@ -1,3 +1,13 @@
+## Current next step — granular DCM/BT evidence before a functional fix
+
+Offline investigation is complete for available144 evidence. Add/collect distinct
+private blocked reasons and numeric/boolean DCM/BT fields via the existing reader
+in a later authorized session. Keep MAC/name/serial private, preserve all absence
+and projection guards. Current logs cannot identify which of3branches yieldedFALSE.
+No need to request another P/disconnect loop without these discriminators. Do not
+execute archived diagnostic prototype: callback/unload lifecycle unvalidated.
+VehicleOFF; no wake/build/new release authorized by the investigation alone.
+
 ## Current next step — offline quiescence investigation; vehicle OFF
 
 144 reboot validation reached precise fresh wait, CP/AA visualsfalse but underlying

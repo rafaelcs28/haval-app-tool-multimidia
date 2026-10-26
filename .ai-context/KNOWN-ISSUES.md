@@ -1,3 +1,14 @@
+## 2026-10-26 — merged quiescence diagnostic cannot identify current blocker
+
+The144 event collapses an unrecognized DCM online signature, active DCM projection,
+and physical BT aggregate/profile presence into FALSE. First case does not itself
+prove phone connection; current UI text overstates it. Saved current-boot evidence
+has no branch discriminator, so exact cause remains unknown. Decoder/Binder errors
+returnNULL and temporalwindow does not retainFALSE without a fresh negative sample.
+No demonstrated BLE-only cause. See carplay-preparation-144-investigation.md.
+No guard bypass or speculative release. Private Frida collector prototype NOT
+APPROVED to execute until unload/ServiceConnection lifecycle validated.
+
 ## 2026-10-26 — 144 current-boot preparation blocked by quiescence signal
 
 Postauthorizedreboot boot1c592b4f/app3345: current manager visibility reader completes,

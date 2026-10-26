@@ -1,3 +1,30 @@
+## Current handoff — offline 144 investigation complete; exact branch not captured
+
+Owner requested investigation after confirmed GWM shutdown. No vehicle connection,
+wake, reboot, install or power command during this investigation. Production144
+unchanged; no Android/Gradle/Kotlin build, new version or release.
+
+Reviewed current boot events + source + pinned OEM DCM/Bluetooth through REA and
+independent read-only QA. Current FALSE has three possible origins: online DCM
+record outside the narrow retained signature; nonempty active projection list;
+Bluetooth aggregate/profile connected/transitioning. The current log stores only
+the merged boolean, so WHICH branch occurred cannot be reconstructed. Unknown
+record signature is not physical phone proof. UI text overstates that branch.
+Binder/decode failures returnNULL, notFALSE; window does not latch oldFALSE.
+ConnDevice field order matches archived OEM; no current evidence BLElights cause.
+Historical133/134 retained records are not fresh144 measurements.
+
+Report docs/architecture/carplay-preparation-144-investigation.md records evidence,
+limits and exact next fields. Prefer granular private reason telemetry in existing
+bound production readers; do not bypass guards or publish a speculative fix.
+A separate diagnostic JS prototype was syntax/fixture/bundle checked locally but
+review found unload/ServiceConnection lifecycle still unvalidated. Archived PRIVATE
+ONLY under originalworkspace test-artifacts/quiescence-investigation-144-20261026/
+prototype-not-approved/. NOT APPROVED for execution/staging. No collector in app.
+Complete REA records and machine-checked investigation-facts.json in same private
+evidence directory. Only documentation tracked. Next physical identification needs
+fresh detailed DCM/BT data in a later authorized online session. Vehicle remainsOFF.
+
 ## Current handoff — 144 rebooted; preparation WAIT; vehicle OFF confirmed
 
 Latest owner explicitly confirmed parked and authorized central reboot, then asked

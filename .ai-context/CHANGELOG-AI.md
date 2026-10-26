@@ -1,3 +1,14 @@
+## 2026-10-26 — offline investigation of 144 preparation wait
+
+Current fresh FALSE narrowed to three source branches; saved events cannot identify
+which. Confirmed diagnostic imprecision: rejecting an unrecognized online-record
+signature is labelled activeconnection without physical proof. Static REA on pinned
+OEM and independent QA found no demonstrated Parcel-order/latched-FALSE cause.
+No evidence tying BLElights to wait. Report and targeted capture fields documented.
+Private diagnostic prototype passed portable wire/redaction fixtures and JS bundling,
+but is NOT APPROVED for runtime: unload/callback lifecycle unvalidated. No app code,
+Android build, release, car access or vehicle action. Vehicle remainsOFF.
+
 ## 2026-10-26 — 144 post-boot validation and requested GWM shutdown
 
 Owner parked/reboot authorization followed by explicit shutdown request. One guarded
