@@ -1,3 +1,9 @@
+## 2026-10-26 — Netseek v9 integration validated
+
+- True merge4f774153 includes all four upstream commits through0fe2969c and preserves140 OEM/ACfocus/CarPlaybootstrap/catalog fixes. Integrationbranch only; published140 unchanged.
+- Full JVM/Debug passed on authorizedMini in2m34s/49tasks. Fetchedchecksums/signature verified; actualAPK Default48 HTML/metadata, ACfocus JS methods and newthemevisibilitypolicy match integration source. SHA-256 ab1d6d1dc87e3dfdff53039b53b7fe63c2e81eabdc93f50965138e3c23000512.
+- Theme build/aggregatechecks and independentbyteparity pass; added5 passing regressions for identical-payload toggle/dedup plus rawHUD/radar/alias preservation. No localAndroidbuild or vehicle action; physicalintegration pending.
+
 ## 2026-10-26 — Integrate four newer Netseek v9 commits
 
 - True merge upstream5ccd91e2→0fe2969c onto140 integrationbranch: HUD arrows/range/trip, optionalthemeTBTcard toggle, route-tail junction bound. Preserved OEMbuttons/ACfocus/catalog and localCarPlay textOnly guard.

@@ -1,3 +1,64 @@
+## Current handoff — Netseek v9 pulled, merged and validated (2026-10-26)
+
+Request "Teve update na v9 do netseek. Veja e puxa" COMPLETED as source integration.
+Branch integration/netseek-v9-20261026, based on private published140 tip8bf470b3.
+True merge commit 4f7741531caa16005daf28474cc1efd5c4dc9434 has parents8bf470b3 and exact upstream
+0fe2969c94faf3ee485222a8a619613abd1f53b8; all four newer upstream commits are ancestors of HEAD.
+Local refs/remotes/netseek/v9 now points to0fe2969c. Keep release140/publicAPK/OTA/
+themes-preview as published; no new production version was requested or published.
+No vehicle query, install, reboot or power command was issued.
+
+Integrated four updates since5ccd91e2:
+- fbae25f1 andf9a2c857: HUD next-turn default threshold1km (existing saved preference
+  honored), larger two-line trip display, Sempre arrow follows the mapped road and
+  uses the measured angle for soft curves.
+- 34eb92c6: global/theme switches for the turn-by-turn card, enabled by default;
+  inactive theme directions only, keeping rawHUD/radar data. Scoped Default and
+  Minimalist option leaves independent radar alerts visible.
+- 0fe2969c: post-turn route tail ends at the next real junction, excluding driveways,
+  minimum5m and maximum120m, instead of guessing the route beyond that junction.
+
+Preserved140 OEM steering backup/short-default policy, globalACfocus bridge1.0.2,
+private source/public-artifact boundary and current catalogue URL. No CarPlaybootstrap,
+experimentalnative/controller, ServiceManager, BasicSettings or workflow changes.
+CarPlay uses the shared HUD visual changes; its local text-only/unknown-maneuver
+AR guard/test and AndroidAuto precedence remain intact. Contractv1.0 and oldtheme
+API/keys remain compatible. Six merge conflicts resolved through source regeneration
+and retaining BOTH local text-only and new upstream soft-turn tests. Default48 and
+Minimalist8 packages prepared; ApexGT16 unchanged. Never overwrite published47/7
+packages with these new bytes under the same versions.
+
+Found and fixed an actual upstream bug during integration: republishing the same
+raw directions was suppressed before the theme visibility filter. Shared pure
+ThemeNavigationDirectionsPolicy and pre-dedup effective comparison now deliver
+on/off/on immediately while preserving raw bus/HUD/radar and otherkeydedup. Five
+new JVM regressions passed in the full suite, including the real HUD arbiter and
+alias/non-navigation preservation. No new lifecycle/listener behavior.
+
+Validation COMPLETE on authorized Mac Mini ONLY:
+Jobhaval-impulse-133-4f7741531caa1600-20261026T083243Z-6913, exact audited merge source above; SUCCESS2m34s/49tasks,
+finished2026-10-26T08:35:35Z. FulltestDebugUnitTest and assembleDebug passed.
+DebugAPK fetched into a NEW directory, queue SHA256SUMS verified; signature validates,
+actual bundledDefault1.4.48/bridge1.0.2 and rawHTML bytes match source; retainedACfocus
+JS methods and newvisibility policy are present. Debug artifact only, not for OTA.
+APK SHA-256 ab1d6d1dc87e3dfdff53039b53b7fe63c2e81eabdc93f50965138e3c23000512, 156872297 bytes.
+NormalNode builds forDefault/Minimalist and aggregate npmcheck passed, including46
+ACfocus scenarios; independentQA checked all6 source/dist/APK/catalog parity groups.
+CarPlay regression lock/OEM hashes and gitdiffcheck passed. No coordinator Android,
+Gradle or Kotlin builds. No physical HUD/newtoggle/map validation claimed.
+
+Private evidence relative to /root/projects/haval-impulse:
+- artifacts/netseek-v9-20261026-debug-mini/: APK/build.log/SHA256SUMS/validation.json.
+- test-artifacts/netseek-v9-20261026/integration-receipt.json: exact commits, queue
+  archive/control digests, checks and artifact hashes.
+- test-artifacts/build-default-v9-20261026.log, build-minimalist-v9-20261026.log,
+  check-themes-v9-20261026.log.
+
+Next only if requested: choose a NEW release number, signedRelease on Mini, validate
+and publish matchingAPK plus compiled Default48/Minimalist8 catalogue assets using
+existingartifact-only branch discipline. Never publish private source/history.
+The current owner request requires no further build or publication work.
+
 ## Current handoff — Netseek v9 source integration, Android Debug validation next
 
 Latest request2026-10-26: "Teve update na v9 do netseek. Veja e puxa". Integrate

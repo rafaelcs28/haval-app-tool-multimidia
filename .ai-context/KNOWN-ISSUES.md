@@ -1,3 +1,13 @@
+## Current status — Netseek v9 through0fe2969c integrated and tested
+
+Source integration/netseek-v9-20261026 includes four new HUD/theme-card/map-route
+updates on top of140. Full Mini JVM/Debug and theme checks pass, with a narrow fix
+for same-JSON visibility-toggle dedup. Default1.4.48/Minimalist1.0.8 packages are
+prepared, ApexGT16 unchanged; no source regression to140 features. CurrentHANDOFF
+contains exact commits/receipts. This is a source pull, not a new production release.
+Published140/publicOTA/themes-preview were not changed; no car operation. Physical
+validation and any future signed release remain separate requested work.
+
 ## Current status — 140 published and verified, owner installation pending
 
 140 includes PR165 steering OEM preservation and PR166 global AC focus, retaining
