@@ -1,3 +1,12 @@
+## 2026-10-26 — 144 current-boot preparation blocked by quiescence signal
+
+Postauthorizedreboot boot1c592b4f/app3345: current manager visibility reader completes,
+CP/AA visualsfalse, observationfresh, quiescentfalse ->CARPLAY_NOT_KNOWN_INACTIVE.
+No new attempt, noREADY. This is not proof of connected phone; origin of connection
+signal needs offline review. Old persisted142failure and137ready excluded. Logs saved
+under originalworkspace test-artifacts/reboot-74144-20261026. GWM shutdown confirmed;
+actual iPhone test deferred. No vehicle wake to investigate without new authorization.
+
 ## 2026-10-26 — 144 published, verified and remotely installed
 
 Fixed OEM visibility reader compatibility and initial proof budget within the

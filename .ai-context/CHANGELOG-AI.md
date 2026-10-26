@@ -1,3 +1,12 @@
+## 2026-10-26 — 144 post-boot validation and requested GWM shutdown
+
+Owner parked/reboot authorization followed by explicit shutdown request. One guarded
+central reboot confirmed newboot1c592b4f/app3345.144 manager emits fresh precise
+wait: hidden CP/AA, quiescentfalse, CARPLAY_NOT_KNOWN_INACTIVE. No144READY; historical
+137READY/142failure excluded. Passive field evidence saved, no iPhone test/injection.
+GWMoff accepted22:07:31Z and fresh hyEngSts0 confirmed22:07:41Z, newer cloud update.
+Vehicle left OFF as requested. Source/build/publication unchanged.
+
 ## 2026-10-26 — 144 published, verified and remotely installed
 
 Fixed OEM visibility reader compatibility and initial proof budget within the

@@ -1,3 +1,27 @@
+## Current handoff — 144 rebooted; preparation WAIT; vehicle OFF confirmed
+
+Latest owner explicitly confirmed parked and authorized central reboot, then asked
+for vehicle shutdown after validation and deferred the iPhone test. This supersedes
+older reboot/power prohibitions below. ONE guarded Android reboot was issued at
+2026-10-26 22:03Z. New kernel boot1c592b4f-d99c-438e-9127-63dd6a079193, appPID3345,
+144 payload extracted. Automatic manager now produces precise wait events, without
+143 OEM AWK crash: fresh observation, cp_visual=false, aa_visual=false,
+quiescent=false, reasonCARPLAY_NOT_KNOWN_INACTIVE (22:03:58Z through22:07Z).
+No current attempt/runtime/READY. The persisted142 failure and137 READY are historical;
+do not mislabel them as144 failure/success. No iPhone/CarPlay test was performed.
+Phone absence versus a stale/overbroad OEM connection signal remains UNRESOLVED.
+Next offline work: trace quiescence/DCM/BT evidence; do not bypass unknown projection
+ownership or claim a phone is connected from this boolean alone. No additional
+reboot, restart, disconnect request or speculative release now.
+
+Owner-authorized GWM TURN_OFF sent ONCE22:07:31Z. API accepted, then fresh cloud
+hyEngSts changed1->0 at22:07:41Z (updateTime1793052461171 newer than pre-command
+1793052441087), verification attempt3. Local preflightP/0 (speed age9.8s).
+Vehicle OFF confirmed; do not turn it on again without a new owner request.
+Evidence in originalworkspace test-artifacts/reboot-74144-20261026/ includes
+boot/prefs/passive logs/stack reads, authorization/reboot marker, power.jsonl and
+validation-and-shutdown-receipt.json. Only credentials-free receipts in Git.
+
 ## Current handoff — 144 PUBLISHED + INSTALLED; owner reboot/activation pending
 
 Latest owner explicitly authorized remote INSTALL while moving because passenger

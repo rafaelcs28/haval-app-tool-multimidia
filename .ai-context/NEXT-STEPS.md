@@ -1,3 +1,12 @@
+## Current next step — offline quiescence investigation; vehicle OFF
+
+144 reboot validation reached precise fresh wait, CP/AA visualsfalse but underlying
+quiescencefalse; READY/test pending. Trace independent DCM/BT signal and freshness,
+including whether BLE-only accessories can make the predicate too broad. Do not
+infer phone presence from boolean. Historical142 error/137ready unrelated to newboot.
+Owner deferred test; GWMoff confirmed22:07:41Z26Oct. Do not wake/reboot/installagain
+without new session request. Evidence and exact fresh state in currentHANDOFF.
+
 ## 2026-10-26 — 144 published, verified and remotely installed
 
 Fixed OEM visibility reader compatibility and initial proof budget within the
