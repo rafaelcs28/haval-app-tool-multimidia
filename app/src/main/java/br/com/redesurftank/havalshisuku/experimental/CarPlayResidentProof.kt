@@ -4,6 +4,23 @@ import java.security.MessageDigest
 
 /** Pure validation and shell generation. No process restart or callback teardown. */
 internal object CarPlayResidentProof {
+    class Pending(message: String) : IllegalStateException(message)
+
+    /** A pending poll spends the existing budget; terminal errors are never retried. */
+    fun <T> await(deadline: Long, now: () -> Long, pause: () -> Unit, probe: () -> T): T {
+        var last: Pending? = null
+        while (now() < deadline) {
+            try {
+                val result = probe()
+                check(now() < deadline) { "Resident proof completed after its deadline" }
+                return result
+            } catch (pending: Pending) {
+                last = pending
+                if (now() < deadline) pause()
+            }
+        }
+        throw IllegalStateException("Resident proof deadline expired: ${last?.message}", last)
+    }
     data class Binding(val role: String, val bootId: String, val targetPid: Int,
         val targetStartTime: Long, val revision: String, val ticket: String,
         val instance: String, val scriptSha256: String, val runtimeDirectory: String,
@@ -16,10 +33,17 @@ internal object CarPlayResidentProof {
     data class Challenge(val instance: String, val nonce: String, val issuedElapsedMs: Long)
     data class Sample(val sequence: Long, val elapsedMs: Long, val wallMs: Long,
         val phase: String = "", val replacements: Int = -1, val pinned: Boolean = false,
-        val failureAbsent: Boolean = false, val armed: Boolean = false)
+        val failureAbsent: Boolean = false, val armed: Boolean? = null,
+        val firstElapsedMs: Long = elapsedMs, val firstWallMs: Long = wallMs)
     data class Response(val binding: Binding, val nonce: String, val disposing: Boolean?, val samples: List<Sample>)
     private val uuid = Regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")
     private val digest = Regex("[a-f0-9]{64}")
+
+    fun challenge(instance: String, previous: Challenge?, now: Long, nonce: () -> String): Challenge {
+        require(uuid.matches(instance) && now >= 0) { "Invalid challenge identity or clock" }
+        return previous?.takeIf { it.instance == instance && now - it.issuedElapsedMs in 0..2500 }
+            ?: Challenge(instance, nonce().also { require(uuid.matches(it)) }, now)
+    }
 
     fun checkBinding(binding: Binding) = with(binding) {
         require(role in setOf("native", "java")) { "Unknown residency role" }
@@ -43,17 +67,29 @@ internal object CarPlayResidentProof {
     fun commandSha256(b: Binding) = sha256((arguments(b, "${b.payloadDirectory}/cpbridge-inject").joinToString("\u0000") + "\u0000").toByteArray(Charsets.UTF_8))
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    fun checkExit(expected: Binding, launch: Receipt, exit: Receipt) {
+    fun checkLaunch(expected: Binding, launch: Receipt) {
         checkBinding(expected)
-        require(launch.binding == expected && exit.binding == expected) { "Residency launch identity mismatch" }
-        require(launch.childPid > 0 && launch.childStartTime >= expected.targetStartTime &&
-            launch.childPid == exit.childPid && launch.childStartTime == exit.childStartTime) { "Residency child identity mismatch" }
-        require(launch.commandSha256 == commandSha256(expected) && exit.commandSha256 == launch.commandSha256) { "Residency declared CLI arguments mismatch" }
-        require(launch.commandEvidence == "declared-before-exec-v1" && exit.commandEvidence == launch.commandEvidence &&
-            launch.supervisorSha256 == supervisorSha256(expected) && exit.supervisorSha256 == launch.supervisorSha256) {
+        require(launch.binding == expected) { "Residency launch identity mismatch" }
+        require(launch.childPid > 0 && launch.childStartTime >= expected.targetStartTime) { "Residency child identity mismatch" }
+        require(launch.commandSha256 == commandSha256(expected)) { "Residency declared CLI arguments mismatch" }
+        require(launch.commandEvidence == "declared-before-exec-v1" && launch.supervisorSha256 == supervisorSha256(expected)) {
             "Residency pre-exec supervisor evidence mismatch"
         }
+    }
+
+    fun checkExit(expected: Binding, launch: Receipt, exit: Receipt) {
+        checkLaunch(expected, launch)
+        checkLaunch(expected, exit)
+        require(launch.childPid == exit.childPid && launch.childStartTime == exit.childStartTime) { "Residency child identity mismatch" }
         require(exit.exitCode == 0 && (exit.exitElapsedMs ?: 0) > 0) { "Residency CLI did not exit successfully" }
+    }
+
+    enum class Recovery { PENDING, ARMED, INSTALLED }
+    fun recovery(phase: String, mappingMatches: Boolean?, proofAvailable: Boolean): Recovery {
+        require(mappingMatches != false) { "Unexpected resident bridge mapping" }
+        require(phase in setOf("armed", "installing", "installed-pinned")) { "Native phase is terminal or unknown: $phase" }
+        if (!proofAvailable || mappingMatches == null || phase == "installing") return Recovery.PENDING
+        return if (phase == "armed") Recovery.ARMED else Recovery.INSTALLED
     }
 
     fun checkResponse(expected: Binding, launch: Receipt, exit: Receipt, challenge: Challenge,
@@ -62,22 +98,44 @@ internal object CarPlayResidentProof {
         require(uuid.matches(challenge.nonce) && challenge.instance == expected.instance) { "Invalid residency challenge" }
         require(challenge.issuedElapsedMs >= requireNotNull(exit.exitElapsedMs) &&
             challenge.issuedElapsedMs <= nowElapsedMs) { "Residency challenge predates CLI exit" }
-        require(response.binding == expected && response.nonce == challenge.nonce && response.disposing == false) { "Residency response identity or disposal mismatch" }
-        require(response.samples.size == 2) { "Two residency samples required" }
-        val first = response.samples[0]
-        val last = response.samples[1]
-        require(first.sequence > 0 && last.sequence > first.sequence &&
-            last.elapsedMs - first.elapsedMs >= 100) { "Residency samples did not advance" }
+        require(response.binding == expected && response.disposing == false) { "Residency response identity or disposal mismatch" }
+        require(uuid.matches(response.nonce)) { "Invalid residency response nonce" }
+        require(response.samples.size <= 2) { "Invalid residency sample count" }
+        var unfinished = response.samples.size < 2
         for (sample in response.samples) {
-            require(sample.elapsedMs >= challenge.issuedElapsedMs &&
-                nowElapsedMs - sample.elapsedMs in 0..3000 &&
-                nowWallMs - sample.wallMs in 0..3000) { "Residency response not fresh after challenge" }
-            require(if (expected.role == "native") nativeArmed(sample) || nativeInstalled(sample) else sample.armed) {
-                "Resident peer state is not prepared"
+            require(sample.sequence > 0 && sample.elapsedMs >= 0 && sample.wallMs >= 0) { "Invalid residency sample" }
+            if (expected.role == "native") {
+                if (sample.phase == "installing" && sample.pinned && sample.failureAbsent && sample.replacements in 0..9) {
+                    unfinished = true
+                } else require(nativeArmed(sample) || nativeInstalled(sample)) { "Resident native state is terminal: ${sample.phase}" }
+            } else {
+                require(sample.armed != null) { "Resident Java state is unknown" }
+                if (sample.armed == false) unfinished = true
             }
         }
-        return last
+        // Old healthy responses are pending; terminal/invalid evidence above is never hidden by nonce churn.
+        if (response.nonce != challenge.nonce) throw Pending("Still awaiting the current residency nonce")
+        var stale = false
+        for (sample in response.samples) {
+            require(sample.elapsedMs >= challenge.issuedElapsedMs && sample.elapsedMs <= nowElapsedMs &&
+                sample.wallMs <= nowWallMs) { "Invalid residency sample chronology" }
+            if (nowElapsedMs - sample.elapsedMs > 3000 || nowWallMs - sample.wallMs > 3000) stale = true
+        }
+        if (response.samples.size == 2) {
+            val first = response.samples[0]
+            val last = response.samples[1]
+            require(last.sequence > first.sequence && last.elapsedMs - first.elapsedMs >= 100) { "Residency samples did not advance" }
+        }
+        if (stale) throw Pending("Residency response is no longer fresh")
+        if (unfinished) throw Pending("Residency response is not complete")
+        val last = response.samples.last()
+        return last.copy(firstElapsedMs = response.samples.first().elapsedMs, firstWallMs = response.samples.first().wallMs)
     }
+
+    fun fresh(sample: Sample, nowElapsed: Long, nowWall: Long): Boolean =
+        sample.firstElapsedMs >= 0 && sample.firstWallMs >= 0 &&
+            nowElapsed - sample.firstElapsedMs in 0..3000 && nowWall - sample.firstWallMs in 0..3000 &&
+            nowElapsed - sample.elapsedMs in 0..3000 && nowWall - sample.wallMs in 0..3000
 
     fun nativeArmed(sample: Sample) = sample.phase == "armed" && sample.replacements == 0 && sample.pinned && sample.failureAbsent
     fun nativeInstalled(sample: Sample) = sample.phase == "installed-pinned" && sample.replacements == 9 && sample.pinned && sample.failureAbsent

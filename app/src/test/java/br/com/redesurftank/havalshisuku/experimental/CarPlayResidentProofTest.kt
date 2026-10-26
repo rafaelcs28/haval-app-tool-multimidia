@@ -30,6 +30,11 @@ class CarPlayResidentProofTest {
         catch (_: IllegalArgumentException) {}
     }
 
+    private fun pending(action: () -> Unit) {
+        try { action(); fail("Unfinished proof accepted") }
+        catch (_: CarPlayResidentProof.Pending) {}
+    }
+
     @Test fun onlyPostExitFreshAdvancingSamplesProveNativeResidence() {
         val proof = verify()
         assertTrue(CarPlayResidentProof.nativeArmed(proof))
@@ -75,9 +80,8 @@ class CarPlayResidentProofTest {
     }
 
     @Test fun replayDisposedOrIncompleteResponseNeverProvesResidence() {
-        for (bad in listOf(response().copy(nonce = ticket), response().copy(disposing = true),
-            response().copy(disposing = null), response().copy(samples = emptyList()),
-            response().copy(samples = response().samples.take(1)),
+        for (bad in listOf(response().copy(disposing = true),
+            response().copy(disposing = null),
             response().copy(samples = response().samples + sample(3, 10_500)))) rejects { verify(response = bad) }
         rejects { verify(challenge = challenge().copy(instance = ticket)) }
         rejects { verify(challenge = challenge().copy(nonce = "")) }
@@ -87,7 +91,7 @@ class CarPlayResidentProofTest {
         val first = response().samples[0]
         val second = response().samples[1]
         for (bad in listOf(first.copy(sequence = 0), first.copy(elapsedMs = 10_099),
-            first.copy(elapsedMs = 7500 - 1), first.copy(wallMs = 1_007_499),
+            first.copy(elapsedMs = 7500 - 1), first.copy(wallMs = Long.MIN_VALUE), first.copy(wallMs = -1),
             first.copy(elapsedMs = 10_501), first.copy(wallMs = 1_010_501))) {
             rejects { verify(response = response().copy(samples = listOf(bad, second))) }
         }
@@ -96,7 +100,8 @@ class CarPlayResidentProofTest {
         }
         val boundary = response().copy(samples = listOf(sample(1, 10_100), sample(2, 10_200)))
         verify(response = boundary, now = 13_100, wall = 1_013_100)
-        rejects { verify(response = boundary, now = 13_101, wall = 1_013_101) }
+        pending { verify(response = boundary, now = 13_101, wall = 1_013_101) }
+        pending { verify(response = response().copy(samples = listOf(first.copy(wallMs = 1_007_499), second))) }
     }
 
     @Test fun everyNativeSampleRequiresPinExactPhaseCountAndNoFailure() {
@@ -113,11 +118,102 @@ class CarPlayResidentProofTest {
         val java = binding.copy(role = "java")
         val ready = response(java).copy(samples = response().samples.map { it.copy(armed = true) })
         verify(b = java, response = ready)
-        for (index in 0..1) rejects {
+        for (index in 0..1) pending {
             verify(b = java, response = ready.copy(samples = ready.samples.mapIndexed { i, value ->
                 if (i == index) value.copy(armed = false) else value
             }))
         }
+    }
+
+    @Test fun delayedResponseAndInstallingKeepSameAttemptAndEligibilityUntilFreshCompletion() {
+        var now = 10_100L
+        var calls = 0
+        val gate = CarPlaySafetyPublicationGate()
+        val key = CarPlaySafetyPublicationGate.Key(boot, binding.targetPid, binding.targetStartTime, ticket)
+        val result = CarPlayResidentProof.await(20_000, { now }, { now += 80 }) {
+            calls++
+            assertEquals(CarPlaySafetyPublicationGate.Decision.ALLOW,
+                gate.decide(key, key, true, true, true, "preparing"))
+            when (calls) {
+                1 -> { now += 1200; throw CarPlayResidentProof.Pending("first poll missed") }
+                2 -> verify(response = response().copy(samples = response().samples.map { it.copy(phase = "installing") }), now = now, wall = 1_000_000 + now)
+                else -> verify(response = response().copy(samples = response().samples.map { it.copy(phase = "installed-pinned", replacements = 9) }), now = now, wall = 1_000_000 + now)
+            }
+        }
+        assertEquals(3, calls)
+        assertTrue(CarPlayResidentProof.nativeInstalled(result))
+        assertEquals(CarPlaySafetyPublicationGate.Decision.DENY,
+            gate.decide(key, key, false, true, true, "preparing")) // live quiescence loss still revokes
+    }
+
+    @Test fun fatalIdentityReceiptOrDisposalIsNotRetriedEvenAfterOnePendingPoll() {
+        for (failure in listOf<() -> Unit>(
+            { verify(response = response().copy(binding = binding.copy(ticket = boot))) },
+            { verify(end = exit().copy(exitCode = 137)) },
+            { verify(response = response().copy(nonce = ticket, disposing = true)) },
+            { verify(response = response().copy(nonce = ticket, samples = response().samples.map { it.copy(phase = "failed") })) },
+            { verify(response = response().copy(nonce = ticket, samples = response().samples.map { it.copy(pinned = false) })) }
+        )) {
+            var now = 0L
+            var calls = 0
+            rejects {
+                CarPlayResidentProof.await(10_000, { now }, { now += 80 }) {
+                    calls++
+                    if (calls == 1) throw CarPlayResidentProof.Pending("not yet")
+                    failure()
+                }
+            }
+            assertEquals(2, calls)
+        }
+    }
+
+    @Test fun deadlineExpiresWithoutExtendingAttemptAndRejectsLateSuccessfulReturn() {
+        var now = 0L
+        var calls = 0
+        try {
+            CarPlayResidentProof.await(200, { now }, { now += 100 }) {
+                calls++; throw CarPlayResidentProof.Pending("not yet")
+            }
+            fail("Pending exceeded attempt deadline")
+        } catch (_: IllegalStateException) {}
+        assertEquals(2, calls)
+        try {
+            now = 0
+            CarPlayResidentProof.await(200, { now }, {}) { now = 201; "late" }
+            fail("late result accepted")
+        } catch (_: IllegalStateException) {}
+    }
+
+    @Test fun pendingNonceSurvivesFirstPollAndOnlyRenewsAfterLease() {
+        var generated = 0
+        val create = { generated++; nonce }
+        val first = CarPlayResidentProof.challenge(instance, null, 10_000, create)
+        assertSame(first, CarPlayResidentProof.challenge(instance, first, 11_200, create))
+        assertSame(first, CarPlayResidentProof.challenge(instance, first, 12_500, create))
+        assertNotSame(first, CarPlayResidentProof.challenge(instance, first, 12_501, create))
+        assertEquals(2, generated)
+        pending { verify(response = response().copy(nonce = ticket)) }
+        pending { verify(response = response().copy(samples = response().samples.take(1))) }
+        pending { verify(response = response().copy(samples = emptyList())) }
+    }
+
+    @Test fun recoveryWaitsForKnownArmedWithoutMappingAndNeverPreparesForeignOrUnknownState() {
+        assertEquals(CarPlayResidentProof.Recovery.PENDING, CarPlayResidentProof.recovery("armed", null, true))
+        assertEquals(CarPlayResidentProof.Recovery.PENDING, CarPlayResidentProof.recovery("armed", true, false))
+        assertEquals(CarPlayResidentProof.Recovery.PENDING, CarPlayResidentProof.recovery("installing", true, true))
+        assertEquals(CarPlayResidentProof.Recovery.INSTALLED, CarPlayResidentProof.recovery("installed-pinned", true, true))
+        for (phase in listOf("none", "unknown", "failed", "failed-pinned")) rejects {
+            CarPlayResidentProof.recovery(phase, true, false)
+        }
+        rejects { CarPlayResidentProof.recovery("armed", false, true) }
+    }
+
+    @Test fun proofMustRemainJointlyFreshAfterTheOtherRoleAndIdentityChecksFinish() {
+        val proof = verify()
+        assertTrue(CarPlayResidentProof.fresh(proof, 13_200, 1_013_200))
+        assertFalse(CarPlayResidentProof.fresh(proof, 13_201, 1_013_201))
+        assertFalse(CarPlayResidentProof.fresh(proof, 10_449, 1_010_449))
+        assertFalse(CarPlayResidentProof.fresh(proof.copy(firstWallMs = Long.MIN_VALUE), 10_500, 1_010_500))
     }
 
     @Test fun supervisorUsesExactEternalizeParametersAndWaitsWithoutRetry() {

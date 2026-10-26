@@ -1,3 +1,82 @@
+## 2026-10-26 — 141 fix ready for immutable audit and signed Mini validation
+
+Follow-up to owner's140 interrupted-preparation photo. Resident launch/birth and
+eternalized peer worked in observedboot; failed140state was preserved without any
+vehicle mutation. Exactfieldcause/order unknown because oldcode overwrote safety.
+Independently demonstrated source defects are addressed in141: ARMED beforeC++SO
+mapping and temporary peer response delays no longer immediatelycancel sameattempt.
+
+TypedPending is limited to verified not-yet-published/unfinished responses and
+explicit just-admittedstartup. Valid persistentattempt/adoption and ARMED/noSO stay
+within existing4s/15s/330s deadlines/ticket; no new injector/retry/unload. Invalid
+identity/hash/receipt/disposal/nativefailure or foreignmap/unknownphase remains
+terminal. Pendingnonce kept underboundedlease to avoid two-sample starvation. Both
+samples for BOTHroles must remain jointlyfresh after finalidentity check before
+READY/clientrefresh, and lateafterdeadline results are rejected. Quiescence/publish
+cancellation never relaxed; no P/speed requirement restored.
+
+Prior safety packet is captured bounded4096bytes, parsed/whitelisted, UNDERlock
+BEFORE cancellation/writefailure, with failuretimes. SourceQA has no remaining
+blockers; six newfocusedJVM regressions plus existing adjustments await MiniONLY.
+Finalsource/lifecycle checks and controllerfreeze pending; do not stagewhileagent
+stillchecks. Versiondefaults141, latestvalidatedNetseek changes inherited. No UI or
+nativeJS helper/protocol change. Afterfreeze onlyone auditedsignedMiniRelease, then
+artifact/productioncert/source validation, approvedpublicAPKandcompiledcatalog
+publication andindependentchecks; fixedpreviewmanifestLAST. Ownerinstalls later.
+
+## ACTIVE — 140 field failure captured; preparing141, no more vehicle operations
+
+Owner installed140 and restarted, newphoto "O preparo foi interrompido; sessão atual
+preservada". Readonly live query confirmed code74140, bootb753f2ea-415f-4028-b6b6-
+35547e098a7a, OEM8544/start3549. Captured private evidence originalworkspace
+ test-artifacts/140-photo-interrupted-20261026/field-summary.json plus initial/runtime
+files. ONLYreadcommands issued; no install/reboot/kill/reset/retry/injection. Final
+ordering/logcatquery timedout; no morecarcalls. Owner was told no needwait atcar,
+leave experimentaltest off, preserve session. Do not ask anotherpark/disconnect loop.
+
+140 firstpassed139 birth barrier: native-launch andexitROOT400 receipts PRESENT,
+child9025/start3726, exactsamebinding, exit0 elapsed38820. Nativepeer remainsresident,
+freshnonce2samples disposingfalse in SAMEOEMidentity, but its currentstatefailed0/
+pinnedfalse with "Automatic eligibility lost before native preparation"; appfailure
+"Native resident proof unavailable during preparation". NOJava launch. CurrentUSB
+onlyroot hubs, noPhoneUSB; do NOT blameBluetooth/phonefromicon. Historicalready137
+prefs irrelevant. Currentattemptticketfc54f1a2-9779-4980-ac77-7e51451749d0, revision
+74140-ed95f3e47037-2d6479ac8ae2. FieldorderingUNKNOWN becausefailAttempt overwrote
+prior safety packet. Nativefailure could be consequence of earlycontrollercancellation.
+
+Source defects verified: (a) aftervalidpre-gateARMEDJSproof, C++SO maynotbemappedyet;
+observe onlyasksresidentnativeproof whenmap==bundlebridge, recoverimmediatelyfails
+null. (b) one1.2speerpolltimeout collapsesnull→failAttempt→gatefalse→nativeeligibility
+failure. No proof either caused THISfieldattempt specifically. Do not claimfixphysical.
+
+Preparing141 under ongoing projectfix/publication authorization; ownerinstalls later.
+Branchrelease/impulse-74141-v9 fromvalidatedlatestNetseekintegration8557890d. Root
+bumpedgradledefaults74141/1.0.0.74.141-preview. Controller_pid_fix owns manager/proof
+andfocusedJVMtests: typedPending onlyexplicittemporarilymissing/unfinishedresponse,
+samedeadline/ticket/noextrainjection, terminalidentity/receipt/dispose/nativefailed;
+retainpendingnonce,handleARMEDnoSO,guardforeignmap/unknownphase, preservepreFailure
+safetypacket. QA persistent_bridge_qa reviewing; NOTfrozen/committed/built yet. Avoid
+blindtimeoutincrease or weakenedquiescence/READY. Pendingadoptionroute andjointfresh
+native+Javaproof areQA requirements. NOAndroid/Kotlinbuild onVPS; allMiniONLY.
+
+Root alreadyprepared:
+- originalworkspace test-artifacts/install-133-persistent-20261025/validate_141.py
+  checks productioncert,code141,payloadsource,Default48andbothACfocusmethods.
+- test-artifacts/publish-74141-20261026/release-notes.txt,theme-artifacts.json.
+- test-artifacts/theme-catalog-74141-20261026/ iscleanclonePUBLICcompiled-onlybranch,
+  localartifactcommitb8662d2 (parentfeb9a001...), TENapprovedfiles(Default48/Minimalist8/
+  ApexGT16). NOTpushedyet. No privatecode/history public.
+Currentpublicrelease/OTA/catalog remain140 whilefixisbeingworked. LatestNetseek4
+commits are alreadyintegrated andvalidatedDebug inbase;141willinclude them.
+
+Remaining: freezefocusedfixafterQA/tests prepared, updateprovenance, immutablecommit+
+/tmp/haval133-approve-build.py audit/allowlist, signedMini141 viawrapperONLY, fetchNEWdir,
+validateAPK, publishversionedprereleaseassets toPUBLICapp-toolrepo usingexistingpublic
+commit048749ae fordistributiontag. Publishcompiledcatalogbyfastforwardonly; independently
+verifyTENpublicassetbytes+entirepublicAPKsha, THENfixedpreviewmanifestLAST. Private
+sourcebranchONLYtoPRIVATEhaval-impulse. No carinstall/reboot. Finalmustexplain140failed,
+141fixsourcevalidatedbutboot/mapphysicalpending; usercaninstallwhenconvenient.
+
 ## Current handoff — Netseek v9 pulled, merged and validated (2026-10-26)
 
 Request "Teve update na v9 do netseek. Veja e puxa" COMPLETED as source integration.

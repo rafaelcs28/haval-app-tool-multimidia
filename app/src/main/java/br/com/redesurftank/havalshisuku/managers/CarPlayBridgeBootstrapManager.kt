@@ -51,6 +51,9 @@ object CarPlayBridgeBootstrapManager {
     private var installedRevision: String? = null
     private var verifiedServiceBoot: String? = null
     private var nextReadyCheckAt = 0L
+    // Worker-confined. Keep a pending nonce until its lease expires, allowing the peer to finish.
+    private val pendingChallenges = mutableMapOf<String, CarPlayResidentProof.Challenge>()
+    private val startingBindings = mutableMapOf<String, CarPlayResidentProof.Binding>()
 
     private data class Identity(val boot: String, val pid: Int, val start: Long) {
         val key get() = "$boot-$pid-$start"
@@ -188,7 +191,16 @@ object CarPlayBridgeBootstrapManager {
         if (SystemClock.elapsedRealtime() < nextReadyCheckAt) return
         val bundle = payload ?: extractPayload().also { payload = it }
         installPayload(bundle)
-        val observed = observe(bundle)
+        val observed = try { observe(bundle) } catch (error: Exception) {
+            val boot = runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()
+            if (prefs().getString("cpBridgeAttemptPhase", "") == "preparing" &&
+                prefs().getString("cpBridgeAttemptBoot", "") == boot &&
+                prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision) {
+                failAttempt(bundle, error)
+                return
+            }
+            throw error
+        }
         val id = observed.id
         if (id != null && prefs().getString("cpBridgeAttemptBoot", "").let { it != null && it.isNotEmpty() && it != id.boot } &&
             prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&
@@ -214,6 +226,17 @@ object CarPlayBridgeBootstrapManager {
             prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&
             prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&
             deadline - SystemClock.elapsedRealtime() in 1L..330_000L
+        if (recovering && (observed.nativeProof == null || observed.mappedPath == null)) {
+            try {
+                if (observed.native.optString("phase") in setOf("failed", "failed-pinned")) {
+                    error("Native preparation failed: ${observed.native.optString("failure")}")
+                }
+                CarPlayResidentProof.recovery(observed.native.optString("phase"),
+                    observed.mappedPath?.let { it == bundle.bridge }, false)
+                recoverAttempt(bundle, observed)
+            } catch (error: Exception) { failAttempt(bundle, error) }
+            return
+        }
         val ownsNative = observed.nativeProof != null
         val ownsJava = observed.javaProof?.armed == true
         val sameImage = observed.mappedPath == bundle.bridge
@@ -343,7 +366,8 @@ object CarPlayBridgeBootstrapManager {
         installedRevision = bundle.revision
     }
 
-    private fun observe(bundle: Payload, minimal: Boolean = false, includeVisuals: Boolean = !minimal): Observation {
+    private fun observe(bundle: Payload, minimal: Boolean = false, includeVisuals: Boolean = !minimal,
+        skipResidentRole: String? = null): Observation {
         val output = root.run(script("""
             printf 'boot='; cat /proc/sys/kernel/random/boot_id
             p=§(pidof com.ts.carplay)
@@ -402,18 +426,30 @@ object CarPlayBridgeBootstrapManager {
             val candidate = data[name]?.toIntOrNull() ?: return 0
             return if ((startTime(data[name + "_stat"].orEmpty(), candidate) ?: 0) >= id.start) candidate else 0
         }
-        val nativeProof = if (!minimal && mapped == bundle.bridge) residentSampleOrNull(bundle, id, "native") else null
-        val javaProof = if (!minimal && mapped == bundle.bridge) residentSampleOrNull(bundle, id, "java") else null
+        val recordedNative = runCatching { JSONObject(data["native"].orEmpty()) }
+            .getOrDefault(JSONObject().put("phase", "unknown"))
+        val nativeTerminal = recordedNative.optString("phase") in setOf("failed", "failed-pinned")
+        val recoveringUnmapped = mapped == null && recordedNative.optString("phase") in setOf("armed", "installing", "installed-pinned") &&
+            prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&
+            prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&
+            prefs().getString("cpBridgeAttemptPhase", "") == "preparing"
+        val nativeCandidate = if (!minimal && (mapped == bundle.bridge || recoveringUnmapped) && !nativeTerminal && skipResidentRole != "native")
+            residentSampleOrNull(bundle, id, "native") else null
+        val javaCandidate = if (!minimal && mapped == bundle.bridge && !nativeTerminal && skipResidentRole != "java")
+            residentSampleOrNull(bundle, id, "java") else null
+        if (nativeCandidate != null || javaCandidate != null) root.run(identityGuard(id) + ":")
+        val finalElapsed = SystemClock.elapsedRealtime()
+        val finalWall = System.currentTimeMillis()
+        val nativeProof = nativeCandidate?.takeIf { CarPlayResidentProof.fresh(it, finalElapsed, finalWall) }
+        val javaProof = javaCandidate?.takeIf { CarPlayResidentProof.fresh(it, finalElapsed, finalWall) }
         val nativeState = if (nativeProof != null) JSONObject().put("phase", nativeProof.phase)
             .put("replacements", nativeProof.replacements).put("pinned", nativeProof.pinned)
             .put("failure", if (nativeProof.failureAbsent) JSONObject.NULL else "Resident native failure")
-            else runCatching { JSONObject(data["native"].orEmpty()) }.getOrDefault(JSONObject().put("phase", "unknown"))
+            else recordedNative
         return Observation(id, values["cold"]?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
             mapped, nativeState, javaProof?.armed == true,
             owner("native_owner"), owner("java_owner"), values["cp_visual"] != "0", values["aa_visual"] != "0",
-            nativeProof, javaProof).also {
-                if (nativeProof != null || javaProof != null) root.run(identityGuard(id) + ":")
-            }
+            nativeProof, javaProof)
     }
 
     private fun attempt(bundle: Payload, before: Observation, action: Policy.Action) {
@@ -491,7 +527,7 @@ object CarPlayBridgeBootstrapManager {
             """))
             requireFreshSafety(identity)
             launch(bundle, identity, "$run/cold-launcher.js", "$run/native-injector.log")
-            val proof = awaitResident(bundle, identity, "native", SystemClock.elapsedRealtime() + 4_000)
+            val proof = awaitResident(bundle, identity, "native", SystemClock.elapsedRealtime() + 4_000, starting = true)
             check(CarPlayResidentProof.nativeArmed(proof) || CarPlayResidentProof.nativeInstalled(proof)) {
                 "Native resident peer not prepared before gate release"
             }
@@ -521,10 +557,19 @@ object CarPlayBridgeBootstrapManager {
         check(deadline - SystemClock.elapsedRealtime() in 1L..330_000L)
         while (SystemClock.elapsedRealtime() < deadline) {
             val state = observe(bundle, includeVisuals = false)
+            check(SystemClock.elapsedRealtime() < deadline) { "Resident preparation deadline expired" }
             check(state.id == identity) { "OEM identity changed during resident preparation" }
-            check(state.nativeProof != null) { "Native resident proof unavailable during preparation" }
+            if (state.native.optString("phase") in setOf("failed", "failed-pinned")) {
+                error("Native preparation failed: ${state.native.optString("failure")}")
+            }
+            val recovery = CarPlayResidentProof.recovery(state.native.optString("phase"),
+                state.mappedPath?.let { it == bundle.bridge }, state.nativeProof != null)
+            if (recovery == CarPlayResidentProof.Recovery.PENDING) {
+                // A typed pending response does not revoke a still-live attempt's safety lease.
+                Thread.sleep(100)
+                continue
+            }
             when (state.native.optString("phase")) {
-                "failed", "failed-pinned" -> error("Native preparation failed")
                 "installed-pinned" -> {
                     check(CarPlayResidentProof.nativeInstalled(requireNotNull(state.nativeProof))) { "Native resident installation is incomplete" }
                     if (state.endpointArmed && state.javaProof?.armed == true) {
@@ -538,11 +583,12 @@ object CarPlayBridgeBootstrapManager {
                     }
                     if (state.javaProof == null) {
                         check(isAutomaticEnabled())
-                        if (!prefs().getBoolean("cpBridgeJavaIssued_${identity.key}", false)) {
+                        val newlyIssued = !prefs().getBoolean("cpBridgeJavaIssued_${identity.key}", false)
+                        if (newlyIssued) {
                             check(prefs().edit().putBoolean("cpBridgeJavaIssued_${identity.key}", true).commit()) { "Could not persist Java launch admission" }
                             launch(bundle, identity, "${bundle.directory}/endpoint.js", "${identity.directory}/java-injector.log")
                         }
-                        awaitResident(bundle, identity, "java", minOf(deadline, SystemClock.elapsedRealtime() + 15_000))
+                        awaitResident(bundle, identity, "java", minOf(deadline, SystemClock.elapsedRealtime() + 15_000), starting = newlyIssued)
                     }
                 }
             }
@@ -565,7 +611,31 @@ object CarPlayBridgeBootstrapManager {
             .put("failureType", error.javaClass.simpleName)
             .put("failureMessage", error.message ?: "").put("failureStack", trace)
         synchronized(safetyWriteLock) {
+            // Preserve a bounded, parsed packet before cancellation overwrites the evidence.
+            val priorSafety = runCatching {
+                File(INPUT, "safety.json").inputStream().use { input ->
+                    val bytes = ByteArray(4097)
+                    var count = 0
+                    while (count < bytes.size) {
+                        val read = input.read(bytes, count, bytes.size - count)
+                        if (read < 0) break
+                        count += read
+                    }
+                    check(count in 1..4096) { "Prior safety packet size invalid" }
+                    val parsed = JSONObject(String(bytes, 0, count, Charsets.UTF_8))
+                    JSONObject().also { safe ->
+                        for (key in listOf("eligible", "enabled", "inFlight", "attemptPhase", "preparationState",
+                            "bootId", "wallMs", "elapsedMs", "targetPid", "targetStartTime", "ticket", "quiescent")) {
+                            if (parsed.has(key)) safe.put(key, parsed.get(key))
+                        }
+                    }
+                }
+            }.getOrNull()
+            failure.put("preFailureSafety", priorSafety ?: JSONObject.NULL)
+                .put("failureElapsedMs", SystemClock.elapsedRealtime()).put("failureWallMs", System.currentTimeMillis())
             publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
+            pendingChallenges.clear()
+            startingBindings.clear()
             // Keep the failure separate: a late diagnostic sample may replace safety.json.
             prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
                 .putString("cpBridgeAttemptPhase", "failed")
@@ -603,18 +673,19 @@ object CarPlayBridgeBootstrapManager {
     private fun attemptMarker(bundle: Payload, boot: String) = "$ROOT/attempts/$boot-${bundle.revision}"
 
     private fun launch(bundle: Payload, identity: Identity, scriptPath: String, log: String) {
-        val now = observe(bundle)
+        val role = if (scriptPath.endsWith("/cold-launcher.js")) "native" else "java"
+        val now = observe(bundle, skipResidentRole = role)
         check(now.id == identity)
         check(isAutomaticEnabled())
         if (scriptPath.endsWith("/cold-launcher.js")) {
             check(now.cold == true && now.mappedPath == null && !now.cpVisual && !now.aaVisual)
             requireFreshSafety(identity)
         }
-        val role = if (scriptPath.endsWith("/cold-launcher.js")) "native" else "java"
         val binding = residentBinding(bundle, identity, role, UUID.randomUUID().toString())
         check(binding.scriptPath == scriptPath && log == "${identity.directory}/$role-injector.log") { "Unexpected resident launch path" }
         val supervisor = File(requireNotNull(context).filesDir, "carplay-$role-supervisor-${identity.key}.sh")
         supervisor.writeText(CarPlayResidentProof.supervisor(binding))
+        startingBindings["${identity.key}/$role"] = binding
         val remote = "${identity.directory}/$role-supervisor.sh"
         root.run(identityGuard(identity) + script("""
             test -d ${q(attemptMarker(bundle, identity.boot))} || exit 1
@@ -670,7 +741,7 @@ object CarPlayBridgeBootstrapManager {
 
     private fun parseResidentResponse(value: JSONObject): CarPlayResidentProof.Response {
         val samples = value.getJSONArray("samples")
-        check(samples.length() == 2) { "Resident peer must return two samples" }
+        check(samples.length() in 0..2) { "Invalid resident sample count" }
         return CarPlayResidentProof.Response(parseBinding(value), strictString(value, "nonce"),
             value.opt("disposing") as? Boolean, (0 until samples.length()).map { index ->
                 val sample = samples.getJSONObject(index)
@@ -679,48 +750,71 @@ object CarPlayBridgeBootstrapManager {
                     strictLong(sample, "wallMs"), state.optString("phase"),
                     if (state.has("replacements")) strictLong(state, "replacements").also { check(it in 0..9) { "Invalid resident replacement count" } }.toInt() else -1,
                     state.opt("pinned") == true, state.has("failure") && state.isNull("failure"),
-                    state.opt("armed") == true)
+                    state.opt("armed") as? Boolean)
             })
     }
 
     private fun residentSampleOrNull(bundle: Payload, identity: Identity, role: String): CarPlayResidentProof.Sample? {
         if (role == "java" && !prefs().getBoolean("cpBridgeJavaIssued_${identity.key}", false)) return null
         return try { residentSample(bundle, identity, role) }
-        catch (error: Exception) {
-            Log.w(TAG, "$role resident proof unavailable: ${error.message}")
+        catch (error: CarPlayResidentProof.Pending) {
+            Log.d(TAG, "$role resident proof pending: ${error.message}")
             null
         }
     }
 
-    private fun awaitResident(bundle: Payload, identity: Identity, role: String, deadline: Long): CarPlayResidentProof.Sample {
-        var last: Exception? = null
-        while (SystemClock.elapsedRealtime() < deadline) {
-            try { return residentSample(bundle, identity, role) }
-            catch (error: Exception) { last = error; Thread.sleep(80) }
-        }
-        throw IllegalStateException("$role post-exit resident proof unavailable: ${last?.message}", last)
-    }
+    private fun awaitResident(bundle: Payload, identity: Identity, role: String, deadline: Long,
+        starting: Boolean = false): CarPlayResidentProof.Sample = CarPlayResidentProof.await(
+        deadline, { SystemClock.elapsedRealtime() }, { Thread.sleep(80) }
+    ) { residentSample(bundle, identity, role, starting) }
 
-    private fun residentSample(bundle: Payload, identity: Identity, role: String): CarPlayResidentProof.Sample {
+    private fun residentSample(bundle: Payload, identity: Identity, role: String,
+        starting: Boolean = false): CarPlayResidentProof.Sample {
         check(role in setOf("native", "java"))
         val launchPath = "${identity.directory}/$role-launch.json"
         val exitPath = "${identity.directory}/$role-exit.json"
+        val admission = startingBindings["${identity.key}/$role"].takeIf { starting }
+        val admissionHash = admission?.let(CarPlayResidentProof::supervisorSha256).orEmpty()
+        val supervisorPath = "${identity.directory}/$role-supervisor.sh"
         val receipts = root.run(identityGuard(identity) + script("""
+            cpb_receipts_pending=no
+            if [ ! -f ${q(launchPath)} ] || [ ! -f ${q(exitPath)} ]; then
+              test ${if (admission != null) "1" else "0"} = 1 || exit 1
+              if [ -e ${q(exitPath)} ] && [ ! -f ${q(launchPath)} ]; then exit 1; fi
+              test "§(stat -c %u ${q(supervisorPath)})" = 0 && test "§(stat -c %a ${q(supervisorPath)})" = 500 || exit 1
+              test "§(sha256sum ${q(supervisorPath)} | cut -d' ' -f1)" = ${q(admissionHash)} || exit 1
+              cpb_receipts_pending=yes
+            fi
             for cpb_receipt in ${q(launchPath)} ${q(exitPath)}; do
+              if [ ! -e "§cpb_receipt" ]; then continue; fi
               test -f "§cpb_receipt" || exit 1
               test "§(stat -c %u "§cpb_receipt")" = 0 || exit 1
               test "§(stat -c %a "§cpb_receipt")" = 400 || exit 1
-              test "§(wc -c < "§cpb_receipt")" -le 4096 || exit 1
+              test -s "§cpb_receipt" && test "§(wc -c < "§cpb_receipt")" -le 4096 || exit 1
             done
-            printf 'launch='; cat ${q(launchPath)}; printf '\nexit='; cat ${q(exitPath)}; echo
-        """))
+            printf 'launch='; if [ -f ${q(launchPath)} ]; then cat ${q(launchPath)}; fi
+            printf '\nexit='; if [ -f ${q(exitPath)} ]; then cat ${q(exitPath)}; fi
+            printf '\nreceipts_pending=%s\n' "§cpb_receipts_pending"
+        """) + "\n" + identityGuard(identity) + ":")
         val values = fields(receipts)
+        if (values["receipts_pending"] == "yes") {
+            if (!values["launch"].isNullOrBlank()) {
+                val born = parseReceipt(JSONObject(requireNotNull(values["launch"])), false)
+                CarPlayResidentProof.checkLaunch(requireNotNull(admission), born)
+            }
+            throw CarPlayResidentProof.Pending("Admitted CLI has not completed its birth/exit receipts")
+        }
         val launch = parseReceipt(JSONObject(requireNotNull(values["launch"])), false)
         val exited = parseReceipt(JSONObject(requireNotNull(values["exit"])), true)
         val binding = residentBinding(bundle, identity, role, launch.binding.instance)
         CarPlayResidentProof.checkExit(binding, launch, exited)
+        startingBindings.remove("${identity.key}/$role")
         // This nonce is created only AFTER validating the exact child's successful exit.
-        val challenge = CarPlayResidentProof.Challenge(binding.instance, UUID.randomUUID().toString(), SystemClock.elapsedRealtime())
+        val challengeKey = "${identity.key}/$role/${binding.instance}"
+        val now = SystemClock.elapsedRealtime()
+        val challenge = CarPlayResidentProof.challenge(binding.instance, pendingChallenges[challengeKey], now) {
+            UUID.randomUUID().toString()
+        }.also { pendingChallenges[challengeKey] = it }
         val packet = JSONObject().put("schema", 1).put("instance", challenge.instance)
             .put("nonce", challenge.nonce).put("issuedElapsedMs", challenge.issuedElapsedMs).toString()
         val challengePath = "${identity.directory}/$role-residency-challenge.json"
@@ -733,20 +827,24 @@ object CarPlayBridgeBootstrapManager {
             cpb_response=
             while [ "§cpb_round" -lt 24 ]; do
               cpb_round=§((cpb_round+1))
-              if [ -f ${q(responsePath)} ] && [ "§(wc -c < ${q(responsePath)})" -le 8192 ]; then
+              cpb_response=
+              if [ -e ${q(responsePath)} ]; then
+                test -f ${q(responsePath)} && test -s ${q(responsePath)} && test "§(wc -c < ${q(responsePath)})" -le 8192 || exit 1
                 cpb_response=§(cat ${q(responsePath)})
                 if printf '%s' "§cpb_response" | grep -Fq ${q("\"nonce\":\"${challenge.nonce}\"")}; then break; fi
               fi
-              cpb_response=
+              if printf '%s' "§cpb_response" | grep -Eq '"disposing":true|"phase":"failed(-pinned)?"'; then break; fi
               sleep 0.05
             done
-            test -n "§cpb_response" || exit 1
+            if [ -z "§cpb_response" ]; then cpb_response=CPB_RESIDENCY_PENDING; fi
         """) + "\n" + identityGuard(identity) + "printf '%s\\n' \"\$cpb_response\"\n")
+        if (responseText == "CPB_RESIDENCY_PENDING") throw CarPlayResidentProof.Pending("Fresh residency response not yet available")
         val sample = CarPlayResidentProof.checkResponse(binding, launch, exited, challenge,
             parseResidentResponse(JSONObject(responseText)), SystemClock.elapsedRealtime(), System.currentTimeMillis())
         if (role == "native") check(CarPlayResidentProof.nativeArmed(sample) || CarPlayResidentProof.nativeInstalled(sample)) {
             "Native resident phase invalid: ${sample.phase}/${sample.replacements}/${sample.failureAbsent}"
-        } else check(sample.armed) { "Java resident peer is not armed" }
+        } else check(sample.armed == true) { "Java resident peer is not armed" }
+        pendingChallenges.remove(challengeKey)
         return sample
     }
 

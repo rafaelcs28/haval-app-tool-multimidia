@@ -1,3 +1,9 @@
+## 2026-10-26 — 140 field diagnosis and 141 resident-proof correction
+
+- Read-only140bootcapture proves validbirth/exit0 and stillresponsivepeer; nativeeligibilityfailure/appgenericprooferror captured. Fieldcausalorder unknown; no phoneUSB observed, no vehicle modifications.
+- Fix independently verified premature-failure paths: typed Pending vs Fatal, sameattempt/deadline, ARMEDbeforeSOmapping, boundednoncelease, strictjointfreshproof/deadline beforeREADY, no duplicateinject/unload or weakerquiescence.
+- Preserve boundedpreFailureSafety beforecancellation/overwrite. IndependentQA reviewed withoutblockers; focusedJVMtests and signedMini141 validation next. Inherits previouslyvalidatedNetseekv9HUD/theme/map updates.
+
 ## 2026-10-26 — Netseek v9 integration validated
 
 - True merge4f774153 includes all four upstream commits through0fe2969c and preserves140 OEM/ACfocus/CarPlaybootstrap/catalog fixes. Integrationbranch only; published140 unchanged.
