@@ -671,5 +671,5 @@ apósLIVE, reusando o protocolo de desativação e confirmação autenticadaRELE
 antes da nova saída. Mantém limites de tentativas/backoff e cancela recuperação
 obsoleta ao trocar demanda ou ocorrer erro de ownership. Desconexão de sessão,
 app no display secundário e consumer inválido continuam impedindo saída. Não
-altera APKsOEM, fila H264, contrato de temas, geometria ou CarPlay. Validação
-compilada e física ainda pendentes enquanto o código está em revisão.
+altera APKsOEM, fila H264, contrato de temas, geometria ou CarPlay. Suíte JVM completa e Release assinada passaram no Mac Mini (142, commit
+`c4ca6523`). APK e manifesto públicos foram verificados; validação física pendente.

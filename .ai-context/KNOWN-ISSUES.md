@@ -1,3 +1,62 @@
+## Current handoff — 142 published and independently verified; physical test pending
+
+Owner confirmed141 installed and full AAmap disappearing when leaving primaryUI.
+Readonly currentbootad748b68-f097-42b1-99e5-0aa8772113dd captured privately in original
+workspace test-artifacts/141-aa-disappears-20261026/. No install/reboot/retry/reset/
+injection/power or other vehicle mutations issued. Owner can drive/leave normally.
+
+AA provenfailure12:05:02.622: ClusterFramePump CapacityExceededException (queuefull,
+cleanstreamrestartrequired), sessionACTIVE andmapdemandtrue. Controller ignored
+FAILED afterclearing surfaceAttached; ownerrouteoff/on restoredLIVE12:05:18.967.
+142 adds bounded recovery for knownpostLIVE decoderfailure, preserves rawsession/
+route/demand andstrict clientledger authenticatedRELEASEDbefore newoutput. Same
+2-attemptbudget/60sbackoff; epoch/demand/surface guards, unknownownership/quarantine
+cancel recovery. Does not modify OEMAAAPKs, queuesize, theme/contract or geometry.
+Primaryvisibility asqueuepressuretrigger remains ownercorrelation, not proven.
+
+CP141 samebootfailedelapsed36706 waitingforadmittedCLIreceipts while preFailureSafety
+36428eligibletrue/quiescenttrue; exactexit0was36310. NativepeerlaterARMED/pinned/no
+failure, noJava launch. Source race reproduced in actual141shell: initialpendingflag
+ignored validexitarrivingduringattestation.142 classifies validated capturedsnapshots;
+missingrequires admitted/attestedstartup, disappearingpairfatal, owner/mode/size/hash/
+identity/exit0/noncepostexit stillstrict. Same4s/15s/330s/10sgate, noextrainjection,
+no P/speedlockreturned. Fieldmidprobeordering compatiblebutunrecorded, notproven.
+
+IndependentQA cleared both fixes.31Python lifecycle/receiptfixturesPASS(sixnew),
+OEMCarPlayregressionlock/MD5PASS. FullJVM including14AAStreamHealth(sixnew) and16
+residentproof tests passed on authorizedMiniONLY; Release/R8/lint/signingPASS.
+Exact audited sourcec4ca65230392d1d188903f1731a86a2ea37f0e04, privatebranch
+release/impulse-74142-runtime-recovery. Jobhaval-impulse-133-c4ca65230392d1d1-20261026T151409Z-12491
+SUCCESS5m57s/83tasks finished2026-10-26T15:20:27Z. ControlDigest08acd40f4112d3914ad94bb574fc7cac00744c01958ca7025c33ba17cd011724;
+archiveSHA75c0b72f081d876f7b28bbd7b3b16468dd13c3bc771961001e8841b4469ee09c.
+FetchedNEW artifacts/impulse-74142-runtime-recovery-release-mini/; queueSHAverified.
+APK74142/1.0.0.74.142-preview, 81634091bytes, SHA256:
+baa0d1c7f331b857904ecc3f334c4bd3b6317fe7ab3b6b2fc835d86278d33a1a
+Productioncert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0 unchanged. ActualAPKcode/name/cert,
+controller/payloadhashes, runtimefixmarkers, Default48HTML/metadata and unchanged
+OEMAAassets independentlyverified. Payloadrevision74142-ccf0d703f687-042cab399608.
+No coordinator Android/Gradle/Kotlin build. Build log confirms fullJVM executed.
+
+PUBLICreleasehttps://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.142-preview
+Release424415773; APK/SHA256SUMS/build-info.json only. Distributiontag uses
+existingPUBLICmaster048749ae; private source/history remainedprivateorigin only.
+GitHubassetdigest ANDentire unauthenticatedpublicAPKdownload matchMiniAPK. TENpublic
+themebytes rechecked againstsource, unchanged141 artifactcommitb8662d26a4285f15f66d68bcee5ec7c7310ac1f0.
+Default48/Minimalist8/ApexGT16 unchanged; no themerebuild/catalogpush. OnlyAFTERAPK
+verified fixedapp-latest/app-preview.json advanced141→142, exactpublicmanifestbytes
+independentlyverified. Stablechannel unchanged. Publicationreceipt/buildinfo/queue/
+fullpublicAPK/OTA proofs: originalworkspace test-artifacts/publish-74142-20261026/.
+Validator originalworkspace test-artifacts/install-133-persistent-20261025/validate_142.py.
+
+No releasework remains. Ownerinstallwhenparked viaInformações→BuscarAtualizações.
+AA checklater: startaroute, leaveprimaryAAUI withoutendingroute; mapshouldrecover
+knownqueuefailure automatically, no needrestartnavigation. Actual142fieldbehavior
+pending. ForCPtest restartcentralphonesoff, wait"Bridge preparada para esta sessão",
+theniPhoneUSB/primaryD0/route/five-minutetest. IfprepFAILS collectactualboot/attempt/
+preFailureSafety/times/receipts beforeanotherbuild; do not askrepeatedparkingloops
+orblameBLE/phone fromgenericwaiting. Lastconfirmedinstalled141, not142. Do not
+remoteinstall/reboot whiledriving. Successful CarPlaymap/JNI firstframeunproven.
+
 ## 2026-10-26 — 141 field evidence captured; 142 runtime corrections in progress
 
 Owner confirmed141 and later full AA map disappearance when leaving primary AA UI.

@@ -142,4 +142,6 @@ validar dono, modo, tamanho, supervisor e identidade. Recibos que chegam durante
 a conferência podem ser usados nessa leitura quando ambos foram validados.
 Os prazos4s/15s/330s e as provas de residência posteriores à saída permanecem
 obrigatórios; não há reinjeção, relaxamento de quiescência ou novo bloqueio deP.
-Testes e validação noMini aguardam congelamento; boot real continua separado.
+31 fixtures locais de ciclo de vida/recibos, suíte JVM completa e Release
+assinada passaram; build somente no Mini, commit `c4ca6523`. A 142 está publicada
+e verificada no atualizador. Boot real continua separado e pendente.
