@@ -1,3 +1,67 @@
+## Current handoff — 143 published and independently verified (2026-10-26)
+
+User requested latest v9 pull/update and reported142 still waiting for phone
+absence/services. Two bounded read-only connection attempts and a VPN ping did not
+respond. Current142 boot/quiet/task state and precise field cause remain unknown;
+no install, reboot, reset, injection, task action or other vehicle mutation issued.
+Optional question about current internet/power is unanswered, not approval.
+Private report: originalworkspace test-artifacts/142-prep-waiting-20261026/.
+
+Integrated upstream30e301fb00f30bafa0f540206fca48f3e2fe912e, one commit after0fe2969c.
+True merge source8e463602d173e0ac764c683e541edf4cb15f2e61 has parents142a956ad64
+and upstream30e301fb. Private branchrelease/impulse-74143-v9. New HUD colour tab/
+Blue, power arcs/segmented RPM, vehicle EV percentage fallbackV×I, map behind-car
+fade and roundabout routes. Additive preferences, existing values retained. Narrow
+local fix applies RPM picks/Blue to BARS too, preserving default white/red. Local
+CarPlay text-only guard/AA priority and142 AA recovery/receipt fixes remain.
+No theme source/artifact or bridge1.0.2/contractv1.0 change; HUD only geometry,
+not cluster resolution. Render instrumentation integrated, NOT run on a device.
+
+Found independent source defect: old visual probe counted any projection package
+in amstacklist, including explicit visible=false historical tasks. Archived real141
+full dump reproduced the false positive. Shared CarPlayProjectionVisibilityProbe
+now ignores only well-formed explicitly hidden tasks; visible/ambiguous/malformed/
+truncated/error evidence blocks. Same probe runs in observer and final same-root
+idle-host guard. DCM/Bluetooth quiescence, fresh identity/safety, process actions,
+4s/15s/330s/10s budgets and P/speed removal unchanged. New helper included in payload
+source digest and Gradle inputs. Waiting UI distinguishes unavailable/stale evidence,
+visible screens and connection reported by central. Private eventcarplay_preparation_wait
+deduplicates reason/quiet/visual/age-bucket changes without device identifiers.
+This fixes proven source behavior; it is NOT proof of this owner's latest142 cause.
+
+Independent HUD and CP QA cleared source. Root9visibility+31lifecycle Python tests,
+OEM regressionlock/MD5 and diffcheck PASS; independent17visibility cases plus archived
+real dump PASS. Authorized Mini jobhaval-impulse-133-8e463602d173e0ac-20261026T200101Z-5015 SUCCESS6m9s/83tasks, finished2026-10-26T20:07:26Z.
+Full JVM/testDebugUnitTest, Release/R8/lint/signing passed. No Android/Gradle/Kotlin
+build on coordinator. Controls8 digest15ebc36fd58d1901c48bbe34cd6d638a8b7126e10207d3993cad90aa575af9fc;
+archiveSHAd0238964ecd1ec5f6a60cb82787638e7ce240d1034d52915c84975620c31ed5d.
+Fetched NEW artifacts/impulse-74143-v9-visibility-release-mini/, queue SHA verified.
+APK74143/1.0.0.74.143-preview, 81649207bytes, SHA256:
+3aecc77b8d20c2df5d0bc086a497fd3c5590d44892af4245bd912244aaae0faf
+Production cert5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0 unchanged. Actual code/name/cert,
+Default48HTML/metadata, complete payload/controller/helper digest, new visibility/
+HUD/retainedAA markers and unchanged OEMAA assets verified. Payload74143-1963436eab95-9ae6ffb10165.
+Validator originalworkspace test-artifacts/install-133-persistent-20261025/validate_143.py.
+
+PUBLIC release https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.143-preview
+Release424708739, APK/SHA256SUMS/build-info.json only; distribution tag uses existing
+PUBLICmaster048749ae. No private source/history pushed public. GitHub digest AND
+entire unauthenticated public APK download match MiniAPK. TEN public theme files
+rechecked, unchanged artifactcommitb8662d26a4285f15f66d68bcee5ec7c7310ac1f0:
+Default1.4.48/Minimalist1.0.8/ApexGT1.0.16. No new theme build/catalog push needed.
+Only AFTER public APK verification did fixedapp-latest/app-preview.json advance142→143;
+exact public manifest bytes independently verified. Stable channel unchanged.
+Private publication/build/queue/OTA/full public download evidence:
+originalworkspace test-artifacts/publish-74143-20261026/.
+
+No release work remains. Owner installs when parked via Informações→BuscarAtualizações;
+for CarPlay preparation restart central with phones disconnected, wait READY, then
+USB iPhone/primary CarPlay/test. Last owner-confirmed installed142, not143. Physical
+143 HUD/roundabout/boot and CarPlay JNI/map-first-frame remain pending. If waiting
+persists collect current boot/attempt/preFailureSafety and carplay_preparation_wait
+before another speculative build. Do not blame BLE/phone from generic UI or ask
+repeated P/disconnect/reboot loops. No remote installation/reboot while moving.
+
 ## 2026-10-26 — 143 source frozen for signed Mini validation
 
 Merged upstream v9 commit30e301fb over142 and preserved its AA recovery/CP receipts.

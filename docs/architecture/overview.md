@@ -54,5 +54,6 @@ new colour preferences have defaults. The EV power percentage uses the existing
 vehicle telemetry key, with voltage/current calculation as fallback. Theme
 contractv1.0, bridge1.0.2, cluster resolution and installed theme assets stay
 unchanged. A local correction applies RPM colour choices to the bar gauge while
-preserving its original white/red defaults. Full Mini validation is pending
-source freeze; actual HUD geometry and maps require field validation.
+preserving its original white/red defaults. Full JVM/Release validation passed on the authorized Mini (143, source `8e463602`).
+The public APK and preview manifest were independently verified. Actual HUD geometry
+and maps require field validation.

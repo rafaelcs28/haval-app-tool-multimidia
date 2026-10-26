@@ -164,5 +164,6 @@ booleans and age buckets; no device identifiers are logged.
 
 The false positive was reproduced using an archived real141 stack response. The
 owner reported the same generic waiting screen on142, but current remote reads
-timed out, so that specific incident remains unconfirmed. Source fixtures pass;
-Mini validation and physical143 testing are separate pending steps.
+timed out, so that specific incident remains unconfirmed. 40 source fixtures, independent visibility cases and full JVM/Release passed
+on the authorized Mini. The143 APK and public updater were verified. Physical143
+testing remains pending.

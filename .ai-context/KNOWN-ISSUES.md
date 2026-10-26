@@ -1,3 +1,15 @@
+## 2026-10-26 — 143 published and verified
+
+Integrated Netseek v9 through30e301fb and fixed HUD RPM bar colour application.
+Corrected projection visibility so explicit hidden tasks do not block preparation;
+unknown/visible states and independent connection guards remain strict. Waiting
+messages/private diagnostics distinguish missing evidence from observed activity.
+40Python fixtures/OEM lock/independent QA and full Mini JVM/Release passed.
+APK SHA3aecc77b8d20c2df5d0bc086a497fd3c5590d44892af4245bd912244aaae0faf; complete public download and fixed preview143 verified.
+Themes unchanged. Source8e463602; exact receipts/current limitations in HANDOFF.
+Latest142 cause could not be confirmed from current field logs; no car mutations.
+143 physical validation pending; owner installs later. No further release work.
+
 ## 2026-10-26 — 143 integrating new v9 and investigating142 preparation wait
 
 Owner requested newv9pull/update, then reported installed142 still waitingforphone
