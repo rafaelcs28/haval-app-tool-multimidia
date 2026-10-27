@@ -608,10 +608,15 @@ object HudOverlayModel {
     }
 
     /** "Sempre": how far ahead the road's bend is read, and the most the arrow turns for it. */
-    const val CHEVRON_ROAD_AHEAD_M = 60f
-    const val CHEVRON_ROAD_MAX_DEG = 60f
-    /** ...turning this many times the bend: a soft corner's 10-20 deg barely showed (owner, 2026-10-25). */
-    const val CHEVRON_ROAD_GAIN = 2f
+    // 100 m (owner, 2026-10-27: it stayed upright where the map already showed the road
+    // bending; 60 m only caught the nearest part). The still arrow leans to the turn from there.
+    const val CHEVRON_ROAD_AHEAD_M = 100f
+    const val CHEVRON_ROAD_MAX_DEG = 15f
+    /**
+     * ...turning this share of the bend: only the road's trend (owner, 2026-10-27: a quarter of
+     * the 2x it had, which followed the curves fully).
+     */
+    const val CHEVRON_ROAD_GAIN = 0.5f
 
     /**
      * The bend (degrees, + right) of the matched [route] (car frame metres, x right, y ahead)
@@ -807,13 +812,17 @@ object HudOverlayModel {
         // arrow there). They point to the exit (right in right-hand traffic). The map's "next
         // street on this side" check does not apply: a roundabout is not that turn.
         val roundaboutExit = tbt.dynamicRoundabout && tbt.rbProgress >= RB_CHEVRON_MIN_PROGRESS && meters <= CHEVRON_ANIM_M
-        if (tbt.dynamicRoundabout && !roundaboutExit) return null
+        // "Sempre" (owner, 2026-10-27: it vanished approaching a roundabout and on straight-on
+        // steps): the still arrow keeps following the road, upright, where no side is shown.
+        val road = if (always) tbt.route?.takeIf { tbt.routeMatched }?.let { roadBendAhead(it) } ?: 0f else 0f
+        val followRoad = if (always) Chevrons(1, 0f, animate = false, sharp = false, lean = 0f, roadDeg = road) else null
+        if (tbt.dynamicRoundabout && !roundaboutExit) return followRoad
         val notOurs = tbt.routeMatched && !tbt.routeClear && !scripted && !roundaboutExit
         if (notOurs && !always) return null
         val heading = if (tbt.dynamicRoundabout) {
             if (tbt.roundaboutClockwise) -90f else 90f
         } else {
-            val meta = tbt.guideAngle ?: return null
+            val meta = tbt.guideAngle ?: return followRoad
             // The map's own angle when the route is on the real streets and agrees on the side:
             // a "turn" that is a soft bend there animates as one (owner, 2026-10-25).
             val map = tbt.route?.takeIf { tbt.routeMatched && meters <= CHEVRON_SHOW_M * 1.5f }
@@ -821,14 +830,13 @@ object HudOverlayModel {
                 ?.takeIf { kotlin.math.abs(it) >= CHEVRON_MIN_DEG && (it > 0f) == (meta > 0f) }
             map ?: meta
         }
-        if (kotlin.math.abs(heading) < CHEVRON_MIN_DEG) return null
+        if (kotlin.math.abs(heading) < CHEVRON_MIN_DEG) return followRoad
         val side = if (heading > 0f) 1 else -1
         val sharp = kotlin.math.abs(heading) >= CHEVRON_SHARP_DEG
         val animate = meters <= CHEVRON_ANIM_M && !notOurs
         val intensity = if (animate) (1f - meters / CHEVRON_ANIM_M).coerceIn(0f, 1f) else 0f
         // "Sempre" far away: straight up (the turn is still ahead), leaning to the diagonal as it nears.
         val l = ((CHEVRON_ALWAYS_UP_M - meters) / (CHEVRON_ALWAYS_UP_M - CHEVRON_SHOW_M)).coerceIn(0f, 1f)
-        val road = if (always) tbt.route?.takeIf { tbt.routeMatched }?.let { roadBendAhead(it) } ?: 0f else 0f
         return Chevrons(side, intensity, animate, sharp, lean = l * l * (3 - 2 * l), roadDeg = road, turnDeg = kotlin.math.abs(heading))
     }
 
@@ -1236,9 +1244,8 @@ object HudOverlayModel {
         val trip: Boolean = true,
         val powerBar: Boolean = true,
         val rpmBar: Boolean = true,
-        /** Power/RPM indicators per layout: none, bottom bars, or arcs round the native speed. */
-        val navGauges: Gauges = Gauges.BARS,
-        val arGauges: Gauges = Gauges.ARCS,
+        /** Power/RPM indicators: none, bottom bars, or arcs round the native speed (one for every style). */
+        val gauges: Gauges = Gauges.BARS,
         /** AR: animated chevrons above the speed when close to a turn. */
         val chevrons: Boolean = true,
         /** ...and one still chevron by the arcs at any distance, pointing to the next road. */
@@ -1269,19 +1276,62 @@ object HudOverlayModel {
     ) {
         val active: Boolean get() = layout != Layout.ORIGINAL
 
-        /** Indicators for the current layout. */
-        val gauges: Gauges get() = when (layout) {
-            Layout.NAVIGATION -> navGauges
-            Layout.AR -> arGauges
-            Layout.ORIGINAL -> Gauges.NONE
+        /** Arcs round the speed. */
+        val arcs: Boolean get() = gauges == Gauges.ARCS
+    }
+
+    /**
+     * The HUD styles in Telas (owner, 2026-10-27): fixed sets of every option, plus the owner's
+     * own ([CUSTOM], "Personalizado"), made by changing any of them. The 3D arrows without the
+     * map are no longer offered: "Mapa 3D" always has the map (the arrows stay only as what it
+     * draws while the streets load or without internet).
+     */
+    enum class Preset(val key: String) {
+        ORIGINAL("original"),
+        CUSTOM("custom"),
+        MAP("map"),
+        BASIC("basic"),
+        DISCREET("discreet");
+
+        /** The style's options; null for [CUSTOM] (saved by the owner). */
+        val config: Config? get() = when (this) {
+            ORIGINAL -> Config(layout = Layout.ORIGINAL)
+            CUSTOM -> null
+            // The owner's car on 2026-10-27, made the map style.
+            MAP -> Config(
+                layout = Layout.AR,
+                gauges = Gauges.ARCS,
+                chevronsAlways = true,
+                chevronsEvenHidden = true,
+                mapStreets = true,
+                mapEdges = true,
+                iconStyle = IconStyle.GOOGLE,
+                colors = Colors(
+                    drive = COLOR_CHEVRON,
+                    rpm = rgb(0x83, 0x87, 0x8D),
+                    route = rgb(0x00, 0x34, 0xFF),
+                    chevron = rgb(0x47, 0x98, 0xDC)
+                )
+            )
+            // The old Navegação layout with its defaults.
+            BASIC -> Config(layout = Layout.NAVIGATION, gauges = Gauges.BARS)
+            // The least on the glass: the turn only from 300 m, no trip line, no indicators, all blue.
+            DISCREET -> Config(
+                layout = Layout.NAVIGATION,
+                trip = false,
+                gauges = Gauges.NONE,
+                showTurnFromM = 300,
+                iconStyle = IconStyle.GOOGLE,
+                colors = Colors(mode = ColorMode.BLUE)
+            )
         }
 
-        /** Arcs for the current layout. */
-        val arcs: Boolean get() = gauges == Gauges.ARCS
+        companion object {
+            fun fromKey(key: String?): Preset? = entries.firstOrNull { it.key == key }
 
-        /** This config with [layout]'s indicators set to [g]. */
-        fun withGauges(layout: Layout, g: Gauges): Config =
-            if (layout == Layout.AR) copy(arGauges = g) else copy(navGauges = g)
+            /** Styles with fixed options, in the Telas order (Personalizado goes after Original). */
+            val FIXED = listOf(MAP, BASIC, DISCREET)
+        }
     }
 
     /** Choices for [Config.showTurnFromM]: always, then 200 m .. 1 km. */
@@ -1341,7 +1391,9 @@ object HudOverlayModel {
         val lanes = d.lanes.map { laneArrows(it) }
         val meters = distanceMeters(d.distance, d.distanceM)
         val icon = hudIcon(d.turn)
-        val hidden = turnHidden(config, meters)
+        // The trip's first step, "head towards ...", always comes at 0 m: "^ 0 m" read as a
+        // turn right here (owner, 2026-10-27). Only the trip line until the first real maneuver.
+        val hidden = turnHidden(config, meters) || d.turn.equals("DEPART", ignoreCase = true)
         val exitAngle = if (icon == "ROUNDABOUT") drawableExitAngle(d.turnAngle) else null
         // AR: turns by their bend angle; a roundabout with a known exit gets the 3D ring (angle 0
         // here, the renderer draws it from exitAngle). A maneuver with no shape (a merge with no
@@ -1422,7 +1474,11 @@ object HudOverlayModel {
                 val adjusted = tbt.copy(
                     guideMeters = guide,
                     rbProgress = if (tbt.icon == "ROUNDABOUT") arProgress.coerceIn(0f, 1f) else 0f
-                )
+                ).let {
+                    // A new step before its distance carries the last one's (0 m at the start of a
+                    // trip): its arrow and street, no number until AA sends it (owner, 2026-10-27).
+                    if (arDistanceKnown) it else it.copy(distanceValue = "", distanceUnit = "")
+                }
                 if (adjusted.style != TbtStyle.AR) adjusted
                 else withMap(
                     adjusted.copy(
