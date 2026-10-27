@@ -1,3 +1,21 @@
+## ACTIVE — 147 fixes false DCM device block; Mini release build pending
+
+Owner installed corrected146 and reported persistent “Aguardando confirmação de
+desconexão pela central” with no device connected. Read-only current boot confirms
+74146, app/OEM processes alive, visual CP/AA false, TX45 list null, and reason
+DCM_RECORD_NOT_RETAINED. The rejected row is exact type0/accepted1/state1/
+connection{3=3}/available4096/active0/no active states/no valid BT identity/no USB
+nodes. This is an internal DCM/Wi-Fi infrastructure row, not proof of a phone.
+
+Branch release/impulse-74147-dcm-residual now classifies only that exact signature
+as inactive infrastructure. Real projections, active/nonzero capability, valid BT
+identity, USB nodes, changed state/shape and all unknowns still block. TX45 null,
+visual absence, firmware identity and temporal settling remain mandatory. Version
+defaults are74147/1.0.0.74.147-preview. Two JVM policy tests added;64 portable
+CarPlay tests/OEM regression lock/diffcheck pass. Next: immutable commit/audit,
+authorized Mini full JVM+Release/R8/lint/signing, verify/publish exact147 and promote
+preview last. No vehicle mutation requested; owner will manually install/restart/test.
+
 ## COMPLETE — corrected146 published and verified; owner manual install/reboot/test next
 
 Latest owner request: parked car has no internet; generate corrected146, owner will

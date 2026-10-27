@@ -103,4 +103,36 @@ class RetainedBluetoothDevicePolicyTest {
         for (state in 1..3) assertEquals(false, policy.profileAbsence(state))
         for (state in listOf(-1, 4, 10, 12, Int.MAX_VALUE)) assertNull(policy.profileAbsence(state))
     }
+
+    @Test fun exactInactiveDcmInfrastructureRecordIsNotAProjectionDevice() {
+        val infrastructure = candidate().copy(
+            type = 0, state = 1, connections = mapOf(3 to 3), available = 4096,
+            address = null
+        )
+        assertEquals(true, policy.isInactiveDcmInfrastructure(infrastructure))
+        assertNull(policy.addressIfCandidate(infrastructure))
+    }
+
+    @Test fun infrastructureExceptionFailsClosedOnEveryProjectionRelevantChange() {
+        val infrastructure = candidate().copy(
+            type = 0, state = 1, connections = mapOf(3 to 3), available = 4096,
+            address = null
+        )
+        val changed = listOf(
+            infrastructure.copy(type = 1),
+            infrastructure.copy(accepted = 0),
+            infrastructure.copy(state = 0),
+            infrastructure.copy(connections = emptyMap()),
+            infrastructure.copy(connections = mapOf(3 to 2)),
+            infrastructure.copy(available = 8),
+            infrastructure.copy(available = 4096 or 8),
+            infrastructure.copy(active = 8),
+            infrastructure.copy(activeStates = mapOf(8 to 3)),
+            infrastructure.copy(address = "12:34:56:78:9A:BC"),
+            infrastructure.copy(usbDeviceMode = true),
+            infrastructure.copy(transportNodes = listOf(null, "/dev/fixture", null)),
+            infrastructure.copy(transportNodes = emptyList())
+        )
+        for (facts in changed) assertEquals(false, policy.isInactiveDcmInfrastructure(facts))
+    }
 }

@@ -197,6 +197,7 @@ object CarPlayBridgeQuiescence {
             diagnostics["dcm_record_count"] = entries.size
             diagnostics["dcm_records_truncated"] = entries.size > CarPlayQuiescenceDiagnostics.MAX_RECORDS
             val addresses = LinkedHashSet<String>()
+            var ignoredInfrastructureRecords = 0
             for ((index, entry) in entries.withIndex()) {
                 val device = entry as ConnDevice
                 val facts = RetainedBluetoothDevicePolicy.Facts(device.deviceType, device.accepted,
@@ -210,9 +211,14 @@ object CarPlayBridgeQuiescence {
                     }
                 }
                 val address = RetainedBluetoothDevicePolicy.addressIfCandidate(facts)
-                    ?: return@transactRead OnlineSnapshot(false, emptySet())
-                addresses.add(address)
+                when {
+                    address != null -> addresses.add(address)
+                    RetainedBluetoothDevicePolicy.isInactiveDcmInfrastructure(facts) ->
+                        ignoredInfrastructureRecords++
+                    else -> return@transactRead OnlineSnapshot(false, emptySet())
+                }
             }
+            diagnostics["dcm_inactive_infrastructure_count"] = ignoredInfrastructureRecords
             OnlineSnapshot(true, addresses)
         }
 

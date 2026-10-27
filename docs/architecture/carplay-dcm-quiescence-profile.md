@@ -122,6 +122,31 @@ Evidências REA Bluetooth: `ev_b4c1e24b2eb38fb27050734c7cc9a5083afca2cbbbdb35cc4
 e `ev_2b5d4df99d2f286bc977f29115c06e9e8ebd668969b6c603d1b72fa6ab45eaec`
 (ordem de inicialização).
 
+## Registro de infraestrutura DCM/Wi-Fi da 146
+
+No primeiro boot de campo da 146, a central não tinha projeção ativa e as sondas
+visuais indicavam CarPlay e Android Auto ausentes, mas TX14 devolveu dois registros.
+O primeiro tinha a assinatura `type=0`, `accepted=1`, `state=1`, conexão exatamente
+`{3=3}`, capacidade disponível `4096`, capacidade ativa zero, nenhum estado ativo,
+nenhum node USB e nenhum endereço Bluetooth válido. TX45 devolveu lista nula.
+Esse registro é interno ao DCM e não é um telefone identificado.
+
+A análise estática do APK DCM fixado confirma que tipo `0` é `UNKNOWN`, que o mapa
+de conexão não vazio com estado global `1` basta para o OEM rotular um registro como
+online, e que as capacidades de projeção reconhecidas pelo firmware ficam entre os
+bits `8` e `2048`; `4096` não é mapeado como serviço de projeção. Evidências REA:
+`ev_c4c4368de6b734a91563cdc2459f9d6f15572129ec3691287bdbd3075797e160`,
+`ev_9ecf1acafc9787a5f92bedd88238d31d1385bfe36537438b5147a00e009f9d30`,
+`ev_93f4e22f9fa1e1b1460adfb689831b6bc34565f8f8055062148dff0527988f57`
+e `ev_a6f4f3fbbdc58bed80ddd656c765cd19e748258a918c96187a7baaf4fe9c680d`.
+São observações estáticas do APK, não execução do firmware.
+
+A 147 admite apenas essa assinatura exata como infraestrutura inativa. Qualquer
+mudança de tipo, aceite, estado, conexão, capacidade, identidade Bluetooth, node
+USB ou atividade volta a bloquear. A lista nula de projeções, as sondas visuais,
+a janela temporal, a identidade do firmware e todos os demais guardas continuam
+obrigatórios. O diagnóstico privado registra apenas a contagem ignorada.
+
 ## Evidências e limites
 
 REA no APK capturado, sem executá-lo:

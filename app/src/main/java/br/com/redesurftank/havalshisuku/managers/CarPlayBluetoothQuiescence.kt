@@ -247,6 +247,20 @@ internal object RetainedBluetoothDevicePolicy {
         return normalizeAddress(facts.address)
     }
 
+    /**
+     * The profiled DCM publishes its own settled Wi-Fi infrastructure row in TX14.
+     * It is not a phone or projection: type UNKNOWN, WIFI/READY, only capability 4096,
+     * and no active capability, transport node or valid Bluetooth identity. TX45 and
+     * the independent visual probe still have to prove that projection is absent.
+     * Keep this exact so a new OEM shape fails closed instead of becoming readiness.
+     */
+    fun isInactiveDcmInfrastructure(facts: Facts): Boolean =
+        facts.type == 0 && facts.accepted == 1 && facts.state == 1 &&
+            facts.connections == mapOf(3 to 3) && facts.available == 4096 &&
+            facts.active == 0 && facts.activeStates.isEmpty() &&
+            normalizeAddress(facts.address) == null && !facts.usbDeviceMode &&
+            facts.transportNodes.size == 3 && facts.transportNodes.all { it.isNullOrEmpty() }
+
     fun profileAbsence(state: Int): Boolean? = when (state) {
         0 -> true
         1, 2, 3 -> false

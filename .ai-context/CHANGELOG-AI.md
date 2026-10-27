@@ -1,3 +1,14 @@
+## 2026-10-27 — 147 classifies exact inactive DCM infrastructure record
+
+Owner installed146 and it waited at central disconnect confirmation with no phone.
+Read-only current-boot evidence identified DCM_RECORD_NOT_RETAINED: TX45 null/empty,
+CP/AA visuals false, but an internal type0/WIFI-ready/available4096/active0 record.
+Pinned OEM APK REA confirms type0 UNKNOWN, online is only map/nonterminal state, and
+4096 is outside the firmware's mapped projection capabilities. 147 admits only this
+exact inactive signature; any changed/projection/USB/BT/active fact still fails closed.
+Added two JVM policy tests and a private ignored-count diagnostic.64 portable CarPlay
+tests/OEM regression lock/diffcheck pass. Full JVM/Release/signing on Mini pending.
+
 ## 2026-10-27 — corrected146 published and verified for manual installation
 
 Source d2e42013 fixes actualD0/D3 admission/boundedofferwaiting, freshpinnedpassiveAA
