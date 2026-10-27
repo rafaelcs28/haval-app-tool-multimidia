@@ -11,6 +11,7 @@ import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
+import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeAttemptScope
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
@@ -130,10 +131,13 @@ object CarPlayBridgeBootstrapManager {
                 test -r /proc/${identity.pid}/maps || exit 1
                 grep -q libcarplay_video_bridge.so /proc/${identity.pid}/maps
                 test §? = 1 || exit 1
-                if [ -d ${q(attemptMarker(bundle, identity.boot))} ]; then rmdir ${q(attemptMarker(bundle, identity.boot))} || exit 1; fi
+                if [ -d ${q(attemptMarker(bundle, identity.key))} ]; then rmdir ${q(attemptMarker(bundle, identity.key))} || exit 1; fi
             """))
-            check(prefs().edit().remove("cpBridgeCircuitRevision").remove("cpBridgeAttemptBoot")
-                .remove("cpBridgeAttemptPhase").commit())
+            check(prefs().edit().remove("cpBridgeCircuitRevision").remove("cpBridgeCircuitIdentity")
+                .remove("cpBridgeAttemptBoot")
+                .remove("cpBridgeAttemptRevision").remove("cpBridgeAttemptPhase")
+                .remove("cpBridgeAttemptTicket").remove("cpBridgeAttemptIdentity")
+                .remove("cpBridgeAttemptWarmRestart").remove("cpBridgeAttemptDeadlineElapsed").commit())
             nextReadyCheckAt = 0
             safety = Safety()
             report("waiting", "Aguardando confirmação dos serviços de projeção")
@@ -214,7 +218,8 @@ object CarPlayBridgeBootstrapManager {
         if (id != null && prefs().getString("cpBridgeAttemptBoot", "").let { it != null && it.isNotEmpty() && it != id.boot } &&
             prefs().getString("cpBridgeAttemptRevision", "") == bundle.revision &&
             prefs().getString("cpBridgeAttemptPhase", "") != "ready") {
-            prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision).commit()
+            prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
+                .putString("cpBridgeCircuitIdentity", prefs().getString("cpBridgeAttemptIdentity", "")).commit()
         }
         val readyBefore = id != null && prefs().getString("cpBridgeReadyIdentity", "") == id.key &&
             prefs().getString("cpBridgeReadyRevision", "") == bundle.revision
@@ -229,7 +234,11 @@ object CarPlayBridgeBootstrapManager {
             else -> Policy.Phase.UNKNOWN
         }
         val current = safety
-        val bootAttempt = id != null && prefs().getString("cpBridgeAttemptBoot", "") == id.boot
+        val attemptsForProcess = CarPlayBridgeAttemptScope.attemptsForProcess(
+            id?.key, prefs().getString("cpBridgeAttemptIdentity", ""))
+        val failureCircuitOpen = CarPlayBridgeAttemptScope.failureCircuitOpen(
+            id?.key, bundle.revision, prefs().getString("cpBridgeCircuitIdentity", ""),
+            prefs().getString("cpBridgeCircuitRevision", ""))
         val deadline = prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0)
         val recovering = id != null && prefs().getString("cpBridgeAttemptPhase", "") == "preparing" &&
             prefs().getString("cpBridgeAttemptIdentity", "") == id.key &&
@@ -266,8 +275,8 @@ object CarPlayBridgeBootstrapManager {
             observationAgeMs = observationAgeMs,
             carPlayActive = if (observed.cpVisual) true else current.quiescent?.not(),
             androidAutoActive = if (observed.aaVisual) true else current.quiescent?.not(),
-            attemptsThisBoot = if (bootAttempt) 1 else 0,
-            failureCircuitOpen = prefs().getString("cpBridgeCircuitRevision", "") == bundle.revision,
+            attemptsForProcess = attemptsForProcess,
+            failureCircuitOpen = failureCircuitOpen,
             revisionMatches = sameImage || observed.mappedPath == null,
             attemptInProgress = recovering
         ))
@@ -292,7 +301,8 @@ object CarPlayBridgeBootstrapManager {
                 }
                 if (sameImage && decision.reason in listOf(Policy.Reason.PINNED_FAILURE, Policy.Reason.PRIOR_FAILURE,
                         Policy.Reason.OWNERS_NOT_ALIVE, Policy.Reason.ATTEMPT_NOT_IN_PROGRESS)) {
-                    prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision).commit()
+                    prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
+                        .putString("cpBridgeCircuitIdentity", id?.key.orEmpty()).commit()
                     runCatching { root.run("setprop $GATE ''") }
                 }
                 report("blocked", when {
@@ -642,8 +652,8 @@ object CarPlayBridgeBootstrapManager {
             check(root.run("md5sum /vendor/app/TsCarPlayService/TsCarPlayService.apk").trim().startsWith(SERVICE_MD5))
             // A root-owned atomic marker also survives app death and transport timeouts.
             root.run("mkdir -p ${q("$ROOT/attempts")}; chmod 700 ${q("$ROOT/attempts")}; " +
-                "mkdir ${q(attemptMarker(bundle, original.boot))} || exit 1; " +
-                "chmod 700 ${q(attemptMarker(bundle, original.boot))}")
+                "mkdir ${q(attemptMarker(bundle, original.key))} || exit 1; " +
+                "chmod 700 ${q(attemptMarker(bundle, original.key))}")
             val existing = root.run("getprop $GATE").trim()
             val nonce = existing.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: UUID.randomUUID().toString().replace("-", "")
             root.run("setprop $GATE $nonce")
@@ -676,11 +686,15 @@ object CarPlayBridgeBootstrapManager {
             }
             val identity = requireNotNull(current.id)
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
+            synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
+            check(prefs().edit().putString("cpBridgeAttemptIdentity", identity.key).commit())
+            if (identity != original) {
+                root.run("test ! -e ${q(attemptMarker(bundle, identity.key))} || exit 1; " +
+                    "mv ${q(attemptMarker(bundle, original.key))} ${q(attemptMarker(bundle, identity.key))} || exit 1")
+            }
             val coldBudget = CarPlayResidentProof.coldGateBudget(identity.start,
                 Os.sysconf(OsConstants._SC_CLK_TCK), SystemClock.elapsedRealtime(),
                 prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0))
-            synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
-            check(prefs().edit().putString("cpBridgeAttemptIdentity", identity.key).commit())
             val run = identity.directory
             val template = File(bundle.source, "cold-launcher-template.js").readText()
             val marker = "\"expectedPid\":1234567890"
@@ -825,6 +839,8 @@ object CarPlayBridgeBootstrapManager {
             startingBindings.clear()
             // Keep the failure separate: a late diagnostic sample may replace safety.json.
             prefs().edit().putString("cpBridgeCircuitRevision", bundle.revision)
+                .putString("cpBridgeCircuitIdentity", activeAttempt?.identity?.key
+                    ?: prefs().getString("cpBridgeAttemptIdentity", "").orEmpty())
                 .putString("cpBridgeAttemptPhase", "failed")
                 .putString("cpBridgeLastFailure", failure.toString()).commit()
             runCatching { writeSafetyPacketLocked(failure) }
@@ -857,7 +873,8 @@ object CarPlayBridgeBootstrapManager {
         }.onFailure { Log.w(TAG, "Native client refresh deferred; bridge owners preserved", it) }
     }
 
-    private fun attemptMarker(bundle: Payload, boot: String) = "$ROOT/attempts/$boot-${bundle.revision}"
+    private fun attemptMarker(bundle: Payload, processIdentity: String) =
+        "$ROOT/attempts/${CarPlayBridgeAttemptScope.markerName(processIdentity, bundle.revision)}"
 
     private fun launch(bundle: Payload, identity: Identity, scriptPath: String, log: String,
         deadline: Long? = null) {
@@ -882,7 +899,7 @@ object CarPlayBridgeBootstrapManager {
         val remote = "${identity.directory}/$role-supervisor.sh"
         root.run(identityGuard(identity) + CarPlayResidentProof.environmentGuard(binding.environment,
             bundle.revision, bundle.injector) + script("""
-            test -d ${q(attemptMarker(bundle, identity.boot))} || exit 1
+            test -d ${q(attemptMarker(bundle, identity.key))} || exit 1
             test ! -e ${q(remote)} || exit 1
             cp ${q(supervisor.absolutePath)} ${q(remote)} || exit 1
             chown 0:0 ${q(remote)}; chmod 500 ${q(remote)}

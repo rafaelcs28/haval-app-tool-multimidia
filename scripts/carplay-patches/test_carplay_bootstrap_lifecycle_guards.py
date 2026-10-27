@@ -399,7 +399,7 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         failure = function_source(self.bootstrap, "failAttempt")
         self.assertIn('.putString("cpBridgeAttemptPhase", "failed")', failure)
 
-    def test_exhausted_boot_budget_clears_gate_without_allowing_a_retry(self):
+    def test_exhausted_process_budget_clears_gate_without_retrying_same_identity(self):
         tick = function_source(self.bootstrap, "tick")
         blocked = tick.split("Policy.Action.BLOCKED -> {", 1)[1]
         match = re.search(
@@ -409,7 +409,22 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
         self.assertIn('root.run("setprop $GATE \'\'")', match.group(1))
         self.assertNotIn('.remove(', match.group(1))
         self.assertNotIn("attempt(", match.group(1))
-        self.assertIn("attemptsThisBoot = if (bootAttempt) 1 else 0", tick)
+        self.assertIn("val attemptsForProcess = CarPlayBridgeAttemptScope.attemptsForProcess(", tick)
+        self.assertIn('id?.key, prefs().getString("cpBridgeAttemptIdentity", "")', tick)
+        self.assertIn("attemptsForProcess = attemptsForProcess", tick)
+        marker = function_source(self.bootstrap, "attemptMarker")
+        self.assertIn("CarPlayBridgeAttemptScope.markerName(processIdentity, bundle.revision)", marker)
+        self.assertNotIn("identity.boot", marker)
+
+    def test_explicit_retry_clears_the_process_scoped_attempt(self):
+        reset = self.bootstrap.split("@JvmStatic fun resetFailureCircuit", 1)[1].split(
+            "\n    private fun report", 1)[0]
+        for key in ("cpBridgeCircuitRevision", "cpBridgeCircuitIdentity",
+                    "cpBridgeAttemptBoot", "cpBridgeAttemptRevision",
+                    "cpBridgeAttemptPhase", "cpBridgeAttemptTicket",
+                    "cpBridgeAttemptIdentity", "cpBridgeAttemptWarmRestart",
+                    "cpBridgeAttemptDeadlineElapsed"):
+            self.assertIn(f'.remove("{key}")', reset)
 
     def test_null_projection_semantics_require_exact_verified_oem_firmware(self):
         source = QUIESCENCE.read_text()

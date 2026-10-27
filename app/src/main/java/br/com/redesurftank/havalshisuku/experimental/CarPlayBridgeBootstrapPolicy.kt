@@ -3,7 +3,7 @@ package br.com.redesurftank.havalshisuku.experimental
 /** Decisions only: this policy never starts, stops, injects or unloads a process. */
 object CarPlayBridgeBootstrapPolicy {
     const val MAX_OBSERVATION_AGE_MS = 15_000L
-    const val MAX_ATTEMPTS_PER_BOOT = 1
+    const val MAX_ATTEMPTS_PER_PROCESS = 1
 
     enum class Phase { NONE, ARMED, INSTALLED, READY, FAILED, FAILED_PINNED, UNKNOWN }
 
@@ -47,7 +47,7 @@ object CarPlayBridgeBootstrapPolicy {
         val observationAgeMs: Long?,
         val carPlayActive: Boolean?,
         val androidAutoActive: Boolean?,
-        val attemptsThisBoot: Int,
+        val attemptsForProcess: Int,
         val failureCircuitOpen: Boolean,
         val revisionMatches: Boolean,
         val attemptInProgress: Boolean = false
@@ -80,8 +80,8 @@ object CarPlayBridgeBootstrapPolicy {
             if (phase == Phase.FAILED) return blocked(Reason.PRIOR_FAILURE)
             if (!enabled) return decide(Action.DISABLED, Reason.DISABLED)
             if (failureCircuitOpen) return blocked(Reason.FAILURE_CIRCUIT_OPEN)
-            if (attemptsThisBoot < 0) return blocked(Reason.INVALID_ATTEMPT_COUNT)
-            if (attemptsThisBoot >= MAX_ATTEMPTS_PER_BOOT) return blocked(Reason.ATTEMPT_BUDGET_EXHAUSTED)
+            if (attemptsForProcess < 0) return blocked(Reason.INVALID_ATTEMPT_COUNT)
+            if (attemptsForProcess >= MAX_ATTEMPTS_PER_PROCESS) return blocked(Reason.ATTEMPT_BUDGET_EXHAUSTED)
             if (!rootReady) return decide(Action.WAIT_ROOT, Reason.ROOT_UNAVAILABLE)
             if (!assetsVerified) return decide(Action.WAIT_ASSETS, Reason.ASSETS_UNVERIFIED)
             if (!bootIdentityKnown) return decide(Action.WAIT_PROCESS, Reason.BOOT_IDENTITY_UNKNOWN)

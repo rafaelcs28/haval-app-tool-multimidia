@@ -14,7 +14,7 @@ class CarPlayBridgeBootstrapPolicyTest {
         bootIdentityKnown = true, processPresent = true, processIdentityMatches = true,
         phase = Phase.NONE, ownersAlive = false, hasBridgeMapping = false,
         coldModulesAbsent = true, observationAgeMs = 0L,
-        carPlayActive = false, androidAutoActive = false, attemptsThisBoot = 0,
+        carPlayActive = false, androidAutoActive = false, attemptsForProcess = 0,
         failureCircuitOpen = false, revisionMatches = true
     )
 
@@ -62,7 +62,7 @@ class CarPlayBridgeBootstrapPolicyTest {
         val ready = idle().copy(phase = Phase.READY, hasBridgeMapping = true, ownersAlive = true)
         assertEquals(Action.PRESERVE_READY, action(ready))
         val afterAppRestart = ready.copy(rootReady = false, assetsVerified = false,
-            revisionMatches = false, attemptsThisBoot = 1,
+            revisionMatches = false, attemptsForProcess = 1,
             carPlayActive = true, androidAutoActive = null, observationAgeMs = null)
         assertEquals(Action.PRESERVE_READY, action(afterAppRestart))
         assertEquals(Reason.READY_PREVIOUS_REVISION, decide(afterAppRestart).reason)
@@ -77,7 +77,7 @@ class CarPlayBridgeBootstrapPolicyTest {
     @Test fun onlyOwnedInProgressArmingAndInstallationArePreserved() {
         for (phase in listOf(Phase.ARMED, Phase.INSTALLED)) {
             val pending = idle().copy(phase = phase, hasBridgeMapping = true, ownersAlive = true,
-                attemptInProgress = true, attemptsThisBoot = 1)
+                attemptInProgress = true, attemptsForProcess = 1)
             assertEquals(Action.PRESERVE_PINNED, action(pending))
             assertEquals(Reason.ATTEMPT_NOT_IN_PROGRESS,
                 decide(pending.copy(attemptInProgress = false)).reason)
@@ -113,20 +113,20 @@ class CarPlayBridgeBootstrapPolicyTest {
             for (mapping in listOf(true, false)) {
                 val failed = idle().copy(phase = phase, hasBridgeMapping = mapping)
                 assertEquals(Action.BLOCKED, action(failed))
-                assertDoesNotPrepare(failed.copy(revisionMatches = false, attemptsThisBoot = 0))
+                assertDoesNotPrepare(failed.copy(revisionMatches = false, attemptsForProcess = 0))
             }
         }
     }
 
     @Test fun repeatedBootSignalsAndMalformedCountsCannotSpendAnotherAttempt() {
         for (attempts in listOf(-1, 1, 2, Int.MAX_VALUE)) {
-            assertEquals(Action.BLOCKED, action(idle().copy(attemptsThisBoot = attempts)))
+            assertEquals(Action.BLOCKED, action(idle().copy(attemptsForProcess = attempts)))
         }
         assertEquals(Reason.FAILURE_CIRCUIT_OPEN, decide(idle().copy(failureCircuitOpen = true)).reason)
     }
 
     @Test fun aNewRevisionDoesNotSilentlyResetTheFailureBudget() {
-        assertEquals(Action.BLOCKED, action(idle().copy(revisionMatches = false, attemptsThisBoot = 1)))
+        assertEquals(Action.BLOCKED, action(idle().copy(revisionMatches = false, attemptsForProcess = 1)))
         assertEquals(Action.BLOCKED, action(idle().copy(revisionMatches = false, failureCircuitOpen = true)))
         // The persistent owner explicitly resets state for a reviewed revision;
         // the policy itself never treats a different revision as a reset.
