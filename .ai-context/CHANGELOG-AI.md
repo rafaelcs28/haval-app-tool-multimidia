@@ -1,3 +1,13 @@
+## 2026-10-26 — 145 published and installed; automatic preparation verified after reboot
+
+Source7b5d79b2 signed only on authorized Mini; fullJVM/Release/R8/lint/certificate
+passed,10transport JVM and41portable tests. Exactinstalled/publicAPK d96beb68...,
+104337315bytes. Fullpreparation then automaticnewbootprep verified9nativehooks +
+Javaarmed with currentidentities/post-exitnonces; framework/policy stable. GWM OFF
+freshconfirmed01:08:44UTC27Oct. Publicrelease145/wholeAPKdownload/previewmanifest
+verified; stable untouched, no privatehistory published. Owner phone/route test
+remains pending. Final HANDOFF has complete source/artifact/proof/publication refs.
+
 ## 2026-10-26 — current preparation READY; reboot preflight still incomplete
 
 Af43 real9-hook/JavaREADY passed, then fullreboot correctly rejected oldproof but

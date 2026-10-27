@@ -1,3 +1,106 @@
+## 145 completed — published, installed, automatic reboot preparation verified; vehicle OFF
+
+Final application source: 7b5d79b2aeb13073c13860e32f4439b9bd33236d, private
+release/impulse-74145-carplay-readiness branch. Version74145 /1.0.0.74.145-preview.
+Signed Mini job haval-impulse-133-7b5d79b2aeb13073-20261027T005221Z-22631 passed
+full JVM/Release/R8/lint/production certificate in6m6s;10transport JVM tests and
+41portable lifecycle/probe tests pass. No coordinator Android build. Latest Netseek
+v9 through edc0cc61 included; themes/OEM AA/CP assets preserved.
+
+Exact signed/installed/public APK:104337315bytes, SHA256
+ d96beb6834060643e9568f4060f18e8072dcfe389dba4f591fc153d676adb02a.
+Production certificate5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Payload74145-cca41dfe4a54-8f807eaa3c7f. Real preparation and automatic preparation
+AFTER full Android reboot both verified:9pinnednativehooks, Javaarmed, bothCLIexit0,
+matchingpost-exitnonce samples and currentliveOEMidentity. Newbootbdba7dce-ff0a-
+432b-b6e7-8e02776bf33c OEM9785/start4044; policy58d3.../system_server1966 unchanged.
+No manual enable/reset after that reboot. Canonical controller enforces3sec proof
+freshness; passive audit snapshots are within its30sec refresh interval.
+
+GWM OFFaccepted01:08:29UTC27Oct, freshengine0confirmed01:08:44UTC. Vehicle OFF;
+automatic prepTRUE preserved for next boot. No five-minute phone/route capture
+was started. Owner iPhone navigation/capture/HUD test remains to be performed.
+All prior LIVE ON/pending readiness headings below are historical and superseded.
+
+Public release:
+https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.145-preview
+release424932275. Publictagpoints048749aebcb792ec163c3f7c601b574d75f0e9ba, notprivate
+history. Four assets:APK/SHA256SUMS/build-info/component reproduction source tar.
+Whole public APK downloaded and hash/sizeverified BEFORE app-latest/app-preview.json
+promotion to74145; public manifest readback matches. Stable channel untouched.
+Final publication artifacts: originalworkspace/test-artifacts/publish-74145-final-20261026/.
+Oldpublish-74145-20261026 is preliminaryonly and marked DO_NOT_PUBLISH.json.
+Private operation/evidence: originalworkspace/test-artifacts/release-74145-preflight-20261026/.
+Own temporary HTTPS delta directories removed; immutable Mini artifacts/private traces retained.
+
+Next: owner turns on central WITHOUT iPhone, waits Bridge preparada para esta sessão,
+then connects USB iPhone, opens Apple Maps/Waze route and starts five-minute test.
+Retrieve local logs later when online. Do not claim physical map/HUD route validated.
+No further wake/reboot or scheduled action is needed for this completed release.
+
+## FINAL145 fieldPASS — VEHICLE OFFconfirmed01:08:44UTC; publishexactAPKnext
+
+Source7b5d79b2aeb13073c13860e32f4439b9bd33236d exactMiniAPK
+ d96beb6834060643e9568f4060f18e8072dcfe389dba4f591fc153d676adb02a,
+104337315bytes, productioncertverified. InstalledactualhashPMsuccess. Preflight
+passedbothbeforeandafterfullreboot, boundedstdout17.5.2/stderrempty/exit0 andstable
+kernelpolicy/framework. ActualautomaticNEWBOOT READYbdba7dce-ff0a-432b-b6e7-8e02776bf33c,
+OEM9785/start4044,9nativepinnedhooks+Javaarmed, bothCLIexit0, matchingnonce2samples
+perrole andcurrentliveOEMmapping. NOmanualenable/resetafterreboot. Oldboot625eae..
+wasalsoREADY. Controllerenforces3secproofsatREADY;passivesnapshots10/9swithin30srefresh.
+Evidencecheck_readiness andfield-outcome oprelease-74145-preflight-20261026.
+
+GWM OFFaccepted01:08:29, freshengine0confirmed01:08:44UTC. CURRENT VEHICLE OFF.
+AutomaticprepTRUEleftreadyfornextboot, no phone/captureteststarted. Ownerwilldo5min
+CarPlayiPhoneroutetestlater. Do NOTclaimphysicalmap/HUDroutevalidated.
+
+Publicrelease/OTA145STILLPENDING, preview144currently. FINALpublishdir originalworkspace
+/test-artifacts/publish-74145-final-20261026 containscorrectd96APK, metadata, SHA256SUMS,
+componenttar/notes. Oldpublish-74145-20261026 hasDO_NOT_PUBLISH.json (oldaf43prelim).
+Nowcreateprerelease145withtagtargetPUBLIC048749aebcb792ec163c3f7c601b574d75f0e9ba,
+explicit4assets, NEVERpushprivatehistory. VerifywholepublicAPKhashfirst, promote
+app-latest/app-preview.json LAST aftercheckingcurrent144. Stablechannelunchanged.
+Thenupdatefinaldocs/privatepush andreport145installed/autoREADY/off+shortteststeps.
+
+## LIVE145 7b5 preflight/currentREADYpassed, fullrebootrequested, VEHICLE ON
+
+ExactAPK d96beb6834060643e9568f4060f18e8072dcfe389dba4f591fc153d676adb02a installed,
+source7b5d79b2, payload74145-cca41dfe4a54-8f807eaa3c7f. Preflightactualpassedstdout17.5.2,
+exit0, before/afterenvsame, rootprobeoutputbounded/files400. ActualcurrentREADY9hooks/
+Javaarmed/CLIs0, currentboot625eae3b-fea1-4209-8c35-f71c28ea7286 OEM14956/start15301,
+systemserver1831/policy58d3same. Normalreceiver enabledtrue refreshed(no retry/reset);
+proofages11/10secs atlastsnapshot (<30secmanagerrefreshperiod), sourcecanonicalREADY
+itselfenforces3sec. check_readiness receipts after-enable-2 andbefore-reboot-fresh.
+
+Oneguardedfullrebootrequested01:05UTC withfreshP/0, marker
+/data/local/tmp/impulse-74145-reviewed-d96beb683406/reboot-once. DO NOTrepeat.
+VehicleON fromGWMaccepted00:59:43/fresh1at01:00:23, timer~15min (until01:14:43).
+WaitnewbootTCP, field-read.sh capturesprivatepreflight-state/firsterror andprobe
+start/stdout/stderr/exit; no losingearlybootevidence now. No manualenableafterboot:
+mustvalidateautomaticnewbootREADY viahelper. AlwaysGWM OFFfreshverifiedbeforeend.
+Latestop originalworkspace/test-artifacts/release-74145-preflight-20261026/.
+Publicpreviewstill144/no145release. Localpub145folderold33fartifactprelimonly; replace
+withexactfinalartifactafternewbootREADY. OwneriPhone testlater; no phone interaction.
+
+## LIVE145 preflight — VEHICLE ON, must verify GWM OFF before ending
+
+Source7b5d79b2aeb13073c13860e32f4439b9bd33236d signedMini success6m6s, job
+haval-impulse-133-7b5d79b2aeb13073-20261027T005221Z-22631, fullJVM10transportPASS,
+41portablePASS. Artifact originalworkspace/artifacts/impulse-74145-preflight-release-mini/;
+APK104337315bytes SHAd96beb6834060643e9568f4060f18e8072dcfe389dba4f591fc153d676adb02a,
+productioncert5efec0...verified. Exact4MBbyte-delta prepared/HTTPSverified. No public145.
+
+GWM ONaccepted00:59:43UTC27Oct, freshengine1confirmed01:00:23. CURRENT VEHICLE ON.
+FreshP/0 andheartbeat/TCP23online01:00:54. Readingbefore-install now; noinstallYET.
+Operation originalworkspace/test-artifacts/release-74145-preflight-20261026/.
+Oldinstalledaf43 autoFALSE fromlastpause; lastkernelbootfailedpreflightunknownnoCLI
+retry, but prioraf43actual9-hook/JavaREADY happenedpre-reboot. Newsource isolated
+Rootstdin andseparateddurableprobe stdout/stderr/exit/start; keepsfirstprivatefailure
+perboot/rev. Newfirstfailureevidence MUSTread ifblocked; no moreblindhypotheses.
+Fullpreparedcurrent/newbootproofs stillneeded beforepublish. Userauthorization/openair
+persists. AlwaysOFFverifiedevenifblocked. Localpublish145currentlyold33fONLY preliminary;
+replace withfinalactualAPKonlyafterpropernewbootREADY, publictagbase048749ae.
+
 ## Current145 preflight IO/evidence correction — VEHICLE OFF confirmed00:41:49UTC
 
 Sourceaf43 actualcurrentbootREADY PASS9hooks/Javaarmed/freshnonces. Authorizedfull

@@ -1,3 +1,15 @@
+## Current next step — owner CarPlay route test on installed 145
+
+145 is installed and public preview74145 verified. Automatic preparation after a
+full Android reboot passed; vehicle OFFconfirmed01:08:44UTC27Oct. This release task
+is complete. No additional wake/install/reboot or recurring action is pending.
+
+Owner: start central without iPhone, wait Bridge preparada para esta sessão,
+connect USB iPhone, open Apple Maps/Waze route, then start the five-minute CarPlay
+test in Impulse. Retrieve persisted local capture/diagnostics when online again.
+Do not claim phone map/HUD validation before that test. Earlier active/pending
+headings below describe historical work and are superseded by this status.
+
 ## ACTIVE145 — finish signed build and authorized field install/reboot, then OFF
 
 Owner asked ready-to-test version and explicitly GWM ON/install/reboot/OFF;

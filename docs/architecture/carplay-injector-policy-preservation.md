@@ -188,3 +188,19 @@ the Frida version probe failure; upstream --version returns before its Applicati
 stdin-reading path. No admission, callback ownership or cold deadline is bypassed.
 Portable lifecycle/probe fixtures pass 41 cases; full signed Mini/JVM and new-boot
 preparation are still pending.
+
+## Final 145 field and publication result
+
+Source7b5d79b2 passed the signed Mini build, full JVM suite and ten transport tests.
+The exact APK was installed and preparation passed. A full Android reboot then
+prepared automatically with fresh new-boot ownership, nine pinned native hooks,
+Java armed, two matching post-exit nonce samples per role and unchanged framework/
+policy. No manual configuration/reset was used after reboot. Probe stdout was
+17.5.2, stderr empty, exit0, with identical before/after environment. This establishes
+the final build's behavior; it does not retrospectively identify the discarded
+intermediate preflight failure. The owner's phone route/HUD test remains pending.
+
+Version74145 was publicly published and its complete APK hash verified before
+preview-manifest promotion. Public tag references the existing public source base;
+private history and device logs were not published. GWM OFF was freshly confirmed
+at01:08:44UTC27Oct; automatic preparation remains enabled for the next start.

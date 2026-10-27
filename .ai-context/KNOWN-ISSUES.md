@@ -1,3 +1,19 @@
+## Current status after 145 — preparation and full reboot passed; phone route test pending
+
+145 fixes the observed protected-challenge mv prompt and uses a separate fixed-profile
+loader preserving the existing permissive policy. Current and automatic new-boot
+preparation passed real9-hook/Java residency checks with stable Android framework.
+Granular DCM/BT reasons are now available; current quiet state passed without
+attributing the earlier ambiguous144 FALSE to BLE lights. Historical144 cause
+cannot be reconstructed retrospectively from its old merged logs.
+
+The intermediate af43 boot preflight failure had no retained cause; revised bounded
+stdin/output/stage evidence and the final7b5 build passed full reboot. Do not
+claim a unique cause for that intermediate failure. The remaining physical unknown
+is the owner's five-minute iPhone route/capture/HUD test, not preparation readiness.
+No unrelated OEM lighting service was disabled. Historical entries below are kept
+for traceability and are superseded by current145 facts where applicable.
+
 ## 2026-10-26 — merged quiescence diagnostic cannot identify current blocker
 
 The144 event collapses an unrecognized DCM online signature, active DCM projection,
