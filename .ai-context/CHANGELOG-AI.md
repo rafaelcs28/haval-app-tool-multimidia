@@ -1,9 +1,12 @@
-## 2026-10-27 — prepare146 from validated v9 sync
+## 2026-10-27 — signed146 build and transport ready; remote installation pending
 
-Owner requested remote wake/install/reboot/OFF. Bumped only default version fields
-to74146/1.0.0.74.146-preview over validated9981c5c0/ffaf05cb. SignedMini validation,
-freshopenairconfirmation, exactinstall/newbootREADY and OFFverification pending.
-No new CarPlay controller change or physical phone/route test.
+Owner requested wake/install/reboot/OFF. Bumped only default version fields to74146
+above validated v9 sync. Mini full JVM / Release / R8 / lint / production signing
+PASS in6m10s (source4cc520fd). Fetched checksums and actual signed APK payload/source/
+version/feature markers verified: SHA5fe6262e...,104337311 bytes. Byte-exact delta
+from145 tested using generated shell and full comparison (gzip4053999 bytes).
+Current parked/open-air confirmation pending; no vehicle command, field validation,
+public release or OTA promotion. Complete resume instructions in HANDOFF.
 
 ## 2026-10-27 — latest v9 HUD map/opacity integration validated
 

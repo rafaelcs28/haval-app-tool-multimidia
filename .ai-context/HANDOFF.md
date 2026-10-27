@@ -1,21 +1,65 @@
-## 2026-10-27 — 146 release requested; build before GWM/install/reboot/OFF
+## 2026-10-27 — signed 146 ready; awaiting current parked/open-air confirmation
 
-Owner explicitly requests wake, install latest, full central reboot, then vehicleOFF.
-Preparing146 (74146 /1.0.0.74.146-preview) over validated v9 sync9981c5c0/ffaf05cb.
-Only functional delta since validated Debug is the two default version fields;
-latest v9 is83a63219, CarPlay preparation/controller remains145 behaviour.
-SignedRelease/fullJVM/R8/lint must pass on audited immutable source via authorized
-Mini only; production signing remains host-only. No coordinator Android build.
-New private operation: originalworkspace/test-artifacts/release-74146-v9-20261027/.
+Owner requested GWM ON, installation, full central reboot, then GWM OFF. Prepared
+version 74146 / 1.0.0.74.146-preview from validated v9 sync 83a63219 / 9981c5c0.
+Application source commit: 4cc520fdc14db9c2f82887d3206106e4c4fcf2a7.
+Private branch: release/impulse-74146-v9-map-opacity. Since the validated v9 Debug,
+only functional change is the two default version fields; CP/AA logic is unchanged.
 
-Fresh open-air/parked confirmation requested and pending; do not GWM ON until it
-arrives. No vehicle actions yet. After validated exactAPK, require freshP/0 telemetry
-before installation/fullreboot; verify installedhash/version and actualnewbootREADY
-matching146revision/liveOEMidentity. Do not reset uncertain preflight/ownership.
-Always verify freshGWM OFF after anyON, including failed or partial installation.
-Owner phone/route/HUD five-minute test remains later; do not claim it completed.
-Publish146/preview only after exactartifact/readiness validation, publicAPKdownload
-hash verification, publictagbase048749ae (neverprivatehistory), previewmanifestLAST.
+Authorized Mini job haval-impulse-133-4cc520fdc14db9c2-20261027T102654Z-22310
+PASSED full JVM / Release / R8 / lint / pinned production certificate in 6m10s,
+finished 10:33:35 UTC. No coordinator Android build. Audited eight build controls;
+new allowlisted digest f54a8a9c81f899a523e79591e30586dde4a350a69f96334c65a5e8da856d7a7c.
+The only build-control delta is versionCode/name 145 -> 146. Source scan passed
+1259 tracked files / 1155 content files; signing material stayed on the Mini.
+Archive SHA256: 49c122b6877526c35493e88e1f81762369aaf037d6b829b2ceaefa7d7e2dff09.
+
+Exact signed APK: 104337311 bytes; SHA256
+5fe6262ed0608a953f6e11cbc7b4049f45d2e640065cfb0f65bf7072a2652895.
+Certificate: 5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Artifact directory: originalworkspace/artifacts/impulse-74146-v9-release-mini/.
+APK signature/version, current controller source digest, bundled five-file payload,
+original/modified injector profile, Default/theme/bridge, OEM CP hashes and HUD
+opacity feature marker verified against actual signed APK. All fetched checksums pass.
+Payload revision: 74146-19391fbb2963-8f807eaa3c7f.
+
+Local transport delta from exact signed 145 d96beb68 is ready and verified by
+actual generated shell + full byte comparison + SHA256. Transfer literal gzip:
+4053999 bytes; 93.7 MB reused, twelve chunks. No HTTPS staging directory created.
+Private operation: originalworkspace/test-artifacts/release-74146-v9-20261027/.
+Contains source-audit.json, mini-job.json, field-outcome.json, authorization.json,
+validated delta, prepare_transport.py (reuses checked delta), make_deploy_scripts.py,
+validate_146.py, collect_state.py/field-read.sh/check_readiness.py, parking_snapshot.py,
+and approved existing GWM power helper. All helper syntax checked; none contacted car.
+
+CURRENT BLOCKER: fresh confirmation of parked car in open air is pending in async
+question. Prior open-air confirmation and verified GWM OFF were about nine hours
+before this new request. Do not infer current location from that old confirmation.
+NO GWM command, car connection, installation, restart or field test in this turn.
+Do not claim 146 installed/boot-validated or vehicle currently OFF from old telemetry.
+Automatic CarPlay preparation on 145 was previously verified; 146 still needs its
+own actual new-boot proof. Owner's five-minute iPhone route/HUD test remains later.
+
+Publication staging only: originalworkspace/test-artifacts/publish-74146-20261027/.
+APK, checksums, build-info, component source and draft notes present; clearly marked
+DO_NOT_PUBLISH_YET.json. No public release/tag/preview writes. Current public 145
+preview pinned as precondition (app-latest release415373441 / asset680027969).
+
+Resume once current parked/open-air reply arrives: record it, run prepare_transport
+and make_deploy_scripts locally, then GWM ON/fresh cloud verification. Require fresh
+P/zero speed and APK heartbeat before install and reboot. Capture read-only baseline,
+verify exact 145 transport base/cache; install exact 146 and verify installedhash.
+Old 145 pinned bridge may correctly remain until reboot; DO NOT force reinjection
+or require 146 READY before the requested full reboot. Generate a one-time reboot
+script bound to actual current boot, installed146 hash and fresh parking evidence.
+After full reboot verify new boot and canonical 146 READY: nine pinned native hooks,
+Java armed, both loader exits zero, live OEM identity, matching nonce/post-exit proof.
+Never reset uncertain preflight or published owners. Preserve automatic enabled=true.
+Always GWM OFF with fresh cloud verification after any ON, even on partial failure.
+After successful field validation, publish four exact assets on public tag based on
+PUBLIC048749aebcb792ec163c3f7c601b574d75f0e9ba, never private history; verify entire
+public APK before promoting preview manifest LAST, only if pinned 145 precondition
+still matches. Update staged metadata/notes/readiness and remove hold marker then.
 
 ## 2026-10-27 — latest Netseek v9 integrated and validated; installed/public145 preserved
 

@@ -1,10 +1,14 @@
-## 2026-10-27 — finish signed146, authorized installation/reboot/OFF
+## 2026-10-27 — 146 signed and ready; remote steps await current location confirmation
 
-Owner requested GWM ON/install/reboot/OFF after v9 sync. Finish immutable audited
-MiniRelease146 first, prepare exacttransport while awaiting fresh open-air parked
-confirmation, then install, validate automaticnewbootREADY and GWM OFFfresh. Publish
-verified146 with previewmanifestLAST; owner phone/route test later. CurrentHANDOFF
-contains pendingconfirmation and strict ownership/preflight constraints.
+Full JVM / Release / R8 / lint / signature and APK payload validation PASS on Mini
+(source4cc520fd, job in HANDOFF). Offline byte-exact transfer delta ready (4.05 MB).
+Owner authorized GWM ON/install/reboot/OFF, but current parked/open-air answer is
+pending. No car commands or public writes. Once confirmed, follow exact installation,
+one full reboot, canonical new-boot146 READY proof and fresh GWM OFF verification.
+Then publish exact146/verify public download/promote preview last. Existing public
+and last installed version remain145; neither 146 field proof nor phone test is done.
+HANDOFF records all paths and restart instructions, including preservation of old
+pinned145 owners until full reboot.
 
 ## 2026-10-27 — latest v9 source sync complete; owner CarPlay test remains next
 
