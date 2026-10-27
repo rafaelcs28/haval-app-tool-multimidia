@@ -1,10 +1,11 @@
-## CURRENT 147 — false device wait corrected; physical READY pending
+## CURRENT 147 — false device wait corrected and new-boot READY verified
 
 146 can block automatic preparation on the central's exact inactive DCM/Wi-Fi
 infrastructure row (type0, capability4096) even when TX45 and both visual probes
 show no projection. Current field evidence proves this branch.147 narrows an
-exception to that exact signature and is publicly verified. Physical READY still
-requires owner install/reboot; do not generalize the exception to other DCM records.
+exception to that exact signature, is publicly verified, installed and passed real
+new-boot automatic preparation. Do not generalize it to other DCM records. The
+remaining unknown is actual CarPlay map/HUD output during the owner's route test.
 
 ## CURRENT corrected146 — build/publication verified; actual vehicle output pending
 

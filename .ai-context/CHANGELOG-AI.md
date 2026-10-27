@@ -12,6 +12,13 @@ on Mini in5m19s. PublicAPK2001c6fe...,104353699bytes/release425649180 and anonym
 whole download verified before preview74147 promotion/readback. Physical READY and
 CarPlay map/HUD test remain owner steps; no vehicle mutation in this phase.
 
+Owner subsequently authorized GWM ON/install/reboot/OFF. Fresh P/0kmh confirmed;
+exact public APK downloaded and hash-checked on head unit, PM Success/version74147.
+One full reboot produced newboot ad16cac1..., mapped bridge and both native/Java
+proofs; persisted phase=ready/current identity and exact147 payload revision. The
+previous DCM_RECORD_NOT_RETAINED row is now counted as inactive infrastructure and
+no longer blocks. GWM OFF fresh-confirmed engine0. Phone map/HUD test still pending.
+
 ## 2026-10-27 — corrected146 published and verified for manual installation
 
 Source d2e42013 fixes actualD0/D3 admission/boundedofferwaiting, freshpinnedpassiveAA

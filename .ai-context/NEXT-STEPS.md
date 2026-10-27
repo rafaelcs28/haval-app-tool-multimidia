@@ -1,10 +1,9 @@
-## CURRENT — owner installs 147 and repeats automatic preparation
+## CURRENT — owner runs the 147 five-minute CarPlay route test
 
-Download/install public147, restart with no CarPlay/Android Auto projection active
-and wait for “Bridge preparada para esta sessão”. Then connect iPhone, start Apple
-Maps route, start the five-minute Impulse test and return to CarPlay D0. Retrieve
-private readiness/map/HUD diagnostics if output still fails. No remote vehicle
-power/install/reboot action is part of this request.
+147 is installed and automatic preparation is READY on the verified new boot; the
+vehicle is OFF. Owner later connects iPhone, starts an Apple Maps route, starts the
+five-minute Impulse test and returns to CarPlay D0. Retrieve private map/HUD decision
+and frame diagnostics after the run if either output remains absent.
 
 ## CURRENT — corrected146 published; owner manual test next
 

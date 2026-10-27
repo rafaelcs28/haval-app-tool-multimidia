@@ -1,4 +1,4 @@
-## COMPLETE — 147 published; owner manual install/reboot/test next
+## COMPLETE — 147 installed; new-boot automatic preparation READY; vehicle OFF
 
 Owner installed corrected146 and reported persistent “Aguardando confirmação de
 desconexão pela central” with no device connected. Read-only current boot confirms
@@ -17,7 +17,16 @@ job haval-impulse-133-926b8ee01762cf6b-20261027T152925Z-12337 in5m19s. ExactAPK
 SHA2001c6fea9cffd09618af278c352068dfd9ff5ae74e44745116c269cbcc5fb99,
 104353699bytes, payload74147-b7ba15626e9c-a9b5e39900a1. Publicrelease425649180,
 tag/publicwholeAPK and preview asset682031213 readback verified. Stable untouched.
-No vehicle mutation requested or performed; owner manually installs/restarts/tests.
+Owner then explicitly authorized GWM ON/install/reboot/OFF and confirmed the prior
+P/open-area condition by replying “Pode fazer”. Fresh telemetry showed P/0kmh.
+GWM ON was accepted once and fresh-confirmed. Head unit downloaded the public APK,
+verified exact size/SHA, installed with PM Success/version74147, and rebooted once.
+Newboot ad16cac1-a2c4-485c-83d8-4a7548eeb0f3 classified one exact inactive DCM
+infrastructure row, completed BT settling, mapped the bridge and produced native+
+Java residence proofs. Prefs show phase=ready, exact current identity9126-3808 and
+revision74147-b7ba15626e9c-a9b5e39900a1. The false146 block is physically fixed.
+GWM OFF was accepted once and fresh-confirmed engine0 at15:59:46Z. Vehicle leftOFF.
+Only owner iPhone/Apple Maps five-minute map+HUD output test remains.
 
 ## COMPLETE — corrected146 published and verified; owner manual install/reboot/test next
 
