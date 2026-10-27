@@ -57,3 +57,20 @@ unchanged. A local correction applies RPM colour choices to the bar gauge while
 preserving its original white/red defaults. Full JVM/Release validation passed on the authorized Mini (143, source `8e463602`).
 The public APK and preview manifest were independently verified. Actual HUD geometry
 and maps require field validation.
+
+## 2026-10-27 — v9 HUD route and colour-opacity source sync
+
+Netseek `83a63219` adds explicit OSM ring/one-way metadata with additive constructor
+defaults, roundabout exit selection using count/angle/distance, and continuation
+through straight-on maneuvers while destinations still end at their distance.
+HUD colour alpha stores per-part opacity (10–100%). Existing opaque street picks
+read at the prior visual default60% until saved with the new opacity marker. BLUE
+changes RGB while keeping each part's alpha; colour changes also retain opacity.
+Local RPM bars preserve the original white/redline RGB pair at the default RPM
+colour even when alpha changes. Inactive red alpha derives from its original paint,
+not the previously scaled value. Two integration tests cover these interactions.
+
+No theme assets, telemetry contracts, bridge methods, cluster dimensions, CarPlay
+preparation or Android Auto stream recovery code are modified by this sync. Physical
+map/opacity rendering still requires later owner validation; Mini validation is
+recorded in the current handoff after completion.

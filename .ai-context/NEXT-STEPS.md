@@ -1,3 +1,10 @@
+## 2026-10-27 — validate latest v9 source sync on Mini
+
+Integrating83a63219 after completed145; source-only synchronization, no new numbered
+release or remote vehicle work. Resolve review findings and run full JVM/Debug on
+authorized Mini. Then retain exact commit/job/artifact evidence and push private
+integration branch. Owner's installed145 CarPlay phone/route test remains pending.
+
 ## Current next step — owner CarPlay route test on installed 145
 
 145 is installed and public preview74145 verified. Automatic preparation after a

@@ -1,3 +1,21 @@
+## 2026-10-27 — latest Netseek v9 source sync; Mini validation pending
+
+Owner reported a new v9 commit. Integrating exactly83a6321966786a561d3dddaa51cf9295dce18946
+over completed145/ebe351a9 on integration/netseek-v9-20261027-83a63219. One upstream
+commit after edc0cc61: roundabout exit selection/ring tracking, straight-on route
+continuation, one-way exit filtering and per-part HUD colour opacity (10–100%).
+Nine source/test files. One renderer merge conflict resolved by combining upstream
+opacity with local RPM-bar colours; default white/redline pair now compares RGB and
+keeps selected alpha. Inactive red segments multiply their original alpha once.
+Two new JVM integration cases cover defaults/custom/BLUE at50% opacity.
+
+No version bump, public release/OTA promotion or vehicle command for this source sync.
+Installed/public145 and its verified automatic CarPlay preparation remain the last
+field-validated release. Phone/route test still pending owner. CP/AA controllers,
+OEM binaries, themes, contract/bridge and cluster geometry are unchanged.
+Full JVM/Debug verification must run only on authorized Mini from audited immutable
+commit; no Android/Kotlin compilation on coordinator. Read-only QA in progress.
+
 ## 145 completed — published, installed, automatic reboot preparation verified; vehicle OFF
 
 Final application source: 7b5d79b2aeb13073c13860e32f4439b9bd33236d, private

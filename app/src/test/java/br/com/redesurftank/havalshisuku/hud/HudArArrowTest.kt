@@ -836,7 +836,32 @@ class HudArArrowTest {
         assertEquals(HudOverlayModel.BLUE_COLORS, HudOverlayModel.frameFor(ar, null, 0, null).colors)
         // The swatches hold every default, so each part can go back to it.
         val swatches = HudOverlayModel.COLOR_SWATCHES.map { it.second }
-        for (c in listOf(d.drive, d.regen, d.rpm, d.street, d.route, d.text, d.chevron)) assertTrue(c in swatches)
+        for (c in listOf(d.drive, d.regen, d.rpm, d.street, d.route, d.text, d.chevron)) assertTrue(swatches.any { HudOverlayModel.sameRgb(it, c) })
+        // Opacity rides in the alpha byte: all solid by default but the streets (as they always looked).
+        assertEquals(1f, HudOverlayModel.opacityOf(d.text), 0.01f)
+        assertEquals(HudOverlayModel.STREET_DEFAULT_OPACITY, HudOverlayModel.opacityOf(d.street), 0.01f)
+        assertEquals(0.1f, HudOverlayModel.opacityOf(HudOverlayModel.withOpacity(d.text, 0f)), 0.01f)
+        // Azul changes the colour only; each part keeps its opacity.
+        val faint = d.copy(text = HudOverlayModel.withOpacity(d.text, 0.5f), mode = HudOverlayModel.ColorMode.BLUE).resolved()
+        assertEquals(0.5f, HudOverlayModel.opacityOf(faint.text), 0.01f)
+        assertTrue(HudOverlayModel.sameRgb(faint.text, HudOverlayModel.COLOR_DRIVE))
+    }
+
+    @Test
+    fun `map - a straight-on maneuver draws the road ahead, a destination still ends there`() {
+        // São Francisco tunnel, 2026-10-26: a name change / merge 40 m ahead drew a 40 m stub.
+        val road = listOf(br.com.redesurftank.havalshisuku.map.LocalRoad(floatArrayOf(0f, -30f, 0f, 700f), 1f))
+        val map = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR, mapStreets = true)
+        fun end(turn: String): Float {
+            val d = br.com.redesurftank.havalshisuku.managers.AndroidAutoNavigationTelemetry.Directions(
+                active = true, distance = "40 m", distanceM = 40, turn = turn, street = "Túnel Roberto Silveira", remainingM = 4800, remainingS = 720
+            )
+            val route = HudOverlayModel.frameFor(map, d, 0, null, streets = road, speedKmh = 40.0).tbt!!.route!!
+            return route[route.size - 1]
+        }
+        assertTrue(end("NAME_CHANGE") > 300f)
+        assertTrue(end("MERGE") > 300f)
+        assertEquals(40f, end("DESTINATION"), 2f)
     }
 
     @Test
@@ -867,6 +892,24 @@ class HudArArrowTest {
         val blue = chosen.copy(mode = HudOverlayModel.ColorMode.BLUE)
         for (redline in listOf(false, true)) {
             assertEquals(HudOverlayModel.BLUE_COLORS.rpm, HudOverlayModel.rpmBarColor(blue, redline))
+            assertEquals(chosen.rpm, HudOverlayModel.rpmBarColor(blue.copy(mode = HudOverlayModel.ColorMode.COLORFUL), redline))
+        }
+    }
+
+    @Test
+    fun `RPM opacity preserves the default white and redline pair`() {
+        val faint = HudOverlayModel.Colors(rpm = HudOverlayModel.withOpacity(HudOverlayModel.COLOR_RPM, 0.5f))
+        assertEquals(HudOverlayModel.withOpacity(HudOverlayModel.COLOR_TEXT, 0.5f), HudOverlayModel.rpmBarColor(faint, redline = false))
+        assertEquals(faint.rpm, HudOverlayModel.rpmBarColor(faint, redline = true))
+    }
+
+    @Test
+    fun `RPM opacity follows custom colours and Azul without replacing the saved pick`() {
+        val chosen = HudOverlayModel.Colors(rpm = HudOverlayModel.withOpacity(HudOverlayModel.rgb(255, 150, 50), 0.5f))
+        for (redline in listOf(false, true)) {
+            assertEquals(chosen.rpm, HudOverlayModel.rpmBarColor(chosen, redline))
+            val blue = chosen.copy(mode = HudOverlayModel.ColorMode.BLUE)
+            assertEquals(HudOverlayModel.withOpacity(HudOverlayModel.COLOR_DRIVE, 0.5f), HudOverlayModel.rpmBarColor(blue, redline))
             assertEquals(chosen.rpm, HudOverlayModel.rpmBarColor(blue.copy(mode = HudOverlayModel.ColorMode.COLORFUL), redline))
         }
     }

@@ -1,3 +1,11 @@
+## 2026-10-27 — latest v9 HUD map/opacity source integration (validation pending)
+
+Merged Netseek83a63219 over145: roundabout exits/ring progress, straight-on route
+continuation, one-way exit filtering and per-part HUD opacity with legacy street
+colour migration. Combined renderer conflict with existing RPM-bar colours and
+added two alpha/default/BLUE integration tests. No CP/AA runtime/theme/contract/
+geometry changes, version bump, publication or vehicle command. Mini QA pending.
+
 ## 2026-10-26 — 145 published and installed; automatic preparation verified after reboot
 
 Source7b5d79b2 signed only on authorized Mini; fullJVM/Release/R8/lint/certificate
