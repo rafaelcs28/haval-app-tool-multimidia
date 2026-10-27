@@ -1,9 +1,9 @@
-## CURRENT — build and publish 147, then owner repeats automatic preparation
+## CURRENT — owner installs 147 and repeats automatic preparation
 
-Freeze exact source, audit and run full JVM/Release/signing on authorized Mac Mini.
-Verify signed APK/version/certificate/payload, publish exact147 and update preview
-manifest only after public whole-APK verification. Owner then installs/restarts with
-no projection active and checks READY before connecting iPhone. No remote vehicle
+Download/install public147, restart with no CarPlay/Android Auto projection active
+and wait for “Bridge preparada para esta sessão”. Then connect iPhone, start Apple
+Maps route, start the five-minute Impulse test and return to CarPlay D0. Retrieve
+private readiness/map/HUD diagnostics if output still fails. No remote vehicle
 power/install/reboot action is part of this request.
 
 ## CURRENT — corrected146 published; owner manual test next

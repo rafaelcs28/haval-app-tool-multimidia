@@ -1,4 +1,4 @@
-## 2026-10-27 — 147 classifies exact inactive DCM infrastructure record
+## 2026-10-27 — 147 DCM residual fix published and verified
 
 Owner installed146 and it waited at central disconnect confirmation with no phone.
 Read-only current-boot evidence identified DCM_RECORD_NOT_RETAINED: TX45 null/empty,
@@ -7,7 +7,10 @@ Pinned OEM APK REA confirms type0 UNKNOWN, online is only map/nonterminal state,
 4096 is outside the firmware's mapped projection capabilities. 147 admits only this
 exact inactive signature; any changed/projection/USB/BT/active fact still fails closed.
 Added two JVM policy tests and a private ignored-count diagnostic.64 portable CarPlay
-tests/OEM regression lock/diffcheck pass. Full JVM/Release/signing on Mini pending.
+tests/OEM regression lock/diffcheck pass. FullJVM/Release/native/R8/lint/signing passed
+on Mini in5m19s. PublicAPK2001c6fe...,104353699bytes/release425649180 and anonymous
+whole download verified before preview74147 promotion/readback. Physical READY and
+CarPlay map/HUD test remain owner steps; no vehicle mutation in this phase.
 
 ## 2026-10-27 — corrected146 published and verified for manual installation
 

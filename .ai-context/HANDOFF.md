@@ -1,4 +1,4 @@
-## ACTIVE — 147 fixes false DCM device block; Mini release build pending
+## COMPLETE — 147 published; owner manual install/reboot/test next
 
 Owner installed corrected146 and reported persistent “Aguardando confirmação de
 desconexão pela central” with no device connected. Read-only current boot confirms
@@ -7,14 +7,17 @@ DCM_RECORD_NOT_RETAINED. The rejected row is exact type0/accepted1/state1/
 connection{3=3}/available4096/active0/no active states/no valid BT identity/no USB
 nodes. This is an internal DCM/Wi-Fi infrastructure row, not proof of a phone.
 
-Branch release/impulse-74147-dcm-residual now classifies only that exact signature
+Branch release/impulse-74147-dcm-residual classifies only that exact signature
 as inactive infrastructure. Real projections, active/nonzero capability, valid BT
 identity, USB nodes, changed state/shape and all unknowns still block. TX45 null,
 visual absence, firmware identity and temporal settling remain mandatory. Version
-defaults are74147/1.0.0.74.147-preview. Two JVM policy tests added;64 portable
-CarPlay tests/OEM regression lock/diffcheck pass. Next: immutable commit/audit,
-authorized Mini full JVM+Release/R8/lint/signing, verify/publish exact147 and promote
-preview last. No vehicle mutation requested; owner will manually install/restart/test.
+74147/1.0.0.74.147-preview. Source926b8ee01762cf6bc7ad691d71208426d5f18b66.
+64portable tests/OEM lock and fullJVM/Release/native/R8/lint/prodcert passed on Mini
+job haval-impulse-133-926b8ee01762cf6b-20261027T152925Z-12337 in5m19s. ExactAPK
+SHA2001c6fea9cffd09618af278c352068dfd9ff5ae74e44745116c269cbcc5fb99,
+104353699bytes, payload74147-b7ba15626e9c-a9b5e39900a1. Publicrelease425649180,
+tag/publicwholeAPK and preview asset682031213 readback verified. Stable untouched.
+No vehicle mutation requested or performed; owner manually installs/restarts/tests.
 
 ## COMPLETE — corrected146 published and verified; owner manual install/reboot/test next
 

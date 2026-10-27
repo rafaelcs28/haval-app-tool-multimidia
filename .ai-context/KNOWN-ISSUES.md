@@ -1,10 +1,10 @@
-## CURRENT 146 — false device wait identified; corrected by pending 147
+## CURRENT 147 — false device wait corrected; physical READY pending
 
 146 can block automatic preparation on the central's exact inactive DCM/Wi-Fi
 infrastructure row (type0, capability4096) even when TX45 and both visual probes
-show no projection. Current field evidence proves this branch.147 source narrows an
-exception to that exact signature; physical READY remains pending signed build and
-owner install/reboot. Do not generalize the exception to other DCM records.
+show no projection. Current field evidence proves this branch.147 narrows an
+exception to that exact signature and is publicly verified. Physical READY still
+requires owner install/reboot; do not generalize the exception to other DCM records.
 
 ## CURRENT corrected146 — build/publication verified; actual vehicle output pending
 
