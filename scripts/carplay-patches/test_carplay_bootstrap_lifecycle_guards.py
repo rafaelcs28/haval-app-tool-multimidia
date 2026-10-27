@@ -525,6 +525,93 @@ class LegacyBootstrapLifecycleGuardTest(unittest.TestCase):
                          "bridge-map-unknown")
 
 
+class ResidentChallengePublicationTest(unittest.TestCase):
+    """Replace a protected existing challenge using the source-extracted shell.
+
+    The OEM mv prompts on a mode400 destination unless -f is supplied. Model
+    that prompt as an unattended failure; the field additionally showed its
+    stdin read consuming the remainder of the root command's script.
+    """
+
+    def publication(self, directory, role, nonce, *, forced=True):
+        resident = function_source(BOOTSTRAP.read_text(), "residentSample")
+        selected = re.search(r'val responseText = root.run.*?script\("""(.*?)\s*cpb_round=0',
+                             resident, re.S)
+        self.assertIsNotNone(selected)
+        body = textwrap.dedent(selected.group(1)).replace("§", "$")
+        self.assertIn('mv -f ${q("$challengePath.next")} ${q(challengePath)} || exit 1', body)
+        self.assertIn('chown 1000:1000 ${q("$challengePath.next")}', body)
+        self.assertIn('chmod 400 ${q("$challengePath.next")}', body)
+        target = directory / (role + "-residency-challenge.json")
+        packet = json.dumps({"schema": 1, "instance": "fixture-instance", "nonce": nonce,
+                             "issuedElapsedMs": 1}, separators=(",", ":"))
+        for expression, value in {
+            '${q(packet)}': shlex.quote(packet),
+            '${q("$challengePath.next")}': shlex.quote(str(target) + ".next"),
+            '${q(challengePath)}': shlex.quote(str(target)),
+        }.items():
+            body = body.replace(expression, value)
+        self.assertNotIn("${q(", body)
+        if not forced:
+            body = body.replace("mv -f ", "mv ")
+        return subprocess.run(["sh", "-c", body], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=5,
+                              env={**os.environ, "PATH": str(directory) + ":" + os.environ["PATH"]})
+
+    def tools(self, directory):
+        # Stub only the ownership syscall so this fixture also runs without root.
+        # The source must still request its unchanged UID/GID and real mode400.
+        chown = directory / "chown"
+        chown.write_text('#!/bin/sh\n[ "$#" = 2 ] && [ "$1" = 1000:1000 ]\n')
+        chown.chmod(0o700)
+        mv = directory / "mv"
+        mv.write_text("#!" + sys.executable + "\n" + textwrap.dedent("""
+            import os, pathlib, stat, sys
+            args = sys.argv[1:]
+            forced = bool(args and args[0] == '-f')
+            if forced:
+                args.pop(0)
+            source, target = map(pathlib.Path, args)
+            if target.exists() and stat.S_IMODE(target.stat().st_mode) == 0o400 and not forced:
+                sys.stderr.write("mv: overwrite '%s' (Y/n):" % target)
+                sys.stderr.flush()
+                sys.stdin.readline()
+                sys.exit(73)
+            os.replace(source, target)
+        """))
+        mv.chmod(0o700)
+
+    def test_unforced_protected_challenge_reproduces_unattended_prompt_failure(self):
+        for role in ("native", "java"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                self.tools(directory)
+                target = directory / (role + "-residency-challenge.json")
+                target.write_text('{"nonce":"original"}\n')
+                target.chmod(0o400)
+                result = self.publication(directory, role, "must-not-publish", forced=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("mv: overwrite ", result.stderr)
+                self.assertEqual(json.loads(target.read_text())["nonce"], "original")
+                self.assertEqual(target.stat().st_mode & 0o777, 0o400)
+
+    def test_two_forced_challenge_replacements_update_nonce_and_preserve_mode(self):
+        for role in ("native", "java"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                self.tools(directory)
+                target = directory / (role + "-residency-challenge.json")
+                target.write_text('{"nonce":"original"}\n')
+                target.chmod(0o400)
+                for nonce in ("next-nonce-one", "next-nonce-two"):
+                    result = self.publication(directory, role, nonce)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual(json.loads(target.read_text())["nonce"], nonce)
+                    self.assertEqual(target.stat().st_mode & 0o777, 0o400)
+                    self.assertFalse(Path(str(target) + ".next").exists())
+
+
 class InjectorEnvironmentShellGuardTest(unittest.TestCase):
     """Run the exact read-only pre-exec shell with every kernel path redirected."""
 

@@ -1,3 +1,24 @@
+## CONFIRMED145 cause/fix — atomic challenge replacement; vehicle OFF; Mini next
+
+Sourceac7 private timeout captured EXACT prompt: mv: overwrite native-residency-
+challenge.json (Y/n):. Existing challenge is mode400; plain mv prompts/consumes
+remaining script stdin so no final frame. Same function for native+Java. Final
+functional fix is ONE LINE mv-f for challenge.next->challenge only; no permission,
+identity, nonce, deadline or immutable-receipt weakening. Source-extracted OEM shim
+regressions added by cp_141_deadline_review to lifecycle file (onlyagenteditpath),
+negative control and two native/Java replacements PASS; 38 tests PASS, sourceQAclear.
+Actualheadunit INERT fixture preexisting400 + two forced updates returnedend0 in
+0.88sec, never touched realprotocol. Root queue hardening/loaderfix retained.
+
+Currentinstalledsourceac7 NOTREADY; nativeexit0/ARMED, stableframework/policy.
+Auto prepFALSEverified, GWM OFF fresh00:20:31UTC27Oct. No fullreboot/public145.
+Evidence originalworkspace/test-artifacts/release-74145-reader-20261026/ includes
+raw timeout in after-enable-1.txt, probe-forced-twice-response.txt and receipts.
+Newop release-74145-atomic-challenge-20261026 prepared. Need commit/audit/Mini signed145,
+validateartifact, authorizedON/install/enable/currentbootREADY/reboot/newbootREADY/OFF,
+then publishexactAPK/previewlast. Userexplicitlyauthorized/openairconfirmed persists.
+OwnerwilltestiPhonelater; no needphoneinteractionnow. Do notclaimreadyfrom137history.
+
 ## Current 145 reader correction — source reviewed; vehicle OFF; Mini next
 
 Third private145 source0b108ff8 passed fullMini/JVM(6newtests), exact APK installed.

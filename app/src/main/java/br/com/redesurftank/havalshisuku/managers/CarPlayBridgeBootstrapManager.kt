@@ -985,7 +985,7 @@ object CarPlayBridgeBootstrapManager {
             deadline?.let { CarPlayResidentProof.deadlineGuard(it) }.orEmpty() + script("""
             printf '%s\n' ${q(packet)} > ${q("$challengePath.next")} || exit 1
             chown 1000:1000 ${q("$challengePath.next")} && chmod 400 ${q("$challengePath.next")} || exit 1
-            mv ${q("$challengePath.next")} ${q(challengePath)} || exit 1
+            mv -f ${q("$challengePath.next")} ${q(challengePath)} || exit 1
             cpb_round=0
             cpb_response=
             while [ "§cpb_round" -lt 24 ]; do

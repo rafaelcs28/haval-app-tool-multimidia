@@ -135,3 +135,25 @@ also carries a bounded private raw tail, written only to the app's private
 filesDir/carplay-root-last-timeout.txt. Shared failure messages retain counts and
 frame flags only. This evidence is never a release asset. Full physical READY
 and automatic preparation after reboot remain required before promotion.
+
+## Confirmed cause of the residency response timeout
+
+Candidate `ac7ee9ac` preserved the raw timeout output privately. It shows the OEM
+command asking `mv: overwrite .../native-residency-challenge.json (Y/n):` before the
+expected end frame. The previous challenge is intentionally mode 400; a later
+plain mv enters an interactive protected-target prompt, consumes the remaining
+script stdin and prevents normal completion. This directly identifies the cause.
+Earlier inert fixtures created a first challenge and therefore missed replacement.
+The queue-read hardening remains valid but did not remove this separate prompt.
+
+Only repeated challenge publication now uses `mv -f next current`. This preserves
+same-directory atomic replacement, mode 400, UID/GID, identity/nonce checks and all
+deadlines. The shared path covers native and Java. Immutable first-write receipts
+and other no-overwrite rules remain unchanged. On the actual head unit, an inert
+fixture with an existing mode-400 destination completed two forced replacements
+and returned end=0 in 0.88 seconds, without touching the production protocol.
+Portable source-extracted tests reproduce the OEM prompt policy, reject the old
+no-force publication and confirm two successive native/Java nonce updates while
+retaining mode 400. The full lifecycle suite passes 38 cases. Production auto
+preparation was paused and GWM OFF confirmed at 00:20:31 UTC. Signed build and
+full preparation/new-boot READY are still required before public promotion.

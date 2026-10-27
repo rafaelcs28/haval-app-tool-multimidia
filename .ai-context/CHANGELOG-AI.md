@@ -1,3 +1,12 @@
+## 2026-10-26 — confirmed protected-file prompt breaks repeated residency proof
+
+Captured OEM mv overwrite prompt from the app's private timeout trace. Repeated
+mode400 challenge publication blocked on interactive confirmation. Added mv-f only
+for this atomic replacement, preserving all guards/mode/deadlines. Source-extracted
+regressions test old failure and two forced replacements for both roles; 38PASS.
+Actualheadunit inert fixture returnedend0 for two updates in0.88sec. Fullproduction
+READY/reboot pending signedMini. Prep paused, GWM OFF confirmed00:20:31UTC.
+
 ## 2026-10-26 — bounded Telnet background queue reads, field validation pending
 
 Third candidate again failed response timeout despite native exit0/ARMED and stable
