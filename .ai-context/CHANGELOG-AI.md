@@ -1,3 +1,10 @@
+## 2026-10-27 — prepare146 from validated v9 sync
+
+Owner requested remote wake/install/reboot/OFF. Bumped only default version fields
+to74146/1.0.0.74.146-preview over validated9981c5c0/ffaf05cb. SignedMini validation,
+freshopenairconfirmation, exactinstall/newbootREADY and OFFverification pending.
+No new CarPlay controller change or physical phone/route test.
+
 ## 2026-10-27 — latest v9 HUD map/opacity integration validated
 
 Merged Netseek83a63219 over145 (source9981c5c0): roundabout exits/ring progress,

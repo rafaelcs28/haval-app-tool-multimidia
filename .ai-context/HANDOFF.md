@@ -1,3 +1,22 @@
+## 2026-10-27 — 146 release requested; build before GWM/install/reboot/OFF
+
+Owner explicitly requests wake, install latest, full central reboot, then vehicleOFF.
+Preparing146 (74146 /1.0.0.74.146-preview) over validated v9 sync9981c5c0/ffaf05cb.
+Only functional delta since validated Debug is the two default version fields;
+latest v9 is83a63219, CarPlay preparation/controller remains145 behaviour.
+SignedRelease/fullJVM/R8/lint must pass on audited immutable source via authorized
+Mini only; production signing remains host-only. No coordinator Android build.
+New private operation: originalworkspace/test-artifacts/release-74146-v9-20261027/.
+
+Fresh open-air/parked confirmation requested and pending; do not GWM ON until it
+arrives. No vehicle actions yet. After validated exactAPK, require freshP/0 telemetry
+before installation/fullreboot; verify installedhash/version and actualnewbootREADY
+matching146revision/liveOEMidentity. Do not reset uncertain preflight/ownership.
+Always verify freshGWM OFF after anyON, including failed or partial installation.
+Owner phone/route/HUD five-minute test remains later; do not claim it completed.
+Publish146/preview only after exactartifact/readiness validation, publicAPKdownload
+hash verification, publictagbase048749ae (neverprivatehistory), previewmanifestLAST.
+
 ## 2026-10-27 — latest Netseek v9 integrated and validated; installed/public145 preserved
 
 Owner reported a new v9 commit. Merged exactly83a6321966786a561d3dddaa51cf9295dce18946

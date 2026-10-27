@@ -1,3 +1,11 @@
+## 2026-10-27 — finish signed146, authorized installation/reboot/OFF
+
+Owner requested GWM ON/install/reboot/OFF after v9 sync. Finish immutable audited
+MiniRelease146 first, prepare exacttransport while awaiting fresh open-air parked
+confirmation, then install, validate automaticnewbootREADY and GWM OFFfresh. Publish
+verified146 with previewmanifestLAST; owner phone/route test later. CurrentHANDOFF
+contains pendingconfirmation and strict ownership/preflight constraints.
+
 ## 2026-10-27 — latest v9 source sync complete; owner CarPlay test remains next
 
 Netseek83a63219 integrated on private integration/netseek-v9-20261027-83a63219,
