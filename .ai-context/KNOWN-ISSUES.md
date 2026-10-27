@@ -1,3 +1,17 @@
+## 2026-10-27 — 145 owner CarPlay test received guidance but no cluster map/HUD text
+
+Real owner Apple Maps session completed300035ms/265callbacks/zero errors or drops;
+244state1 payloads eligible for HUD text. Newboot145READY genuinely verified with
+9nativehooks/Javaarmed/bothCLIexit0/currentidentity; preparation is not the failure.
+Cluster endpoint accepted then POLICY_DENIED/consumer=none before Surface. Exact
+denial condition unrecorded. HUDwindow4096/layoutAR/navtrue; owner saw no text, but
+policy publication/frame not observed. Possible source path: never-bound Autolink
+and no AApositive evidence yields no fresh explicit AAinactive observation, leaving
+CPsuppressed. Not proven as actual field cause. Confirmed separate renderer gap:
+text-only HERO/FAR draws distance but omits street.146v9 fixes neither. LaterAA LIVE
+occurred08:17, afterCPended08:12; do not use it as evidenceAAactive duringCPtest.
+No vehicle mutations; owner still driving and will confirmP/disconnected later.
+
 ## 2026-10-27 — new v9 map behaviour still requires physical validation
 
 Source sync83a63219 changes HUD route selection and per-part opacity only. The

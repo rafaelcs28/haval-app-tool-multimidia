@@ -1,5 +1,27 @@
 # Experimental CarPlay text on the native HUD
 
+## Current field result — 145, 2026-10-27
+
+The owner saw no native-HUD text during the five-minute Apple Maps test. Capture
+completed with 265 callbacks, no errors/drops and 244 text-eligible state-1 payloads.
+The native window existed on display4096, layoutAR and navigation enabled. This
+proves reception and window creation, not an active policy publication or frame.
+
+Source review identifies a possible suppression path: when the Autolink command
+Binder has never been bound and no positive AA evidence exists, the passive poll
+may return null continuously. The HUD requires a fresh explicit AA-inactive
+observation, so valid CarPlay text remains suppressed in that case. The actual
+policy fields were not recorded during this test; do not claim that path as the
+established field cause. AA subsequently became active after the CarPlay test,
+so the later Binder/stream snapshot cannot establish its state during the test.
+
+There is also a confirmed rendering gap: CarPlay text-only bypasses AR geometry
+and uses HERO/FAR, whose renderers draw distance but do not draw the street name.
+That gap alone does not explain a completely absent distance. No guard was bypassed
+and 146's v9 synchronization does not change either path. A later correction needs
+bounded private policy/publication diagnostics and tests preserving AA priority,
+data freshness, source generation and absence of inferred arrows.
+
 ## Scope
 
 Preparation on private 74126, retaining 74125 HEV/readability fixes and all AA JSON,

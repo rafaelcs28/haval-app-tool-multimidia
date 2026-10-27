@@ -1,3 +1,16 @@
+## CURRENT — wait for owner parked P/projection disconnected; then finish146 workflow
+
+Owner still driving and will advise.145five-minute Apple Maps test captured in full:
+265callbacks/0errors/0drops/244HUDeligible. Actual145READY passed, clusterhost denied
+beforeSurface; HUDpublication unobserved.146v9 does not fix those outputs. Independent
+read-only sourceQA identified possibleAAunknown gate and confirmedstreetrendergap;
+exact host/HUDfield causes require bounded decision evidence, no guardbypass.
+CurrentHANDOFF has session summary/privatefiles and precise pendinginstallation steps.
+NO GWM/install/reboot issued. Car manuallyON/inuse: do not shutdown duringjourney.
+Once parked/CP+AAphones disconnected, originalinstall146/reboot/validate/OFF remains
+authorized. Recreate removed HTTPS staging then install the existing signedartifact;
+no rebuild for documentation. Public146/OTA remains pendingfieldvalidation.
+
 ## 2026-10-27 — 146 signed and ready; remote steps await current location confirmation
 
 Full JVM / Release / R8 / lint / signature and APK payload validation PASS on Mini

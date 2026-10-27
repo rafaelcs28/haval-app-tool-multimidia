@@ -1,3 +1,71 @@
+## CURRENT — 145 owner test captured; 146 not installed; owner still driving
+
+Owner confirmed parked/open-air, then manually powered on and started a five-minute
+Apple Maps test on installed145 before remote installation. Latest reply: still on
+the journey and will advise when parked. NO remote GWM command, file/process action,
+APK install, restart, enable/reset or injection was issued. Car is being used by
+owner; DO NOT turn it off or install/reboot while this state persists. Original
+146/install/reboot/OFF authorization remains for the later parked window; do not
+request authorization again. Await promised P + projection phones disconnected.
+AA became live after the CP test; ensure BOTH CP and AA are disconnected for boot
+preparation validation, not just the iPhone. Read-only queries are authorized.
+
+Actual fresh145 boot174fdbf8-e3e0-4c38-be0d-cd5c1aeb3690/OEM7689 start3344/app3291:
+canonicalREADY verified against exact145 APK manifest,9pinnednativehooks/Javaarmed,
+bothCLIexit0/noncepairs/currentOEMmapping, proof ages16/15s within manager30s refresh.
+AutomaticenabledTRUE. system_server1921/policy58d3... stable. No manualprep reset.
+Proof receipt: owner-test-end-preparation-readiness.json in current146 operation.
+
+Owner session a8e8e8f6-c9bb-4558-84f0-752aa69b0d8f ran08:07:22–08:12:22 local,
+automaticstop300035ms,265callbacks/0errors/0dropped,244state1 texteligible payloads.
+Owner confirmed Apple Maps and reported no cluster map or native-HUD text. Full
+session reconstructed losslessly from raw JSONL lines of two ordered snapshots
+with235exactcontiguousoverlaprows, matched start/stop/callback counts;302records,
+165947bytes/SHA256cc08285ebbff04202662fb8c3864b36e87ca19fde1aed496adeddcba19b24b0a.
+Do not claim a verified copy/hash of the entire988456byte historical capturefile:
+that attempted full-prefix transfer timed out35s. The complete CURRENT session
+is retained privately in owner-session-145-applemaps-complete.jsonl with summary.
+
+Cluster: endpointaccepted generation1, then POLICY_DENIED/consumer=none before
+Surface. Exact failing predicate unknown because guard aggregates slot state,
+AA demand/session/surface, CP D0 state and warning/panel/competing-app snapshots.
+Earlier commentary based on old129 docs incorrectly implied no map attempt;
+corrected to owner when current source/log proved attempt. Architecture docs fixed.
+HUD: layoutAR/navtrue/showTurnFrom0, overlaylaunch+window4096OK.244payloads are valid
+text inputs, but policypublication/frame not recorded. Read-only QA found a possible
+AAunknown starvation path: no bound Autolink + no AApositive evidence -> pollnull,
+no fresh explicit AAinactive observation -> CP suppressed. Do NOT call this the
+proven field cause. Separate confirmed renderer gap: text-only HERO/FAR renders
+distance but never street (street is AR-only, which text-only intentionally avoids).
+146source does NOT fix these. Owner was told that explicitly. No speculative bypass.
+Later passive snapshot observed AAroute/CLUSTER_frame_rendered live08:17 after CP
+ended08:12; its servicebinds do not establish AA state during the earlier CP test.
+Need bounded private decision diagnostics (only booleans/ages/reasons) for exact
+hostdenial/HUDsource/publication before functional changes. No rawroads/GPS toGit.
+QA runtime_fix_qa complete/read-only/frozen. Existing146source stays immutable.
+
+146 signed APK/source/build/validation details remain below: source4cc520fd,
+SHA5fe6262e..., payload74146-19391fbb2963-8f807eaa3c7f; no new build required for docs.
+Publicpreview/release remains145. Staged146 is clearly DO_NOT_PUBLISH_YET; metadata
+now records failed145phone test as separate from its still-pending146fieldvalidation.
+Private currentoperation originalworkspace/test-artifacts/release-74146-v9-20261027/.
+Contains owner-session summary/privateJSONL, owner-capture-live/final, boundedAA/map
+snapshot, verification receipts and updatedfield-outcome.json. All private only.
+HTTPS4MB delta was prepared/verified but never sent to car, then own temporary
+haval-146-delta directory removed. Immutable APK/localdelta retained. transport-plan
+marks stagingRemoved; regenerate HTTPS URL with prepare_transport.py then rerun
+make_deploy_scripts.py before any later transfer. No car-side files changed.
+
+NEXT when owner confirms parked/disconnected: verify fresh P/0 + heartbeat + actual
+projection absence, collect baseline, prepare transport, install exact146 and verify
+hash/version. If already manually powered on, no unnecessary GWM ON. One guarded
+fullreboot bound to realcurrentboot/installedhash; validate actualNEWBOOT146READY,
+then freshparking and verified GWM OFF per originalinstruction. Do not claim146
+fixes currentCPmap/HUD defects; it is the v9 update retaining145prep. Publish only
+once exact146fieldchecks pass; verify entirepublicAPK then previewLAST. Preserve
+strictAApriority, originalsession, publishedowners/preflight markers. User will
+separately authorize/continue actual output correction; do not remove guards blindly.
+
 ## 2026-10-27 — signed 146 ready; awaiting current parked/open-air confirmation
 
 Owner requested GWM ON, installation, full central reboot, then GWM OFF. Prepared
@@ -32,10 +100,10 @@ validated delta, prepare_transport.py (reuses checked delta), make_deploy_script
 validate_146.py, collect_state.py/field-read.sh/check_readiness.py, parking_snapshot.py,
 and approved existing GWM power helper. All helper syntax checked; none contacted car.
 
-CURRENT BLOCKER: fresh confirmation of parked car in open air is pending in async
-question. Prior open-air confirmation and verified GWM OFF were about nine hours
-before this new request. Do not infer current location from that old confirmation.
-NO GWM command, car connection, installation, restart or field test in this turn.
+Historical artifact-only phase: parked/open-air confirmation was pending then.
+It has now arrived, followed by the owner manually powering on and conducting a
+145 test while travelling. Current status is the field-test section above.
+No remote GWM/install/reboot command has been issued; read-only collection occurred.
 Do not claim 146 installed/boot-validated or vehicle currently OFF from old telemetry.
 Automatic CarPlay preparation on 145 was previously verified; 146 still needs its
 own actual new-boot proof. Owner's five-minute iPhone route/HUD test remains later.

@@ -1,3 +1,16 @@
+## 2026-10-27 — first owner145 Apple Maps field test captured, output failure isolated
+
+Confirmed realnewboot145READY9nativehooks/Javaarmed. Owner five-minute test produced
+265callbacks/0errors/0drops;244HUDeligible. Savedcomplete302record session by exact
+235line overlap of two snapshots; wholehistoricalfile hash unavailable (35s timeout).
+Cluster endpoint accepted then POLICY_DENIED beforeconsumer/Surface. HUDwindowAR/nav
+present but no owner-visible text; policypublication unknown. SourceQA found possible
+AAunknown starvation (unprovenfieldcause) and confirmedtext-onlystreetrendergap.
+Corrected outdated129combined-test docs: current test attempts secondaryvideo.
+146frozen/v9 update fixes neither; toldowner. No vehicle mutations/power commands.
+Owner remains driving/awaitP+disconnect. Own temporaryHTTPSdelta removed,localAPK/
+delta retained. Updatedprivatefieldreceipts/holdmetadata and handoff. NoAndroidbuild.
+
 ## 2026-10-27 — signed146 build and transport ready; remote installation pending
 
 Owner requested wake/install/reboot/OFF. Bumped only default version fields to74146

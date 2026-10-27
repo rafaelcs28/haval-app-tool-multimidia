@@ -28,10 +28,35 @@ os temas, a resolução, o handoff display 0/3 nem a Surface do Android Auto. En
 assinatura Binder da captura, retira a entrada CarPlay do HUD e cancela os temporizadores.
 Falha de escrita ou incompatibilidade de Parcel também passa pelo mesmo encerramento.
 
-O teste não inventa seta para códigos de manobra ainda desconhecidos. Também não simula mapa
-limpo no cluster: os logs correlacionados servem para provar o estado real da ponte e do
-cluster. O protótipo de vídeo secundário continua default-off e sem uma Surface de produção;
-portanto uma ausência de mapa deve ser registrada como indisponibilidade, nunca como sucesso.
+O teste não inventa seta para códigos de manobra ainda desconhecidos. Com a bridge preparada,
+o fluxo atual também habilita a tentativa experimental de vídeo secundário no cluster:
+solicita um endpoint e tenta criar uma Surface dedicada, preservando a sessão principal.
+A admissão exige CarPlay no D0, prioridade do Android Auto, disponibilidade do slot e ausência
+de UI de segurança ou app concorrente. O experimento fica desligado fora do teste.
+Bridge pronta, endpoint aceito e dados de rota recebidos não comprovam mapa renderizado;
+uma ausência de mapa deve ser registrada como indisponibilidade, nunca como sucesso.
+
+## Teste real da 145 em 27/10/2026
+
+O proprietário confirmou Apple Maps. A sessão terminou automaticamente em 300035 ms,
+com 265 callbacks, zero erros e zero perdas. Desses, 244 continham estado 1, rua,
+distância e unidade m/km elegíveis para o texto experimental. O preparo automático
+estava realmente READY no novo boot: nove hooks nativos pinned, Java armado, dois
+loaders com exit 0 e provas de residência correspondentes à identidade OEM atual.
+
+O endpoint foi aceito, mas o host registrou `POLICY_DENIED`, `consumer=none` antes
+de criar a saída de vídeo. O registro agrega vários critérios; não identifica qual
+falhou. O proprietário também informou ausência de texto no HUD, apesar de layout
+AR, navegação habilitada e janela 4096 criada. A captura não registra a decisão do
+árbitro HUD; recebimento de payload elegível não comprova publicação/renderização.
+
+A sincronização v9 da 146 não altera esses caminhos e não corrige esse resultado.
+São necessários motivos discriminados da admissão e da seleção HUD, preservando os
+critérios existentes, sem ruas, GPS ou bypass de prioridade. Evidências privadas em
+`test-artifacts/release-74146-v9-20261027/` no workspace original. A sessão completa
+foi reconstruída de dois snapshots com 235 linhas de sobreposição exata e contagens
+start/stop consistentes; a tentativa de obter o hash do arquivo histórico inteiro
+expirou e não constitui uma cópia verificada desse arquivo completo.
 
 ## Procedimento de campo
 
