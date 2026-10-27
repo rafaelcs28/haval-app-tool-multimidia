@@ -1,3 +1,71 @@
+## COMPLETE — corrected146 published and verified; owner manual install/reboot/test next
+
+Latest owner request: parked car has no internet; generate corrected146, owner will
+install/restart/test later. Completed that request. NO vehicle connection, GWM power,
+remote APK install, head unit restart, injection or other vehicle mutation in this
+phase. Earlier remote-workflow/drive/parked prompts below are historical/superseded.
+No wake/reboot schedule exists; do not resume old remote actions automatically.
+
+Corrected application source d2e420133d6ce7098e241663dbbe750ce9080c27 on private
+release/impulse-74146-v9-map-opacity. Includes Netseekv9 through83a63219. Version
+74146 /1.0.0.74.146-preview. Separate older146/source4cc520fd/SHA5fe6262e is only a
+superseded preliminary artifact; never distribute it. Corrected146 public artifact:
+104353699bytes, SHA25631b52b0263a58100d63f0559e1e9ee33afb03a11b06ce5dcdf390dc10191ab74.
+Production certificate5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0.
+Payload74146-257a395751b7-8f807eaa3c7f. Bootstrap/native agent/OEM CP+AA assets unchanged.
+
+Mini job haval-impulse-133-d2e420133d6ce709-20261027T121606Z-24770 PASSED full JVM,
+Release/R8/lint/production signing in5m51s, finished12:22:13UTC27Oct. All new JVM
+map/HUD/observer cases executed in the full suite;41Pythonbootstrap/12Nodeendpoint/
+3Pythonobserverfixtures, OEMregressionlock/diffcheck and independent sourceQA passed.
+No coordinator Android/Kotlin build.1269tracked/1165content files audited;8build
+controls unchanged, allowlistedf54a8a9c81f899a523e79591e30586dde4a350a69f96334c65a5e8da856d7a7c.
+Archive17dc48dec1fddc32f5224a346eff7c1046596242057f70c44e03d26698fcdf0d. Signing stayed
+onMini. ActualsignedAPKversion/cert/controllerdigest/payload/frida profile/Default/
+bridge/OEMhashes/new HUDdecision/frame/mapdiagnostic markers verified after fetch.
+
+Corrections: actualfreshD0/D3 stack sample instead of staleorchestrator enum; WAIT
+before requesting endpoint, originaloffer5s preserved, max3requests/backoff1s only
+before anyconsumer, overall300s and confirmedretirement remain. ThemeAArequested
+alone cannot block when fresh explicitAAinactive is proven; realAA/session/surface
+and safety/slot/concurrency/unknown guards remain. Sourceobserver bindflags0 only
+on exactverifiedpatchedAAAPK, passiveTX21, no recovery/connect/activation commands;
+settlednegatives require1s/twosamples500ms, TTL5s, unknown/transitionsfailclosed.
+Legacyfalsecannotbypass it. TEXTstyle draws road+distance in existingfreeHUDbox,
+no inferredarrow; native4096 frame/privatepolicy/admission reasons recorded without
+new route/device/GPS text. UIinstructsreturnCarPlayD0 and explains waits. Captured
+lease starts before map enable. AAJSON/controller/themecontract/layout unchanged.
+Canonical architecture: docs/architecture/carplay-146-output-readiness.md.
+
+Public release425424712, fourassets APK/SHA256SUMS/build-info/componentreproduction:
+https://github.com/rafaelcs28/haval-app-tool-multimidia/releases/tag/1.0.0.74.146-preview
+Publictag verifiedpointing to PUBLIC048749aebcb792ec163c3f7c601b574d75f0e9ba; no
+privatehistory published. Downloaded ENTIREpublicAPK and verified exactsize/hash
+before previewpromotion. app-latest/app-preview.json now74146, asset681531243,
+anonymouspublicHTTPreadback matches.145precondition checked before promotion;
+stablechannel untouched. Sourcecode/privateevidence never uploaded as release assets.
+
+Final artifacts: originalworkspace/artifacts/impulse-74146-carplay-fix-release-mini/.
+Operation/validation/REA/QA receipts: originalworkspace/test-artifacts/
+release-74146-carplay-fix-20261027/. field-outcome.json is final phase receipt.
+Final publication/downloadproof: originalworkspace/test-artifacts/
+publish-74146-carplay-fixed-20261027/. Oldpublish-74146-20261027 remains explicitly
+superseded/DO_NOT_PUBLISH_YET. All agents frozen, no appsource edits pending.
+
+PHYSICAL LIMIT: original145test proved readiness+265callbacks/244HUDeligible but
+not output. Its exact aggregatehostdenial/HUDpublication cause is not uniquely
+proven. New146 fixes reproducedsourcegaps and adds discriminatingevidence; NO146
+installation, actualnewbootREADY, firsttype111frame or physicalHUDtext verified
+in thisofflinephase. Do not claim mapworking/vehicleinstalled/vehicleOFF.
+
+Owner next: installcorrected146, fullcentralrestartWITHOUTphones, wait Bridge
+preparada para esta sessão; connectiPhone/startAppleMapsroute; StarttestinImpulse
+then RETURNtoCarPlayonD0. Checkstreet/distanceHUD(noarrow) andexperimentalclustermap.
+Logs are local and persist withoutcentralinternet. Retrieve later whenowneronline;
+ifwaiting/failing, use explicitreason/policy/frameprovenance ratherthanrepeating
+preparation or relaxingAA/safety/retirement guards. No extra action required before
+owner's manualtest. Do not rebuild just because later commits update docs only.
+
 ## CURRENT — corrected146 for manual installation; vehicle offline, no remote actions
 
 Owner reports parked car without internet and explicitly requests146WITHcorrection,

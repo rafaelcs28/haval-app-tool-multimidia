@@ -1,3 +1,14 @@
+## 2026-10-27 — corrected146 published and verified for manual installation
+
+Source d2e42013 fixes actualD0/D3 admission/boundedofferwaiting, freshpinnedpassiveAA
+absenceproof, nativeHUDstreet+distanceTEXTstyle andprivatepolicy/frame diagnostics.
+IndependentQA+41Python/12Node/3observerfixtures/OEMlock PASS. FullJVM/Release/R8/lint/
+prodcert PASS onMini5m51s. ExactAPK31b52b02...,104353699bytes, payload74146-257a395751b7-8f807eaa3c7f.
+Fourpublicassets/release425424712/tagPUBLIC048749ae verified; wholepublicdownload
+matches BEFORE preview146promotion/publicmanifestreadback. Stable untouched/private
+history notpublished. Ownermanualinstall/reboot/AppleMapstest remainsphysicalnextstep.
+No carconnection/power/install/reboot/injection thisofflinephase. FinalHANDOFF complete.
+
 ## 2026-10-27 — owner requests corrected146 for offline/manual vehicle test
 
 Supersedes remoteinstallationphase. Implementing realD0/D3 admission/fixedleasebounded

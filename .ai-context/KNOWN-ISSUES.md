@@ -1,3 +1,13 @@
+## CURRENT corrected146 — build/publication verified; actual vehicle output pending
+
+Corrected146 source d2e42013 /APK31b52b02... is public and preview74146 verified.
+FullMiniJVM/Release/signature passed; source/lifecycle fixes and discriminating
+privateadmission/publication/nativeframe evidence included. Owner manualinstall/
+restart/AppleMapstest remainsneeded for actual146newbootREADY/type111frames/HUDtext.
+Original145fieldcause notuniquelyproven; do not equate unitPASS with maprendered.
+Oldpreliminary146/source4cc520fd/SHA5fe6262e is superseded and neverpublished.
+Unknown/incompatibleAAfirmware or realAA/safety/slot conflicts intentionally block.
+
 ## CURRENT corrected146 — source gaps fixed; manual physical validation pending
 
 The unpublished v9-only146(source4cc520fd/SHA5fe6262e) is superseded and MUSTNOTpublish.

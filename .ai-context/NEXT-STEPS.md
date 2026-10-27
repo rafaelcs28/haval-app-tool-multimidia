@@ -1,3 +1,13 @@
+## CURRENT — corrected146 published; owner manual test next
+
+Requested build/publication completed. Exactsigned146/source d2e42013 verified on
+Mini and via wholepublicAPK+previewmanifestreadback. Newmapadmission/HUDobserver/
+TEXTfixes included. NOvehicleconnection/mutation; owner parked/offline will install,
+restartwithoutphones, waitREADY, connectiPhone/AppleMaps, Starttest, returnCarPlayD0.
+Physical146map/HUD/newbootverification remainspending; collectnewlocalreason/frame
+logs later. No further build/wake/install/reboot or approval step is pending here.
+FinalHANDOFF records exactAPK SHA31b52b02..., paths, release425424712, preview146.
+
 ## CURRENT — finish corrected146 and publish for manual installation
 
 Owner parked/offline and requests146WITHcorrection; no remotevehicleoperations.
