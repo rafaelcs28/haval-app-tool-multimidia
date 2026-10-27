@@ -1,3 +1,22 @@
+## Current 145 reader correction — source reviewed; vehicle OFF; Mini next
+
+Third private145 source0b108ff8 passed fullMini/JVM(6newtests), exact APK installed.
+Again failed Manager978 response: wire1728,received11647,beginSeen true. Nativeexit0/
+ARMED, policy/system_server1872 stable. Inert exact source fixture oncar ended0 in
+0.726s; extra8kchars are mkshredraw. Echo-off fixture did not help, do NOT ship echo
+changes. Auto prepFALSE verified and GWM OFF fresh confirmed00:05:43UTC27Oct. No
+full reboot/public145. Evidence originalworkspace/test-artifacts/release-74145-console-20261026/.
+
+Narrow reader fix now reviewed/frozen: Commons background soTimeout0; single
+consumer polls available and reads only already-present bytes; same outer deadline,
+no retry. Eliminates source-established partial-buffer-loss hazard from background
+SocketTimeoutException, not yet proven historical cause. Two new JVM cases (8total)
+await Mini. Typed timeout stores bounded raw tail ONLY private filesDir, no raw in
+shared failure/publicevents. New operation release-74145-reader-20261026 prepared.
+Need immutable audit/signedMini, validateAPK, ON/install/enable, actual currentboot
+READY then full reboot/newboot READY then OFF. User authorizes this/openair confirmed.
+No iPhone interaction now; owner tests later. Never claim ready from historical137.
+
 ## Current 145 transport correction — pending review/Mini, vehicle OFF
 
 Root transport now uses CRC-checked gzip/hex packets with same-session append ACKs

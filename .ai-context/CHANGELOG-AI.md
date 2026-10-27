@@ -1,3 +1,13 @@
+## 2026-10-26 — bounded Telnet background queue reads, field validation pending
+
+Third candidate again failed response timeout despite native exit0/ARMED and stable
+framework/policy. Inert on-device replay completed; extra bytes were shell redraw.
+Echo-mode change discarded after controlled comparison. Auto prep paused; GWM OFF
+confirmed00:05:43UTC. Changed to socket timeout0 plus available-bounded polling under
+the same outer deadline, preserving no replay. Added two JVM cases and bounded
+private raw evidence on timeout. Source hazard established, historical cause not
+proven. Signed Mini build and physical READY/reboot remain pending.
+
 ## 2026-10-26 — 145 native initialization passed; confirmation transport correction
 
 Second private145 passed signed Mini/JVM build and exact installed APK verification.

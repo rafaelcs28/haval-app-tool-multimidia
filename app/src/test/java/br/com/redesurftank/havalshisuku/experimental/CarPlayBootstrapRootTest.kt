@@ -2,9 +2,14 @@ package br.com.redesurftank.havalshisuku.experimental
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.apache.commons.net.telnet.TelnetClient
+import java.io.InputStream
+import java.net.ServerSocket
+import java.net.InetAddress
 import java.nio.file.Files
 import java.util.Random
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class CarPlayBootstrapRootTest {
     private val tag = "cpb_0123456789abcdef0123456789abcdef"
@@ -24,6 +29,60 @@ class CarPlayBootstrapRootTest {
             assertTrue("Shell transport did not finish", process.waitFor(5, TimeUnit.SECONDS))
             return process.inputStream.bufferedReader().readText()
         } finally { process.destroyForcibly() }
+    }
+
+    @Test fun `poll never requests absent bytes or a future portion of a bulk read`() {
+        var ready = false
+        val input = object : InputStream() {
+            override fun available() = if (ready) 3 else 0
+            override fun read(): Int = throw AssertionError("Unbounded single-byte read")
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                assertTrue(ready)
+                assertEquals(3, length)
+                "end".toByteArray().copyInto(buffer, offset)
+                ready = false
+                return 3
+            }
+        }
+        val buffer = ByteArray(8192)
+        assertEquals(0, CarPlayBootstrapRoot.readAvailable(input, buffer))
+        ready = true
+        assertEquals(3, CarPlayBootstrapRoot.readAvailable(input, buffer))
+        assertEquals("end", String(buffer, 0, 3))
+        assertEquals(0, CarPlayBootstrapRoot.readAvailable(input, buffer))
+    }
+
+    @Test fun `Commons background reader preserves fragmented frames without socket timeouts`() {
+        val expected = "console echo\r\n${tag}_begin\r\n" + "response".repeat(200) + "\r\n${tag}_end=0\r\n"
+        val writerFailure = AtomicReference<Throwable?>()
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+            val writer = Thread {
+                try {
+                    server.accept().use { peer ->
+                        for (chunk in expected.chunked(17)) {
+                            peer.getOutputStream().write(chunk.toByteArray())
+                            peer.getOutputStream().flush()
+                            Thread.sleep(3)
+                        }
+                    }
+                } catch (error: Throwable) { writerFailure.set(error) }
+            }.apply { isDaemon = true; start() }
+            val client = TelnetClient()
+            try {
+                client.connect("127.0.0.1", server.localPort)
+                client.soTimeout = 0
+                val received = StringBuilder()
+                val buffer = ByteArray(8192)
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (received.length < expected.length && System.nanoTime() < deadline) {
+                    val count = CarPlayBootstrapRoot.readAvailable(client.inputStream, buffer)
+                    if (count > 0) received.append(String(buffer, 0, count)) else Thread.sleep(1)
+                }
+                assertEquals(expected, received.toString())
+                writer.join(1000)
+                assertNull(writerFailure.get())
+            } finally { client.disconnect() }
+        }
     }
 
     @Test fun `compact packet preserves uppercase quotes and literal shell syntax`() {

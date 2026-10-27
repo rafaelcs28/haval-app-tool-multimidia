@@ -7,7 +7,7 @@ import moe.shizuku.server.IShizukuService
 import org.apache.commons.net.telnet.TelnetClient
 import rikka.shizuku.Shizuku
 import java.io.ByteArrayOutputStream
-import java.net.SocketTimeoutException
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
@@ -15,6 +15,8 @@ import java.util.zip.GZIPOutputStream
 
 /** Local transports only. No remote host, credentials, downloads or vehicle commands. */
 internal class CarPlayBootstrapRoot {
+    class CommandTimeout(message: String, val rawTail: String) : IllegalStateException(message)
+
     fun run(command: String, timeoutMs: Long = 5_000): String {
         require(command.all { it.code < 128 }) { "Non-ASCII root command" }
         val tag = "cpb_" + UUID.randomUUID().toString().replace("-", "")
@@ -35,7 +37,10 @@ internal class CarPlayBootstrapRoot {
             client.connectTimeout = 600
             client.connect("127.0.0.1", 23)
             executionStarted = true
-            client.soTimeout = 200
+            // Commons Net's background reader must not inject timeout exceptions
+            // into a bulk read after it has already copied some response bytes.
+            // The caller polls only bytes already available under its own deadline.
+            client.soTimeout = 0
             val buffer = ByteArray(8192)
             val result = StringBuilder()
             val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -46,26 +51,24 @@ internal class CarPlayBootstrapRoot {
                 val expected = packet.acknowledgement?.let { Regex("(?m)^${Regex.escape(it)}\r?\n") } ?: completed
                 var acknowledged = false
                 while (SystemClock.elapsedRealtime() < deadline) {
-                    try {
-                        val count = client.inputStream.read(buffer)
-                        check(count >= 0) { "Local root console closed before its response" }
-                        val previousSize = result.length
-                        result.append(String(buffer, 0, count, StandardCharsets.UTF_8))
-                        if (result.length > 1_048_576) error("Root response too large")
-                        val scanStart = completionScanStart(previousSize, tag)
-                        if (expected.find(result, scanStart) != null) {
-                            acknowledged = true
-                            break
-                        }
-                        if (decodeFailed.find(result, scanStart) != null)
-                            error("Local root packet could not be decoded; command was not executed")
-                    } catch (_: SocketTimeoutException) { /* same bounded deadline */ }
+                    val count = readAvailable(client.inputStream, buffer)
+                    if (count == 0) { Thread.sleep(5); continue }
+                    check(count >= 0) { "Local root console closed before its response" }
+                    val previousSize = result.length
+                    result.append(String(buffer, 0, count, StandardCharsets.UTF_8))
+                    if (result.length > 1_048_576) error("Root response too large")
+                    val scanStart = completionScanStart(previousSize, tag)
+                    if (expected.find(result, scanStart) != null) {
+                        acknowledged = true
+                        break
+                    }
+                    if (decodeFailed.find(result, scanStart) != null)
+                        error("Local root packet could not be decoded; command was not executed")
                 }
-                check(acknowledged) {
+                if (!acknowledged) throw CommandTimeout(
                     "Local root command timed out (packet=${index + 1}/${packets.size}, " +
                         "wireBytes=${packet.wire.length}, receivedChars=${result.length}, " +
-                        "beginSeen=${result.indexOf("${tag}_begin") >= 0})"
-                }
+                        "beginSeen=${result.indexOf("${tag}_begin") >= 0})", result.toString().takeLast(16_384))
             }
             return parse(result.toString(), tag)
         } catch (error: Exception) {
@@ -120,6 +123,11 @@ internal class CarPlayBootstrapRoot {
     }
 
     companion object {
+        internal fun readAvailable(input: InputStream, buffer: ByteArray): Int {
+            val available = input.available()
+            return if (available > 0) input.read(buffer, 0, minOf(available, buffer.size)) else 0
+        }
+
         internal fun completionScanStart(previousSize: Int, tag: String): Int =
             maxOf(0, previousSize - tag.length - 32)
 

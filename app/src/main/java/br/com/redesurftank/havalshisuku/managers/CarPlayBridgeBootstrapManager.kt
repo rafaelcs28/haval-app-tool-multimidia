@@ -732,6 +732,12 @@ object CarPlayBridgeBootstrapManager {
 
     private fun failAttempt(bundle: Payload, error: Exception) {
         Log.e(TAG, "Automatic preparation stopped; published owners are preserved", error)
+        if (error is CarPlayBootstrapRoot.CommandTimeout) runCatching {
+            // Private, bounded evidence only. Raw console output never enters the
+            // shared safety packet, preferences, public events or user-facing text.
+            File(requireNotNull(context).filesDir, "carplay-root-last-timeout.txt")
+                .writeText(error.rawTail.takeLast(16_384))
+        }
         val trace = org.json.JSONArray()
         error.stackTrace.take(12).forEach { trace.put(it.toString()) }
         val failure = JSONObject().put("eligible", false)

@@ -106,3 +106,32 @@ the actual begin frame was seen. Six JVM tests exercise shell round trips,
 nonzero status, corrupt-packet nonexecution, multipart admission, input bounds and
 fragmented/echoed output; they execute only on the authorized Mini. Actual full
 preparation and preparation after a new boot still require field evidence.
+
+## Bounded reads of the background Telnet queue
+
+Candidate `0b108ff8` passed all six transport JVM cases and signed Release, but
+field preparation again timed out at the same response call: packet 1/1,
+1728 wire bytes, 11647 received characters and begin frame observed. Native
+CLI exit/ARMED proof and policy/framework remained healthy. An inert fixture
+reconstructed from the exact source completed on the head unit in 0.726 seconds
+with a valid end frame. Extra bytes were interactive shell redraw, not duplicate
+execution. A separate echo-off fixture did not remove the redraw, so no echo-mode
+change is shipped. Preparation was paused and GWM OFF confirmed at 00:05:43 UTC.
+
+Commons Net 3.12's threaded input can expose an InterruptedIOException from its
+socket reader during a bulk read, after bytes have already been copied. Catching
+that timeout and discarding the call's partial buffer can lose framing bytes.
+This is a source-established hazard, not a proven attribution of the saved field
+failure. The socket background reader now uses timeout zero. The single consumer
+polls available() and requests at most those already-buffered bytes, sleeping
+briefly under the unchanged outer deadline when none are available. No future
+bytes are needed to satisfy such a read. Real I/O failures remain terminal;
+empty-queue EOF may be reported at the outer deadline. Disconnect still closes
+the socket and its background reader. No replay is admitted after connection.
+
+Two additional JVM tests cover nonblocking read admission and fragmented frames
+through the actual Commons Net client on a loopback-only test socket. A timeout
+also carries a bounded private raw tail, written only to the app's private
+filesDir/carplay-root-last-timeout.txt. Shared failure messages retain counts and
+frame flags only. This evidence is never a release asset. Full physical READY
+and automatic preparation after reboot remain required before promotion.
