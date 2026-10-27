@@ -1,3 +1,11 @@
+## 2026-10-26 — current preparation READY; reboot preflight still incomplete
+
+Af43 real9-hook/JavaREADY passed, then fullreboot correctly rejected oldproof but
+leftunknownpreflight marker. No coldattemptnewboot. Added private durable probe
+outputs/exit/stage/firstfailure and isolated childstdin inRootcontrolframe; no
+one-shot/coldguard bypass.41portabletestsPASS,10JVMawaitMini. Auto prep paused;
+GWM OFFconfirmed00:41:49UTC. No145publicrelease/readinessclaimuntilnewbootpasses.
+
 ## 2026-10-26 — confirmed protected-file prompt breaks repeated residency proof
 
 Captured OEM mv overwrite prompt from the app's private timeout trace. Repeated

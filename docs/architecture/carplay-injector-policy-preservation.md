@@ -157,3 +157,34 @@ no-force publication and confirm two successive native/Java nonce updates while
 retaining mode 400. The full lifecycle suite passes 38 cases. Production auto
 preparation was paused and GWM OFF confirmed at 00:20:31 UTC. Signed build and
 full preparation/new-boot READY are still required before public promotion.
+
+## Full reboot validation and retained preflight evidence
+
+`af43c4b5` completed real preparation: nine pinned hooks, Java armed, both CLI exits
+zero and fresh matching post-exit nonce samples; policy/framework unchanged.
+After the authorized full reboot, the new boot created an empty preflight marker
+and did not admit a cold attempt. Historical READY was correctly rejected. Thread
+dumps showed scheduled workers idle, not deadlocked; kernel entropy initialized
+at 0.394 seconds, the immutable executable remained root500 and the framework/
+policy were stable. The stripped release logs and memory-only intermediate probe
+made the precise first failure unrecoverable. No repeated probe was authorized.
+Automatic preparation was paused; GWM OFF confirmed at 00:41:49 UTC.
+
+The revised preflight retains root-only start, stdout, stderr and numeric exit
+files. A child-only file-size limit bounds each output file to at most 16 KiB;
+stdout must additionally fit 512 bytes before parsing. The existing 15-second
+root read budget contains a 10-second probe timeout. Missing timeout is detected
+before admission/marker creation. Stderr warnings no longer contaminate the version
+string; exit zero, exact stdout version and unchanged complete environment still
+remain mandatory. Diagnostic files cannot substitute for canonical success.json.
+Private per-stage records include before/after environment and typed root errors;
+the first failure for a boot/revision survives later adoption checks.
+
+The root command compound now receives stdin from /dev/null, protecting its parent
+shell control stream from a child consuming it. Production and JVM cases use the
+same frame generator. A padded test demonstrates the old missing-end-frame behavior
+and validates isolation. This is protocol hardening, not a proven attribution of
+the Frida version probe failure; upstream --version returns before its Application
+stdin-reading path. No admission, callback ownership or cold deadline is bypassed.
+Portable lifecycle/probe fixtures pass 41 cases; full signed Mini/JVM and new-boot
+preparation are still pending.

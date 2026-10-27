@@ -16,16 +16,12 @@ import java.util.zip.GZIPOutputStream
 /** Local transports only. No remote host, credentials, downloads or vehicle commands. */
 internal class CarPlayBootstrapRoot {
     class CommandTimeout(message: String, val rawTail: String) : IllegalStateException(message)
+    class CommandFailure(message: String, val rawTail: String) : IllegalStateException(message)
 
     fun run(command: String, timeoutMs: Long = 5_000): String {
         require(command.all { it.code < 128 }) { "Non-ASCII root command" }
         val tag = "cpb_" + UUID.randomUUID().toString().replace("-", "")
-        val framed = """
-            printf '\n${tag}_begin\n'
-            ( $command )
-            cpb_rc=§?
-            printf '\n${tag}_end=%s\n' "§cpb_rc"
-        """.trimIndent().replace('§', '$')
+        val framed = frameCommand(command, tag)
         // Decode completely before executing, so a damaged packet cannot execute
         // a partially decoded command. Lowercase-safe input stays below TTY limits.
         val packets = wirePackets(framed, tag)
@@ -118,11 +114,25 @@ internal class CarPlayBootstrapRoot {
         val start = text.indexOf("\n${tag}_begin\n")
         val end = Regex("(?m)^${tag}_end=([0-9]+)$").find(text)
         check(start >= 0 && end != null && end.range.first > start) { "Root response framing missing" }
-        check(end.groupValues[1] == "0") { "Local root command failed" }
+        if (end.groupValues[1] != "0") throw CommandFailure(
+            "Local root command failed (exit=${end.groupValues[1]})", text.takeLast(16_384))
         return text.substring(start + tag.length + 8, end.range.first).trimEnd('\n')
     }
 
     companion object {
+        internal fun frameCommand(command: String, tag: String) = """
+            printf '\n${tag}_begin\n'
+            ( $command ) < /dev/null
+            cpb_rc=§?
+            printf '\n${tag}_end=%s\n' "§cpb_rc"
+        """.trimIndent().replace('§', '$')
+
+        internal fun rawFailure(error: Exception): String? = when (error) {
+            is CommandTimeout -> error.rawTail
+            is CommandFailure -> error.rawTail
+            else -> null
+        }
+
         internal fun readAvailable(input: InputStream, buffer: ByteArray): Int {
             val available = input.available()
             return if (available > 0) input.read(buffer, 0, minOf(available, buffer.size)) else 0

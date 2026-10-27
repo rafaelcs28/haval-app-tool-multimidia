@@ -1,3 +1,72 @@
+## Current145 preflight IO/evidence correction — VEHICLE OFF confirmed00:41:49UTC
+
+Sourceaf43 actualcurrentbootREADY PASS9hooks/Javaarmed/freshnonces. Authorizedfull
+rebootconfirmednewbootc02af8dc.., but startupcreatedEMPTYpreflightmarker and no cold
+attempt. Underlyingfirstexceptionlostbecauseallreleaselogsstripped. Bothscheduler
+threadsidle(notdeadlocked); kernelCRNGinit0.394s; CLIroot500stable/frameworkstable.
+DoNOTclaimautomaticbootREADYoradoptold0b5dREADY. No145publicrelease/previewupdate.
+Auto prepFALSEverified, GWM OFFfresh00:41:49UTC. OldLIVEONheadingsbelowSUPERSEDED.
+
+Newsourcewritten/reviewed: Rootcompoundstdin/devnull; typednonzeroRootrawprivate;
+preflightrootstart/stdout/stderr/exit receipts, childfilelimit<=16KiB +timeout10
+within15rootbudget; stdoutonlyexact17.5.2 +unchangedenv required. Missingtimeout
+checkedBEFOREmarker. Private firsterrorperboot/rev retained despite30s retries.
+No uncertainmarkerreset/reexecution. No claimstdincausedoldCLIproblem (upstream
+versionreturnsbeforeApplicationstdinreading). Production/JVMsameframehelperwith
+paddedchildstdinregression. 41portablelifecycle/probe testsPASS; 10JVMawaitMini.
+cp_141_deadline_review sourceQAclear and frozeonlytestpath. No otheragentwrites.
+
+Newop originalworkspace/test-artifacts/release-74145-preflight-20261026 prepared;
+needsimmutablecommit/audit/signedMini145, validateexactartifact and install, then
+actualcurrentREADY/fullreboot/newbootREADY/OFF. Captureprivatepreflightdiagnostics
+androotprobefiles ifstillblocked; no blindrepeat. Userauthorizesworkflow/openair
+alreadyconfirmed. OwneriPhonetestlater. Publictagbase048749ae, neverprivatehistory.
+Localpublish-74145 folder has oldaf43APK33f prelimONLY, no publicrelease; mustreplace
+withactualfinalverifiedartifactbeforepublish/publicdownloadverify/previewLAST.
+
+## LIVE145 — actual current-boot READY passed; full reboot requested; VEHICLE ON
+
+FINALsourceaf43c4b5 exactAPK33f03e922d19af69a74f9247ce328c47b02215f73d50e428572d381d87f2693d
+installedPMsuccess/actualhash. Payload74145-46a3b080567f-b06609794669. Auto prepTRUE.
+Actual READYverifiedboot0b5d2189-f7d0-4159-8113-3d8514b44896, OEM16670/start16296,
+9pinnednativehooks/Javaarmed, bothCLIexit0, matchingfreshpost-exitnonceproof2samples
+nativeages2520/2270ms andJava1360/1110ms. SamepolicySHA58d3ec6d.../system_server1906,
+noAndroidrestart. Checkreadiness receipt after-enable-1-readiness.json in opfolder.
+This is REAL successful prep, notfixtureorold137. Userphone teststilllater.
+
+One guardedfullcentralreboot requested with freshP/0. Do NOTrequestagainifTCPslow.
+Requestscript marker /data/local/tmp/impulse-74145-reviewed-33f03e922d19/reboot-once.
+Waitnewkernelboot, collectfield-read.sh, check_readiness.py, no manualenable/reset
+needed: bootreceiver must prepare automatically. CURRENT VEHICLE ON; ALWAYS GWMoff
+confirmedbeforeend. Latestop originalworkspace/test-artifacts/
+release-74145-atomic-challenge-20261026/. GWMtimerstarted00:28:03~15min, ampletime.
+Publicpreviewstill144/no145releaseyet. AfternewbootREADY, OFF thenpublish145 exactAPK,
+publicdownloadhashcheckandpreviewmanifestLAST. No privatehistorypublictag.
+
+## LIVE145 atomic challenge — VEHICLE ON, must GWM OFF before ending
+
+Latest sourceaf43c4b538116e98782fa1ade622e63421f36d3b signedMini success5m29s,
+jobhaval-impulse-133-af43c4b538116e98-20261027T002152Z-16060. FullJVM8transport PASS,
+38portable/OEMreglock PASS. APKvalidatedproductioncert/hash33f03e922d19af69a74f9247ce328c47b02215f73d50e428572d381d87f2693d,
+104320931bytes; originalworkspace/artifacts/impulse-74145-atomic-challenge-release-mini/.
+
+GWM ON accepted00:28:03Z, freshengine1confirmed00:28:49Z. CURRENT VEHICLE ON.
+Operation originalworkspace/test-artifacts/release-74145-atomic-challenge-20261026/
+has authorization/openair, power.jsonl/helper, exact4MBdelta plan and scripts.
+CarP/0freshbutlocalengineflaglagged and TCP23notyetup00:28:52; WAITstartup, no install
+yet. Oldinstalledac7 auto prepFALSE verifiedpreviouscycle. Newsource exactfix mv-f
+for repeated mode400 residency challenge replacesinteractiveOEMprompt. Inertfield
+2updatespass0.88s; mustactualcurrentbootREADY+reboot+newbootREADY thenGWMoffverified.
+
+Ready helper check_readiness.py checksnewartifactmeta/actualOEMPIDstart/currentboot,
+9nativehooks/Javaarmed/bothlaunch-exit/proofbindings; passivedatacanbe35sold due30s
+managerrefresh. Needfreshproofcapture ifneededusingnormal OWN config enabledtrue
+withoutretry (preservesliveowners), await~2s thenfieldread. No resetting failure
+circuit/injectionoverpublishedowners. FullrebootONLYaftercurrentREADY andfreshP/0.
+AlwaysGWMoffevenifprepfailed. No public145/OTA yet; preview144. Publishactualartifact
+onlyoncephysicalready; publictagtarget048749aebcb792ec163c3f7c601b574d75f0e9ba,
+NEVERprivatehistory. Ownerphone testlater, no needconnectiPhonenow.
+
 ## CONFIRMED145 cause/fix — atomic challenge replacement; vehicle OFF; Mini next
 
 Sourceac7 private timeout captured EXACT prompt: mv: overwrite native-residency-

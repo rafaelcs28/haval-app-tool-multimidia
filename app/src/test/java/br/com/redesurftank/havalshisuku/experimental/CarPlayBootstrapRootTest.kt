@@ -14,9 +14,7 @@ import java.util.concurrent.atomic.AtomicReference
 class CarPlayBootstrapRootTest {
     private val tag = "cpb_0123456789abcdef0123456789abcdef"
 
-    private fun frame(command: String) =
-        "printf '\\n${tag}_begin\\n'\n( $command )\ncpb_rc=\$?\n" +
-            "printf '\\n${tag}_end=%s\\n' \"\$cpb_rc\"\n"
+    private fun frame(command: String) = CarPlayBootstrapRoot.frameCommand(command, tag)
 
     private fun compactWire(framed: String, tag: String) =
         CarPlayBootstrapRoot.wirePackets(framed, tag).single().wire
@@ -101,6 +99,23 @@ class CarPlayBootstrapRootTest {
     @Test fun `command failure keeps its original status frame`() {
         val output = execute(compactWire(frame("exit 7"), tag))
         assertTrue(output.contains("\n${tag}_end=7\n"))
+    }
+
+    @Test fun `child stdin cannot consume the root shell control stream`() {
+        val padded = frame("cat; printf 'child-done\\n'")
+            .replace("\ncpb_rc=", "\n#" + "x".repeat(12_000) + "\ncpb_rc=")
+        val output = execute(compactWire(padded, tag))
+        assertTrue(output.contains("\nchild-done\n"))
+        assertTrue(output.contains("\n${tag}_end=0\n"))
+        assertFalse(output.contains("cpb_rc=\$?"))
+    }
+
+    @Test fun `unisolated stdin demonstrates loss of the final control frame`() {
+        val unisolated = frame("cat").replace(" < /dev/null", "")
+            .replace("\ncpb_rc=", "\n#" + "x".repeat(12_000) + "\ncpb_rc=")
+        val output = execute(compactWire(unisolated, tag))
+        assertTrue(output.contains("cpb_rc=\$?"))
+        assertFalse(output.contains("\n${tag}_end=0\n"))
     }
 
     @Test fun `damaged gzip never executes even a fully decompressed prefix`() {

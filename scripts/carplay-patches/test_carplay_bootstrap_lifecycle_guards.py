@@ -612,6 +612,86 @@ class ResidentChallengePublicationTest(unittest.TestCase):
                     self.assertFalse(Path(str(target) + ".next").exists())
 
 
+class PreflightProbeEvidenceTest(unittest.TestCase):
+    """Exercise the actual probe wrapper with an inert local CLI and bounded files."""
+
+    def probe(self, cli_body):
+        preflight = function_source(BOOTSTRAP.read_text(), "ensureInjectorPreflight")
+        selected = re.search(r'val version = root.run.*?script\("""(.*?)"""\), 15_000\)',
+                             preflight, re.S)
+        self.assertIsNotNone(selected)
+        body = textwrap.dedent(selected.group(1)).replace("§", "$")
+        self.assertIn("ulimit -f 16 || exit 125", body)
+        self.assertIn("exec timeout 10", body)
+        self.assertIn("--version < /dev/null", body)
+        with tempfile.TemporaryDirectory(prefix="impulse-preflight-probe-") as temporary:
+            directory = Path(temporary)
+            cli = directory / "synthetic-cli"
+            cli.write_text("#!" + sys.executable + "\n" + textwrap.dedent(cli_body))
+            cli.chmod(0o700)
+            # No waiting is needed for these immediate fixtures. Keep the real
+            # kernel file-size limit and exec the inert CLI with its actual argv.
+            timer = directory / "timeout"
+            timer.write_text('#!/bin/sh\n[ "$1" = 10 ] || exit 90\nshift\nexec "$@"\n')
+            timer.chmod(0o700)
+            start = json.dumps({"schema": 1, "state": "probe-started"}, separators=(",", ":"))
+            body = body.replace('${q(start)}', shlex.quote(start))
+            body = body.replace('${q(bundle.injector)}', shlex.quote(str(cli)))
+            leaves = ("probe-start.json", "probe.stdout", "probe.stderr", "probe.exit")
+            for leaf in leaves:
+                body = body.replace('${q("$directory/' + leaf + '")}',
+                                    shlex.quote(str(directory / leaf)))
+            self.assertNotIn("${q(", body)
+            result = subprocess.run(["sh", "-c", body], stdin=subprocess.DEVNULL,
+                                    capture_output=True, timeout=5,
+                                    env={**os.environ, "PATH": str(directory) + ":" + os.environ["PATH"]})
+            contents = {leaf: (directory / leaf).read_bytes() for leaf in leaves}
+            modes = {leaf: (directory / leaf).stat().st_mode & 0o777 for leaf in leaves}
+            self.assertEqual(set(modes.values()), {0o400})
+            self.assertEqual(json.loads(contents["probe-start.json"])["state"], "probe-started")
+            self.assertLessEqual(len(contents["probe.stdout"]), 16_384)
+            self.assertLessEqual(len(contents["probe.stderr"]), 16_384)
+            return result, contents
+
+    def test_valid_stdout_and_separate_stderr_warning_preserve_success_evidence(self):
+        result, files = self.probe("""
+            import sys
+            print('17.5.2')
+            print('fixture warning', file=sys.stderr)
+        """)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, b"17.5.2\n")
+        self.assertEqual(result.stderr, b"")
+        self.assertEqual(files["probe.stdout"], b"17.5.2\n")
+        self.assertEqual(files["probe.stderr"], b"fixture warning\n")
+        self.assertEqual(files["probe.exit"], b"0\n")
+
+    def test_nonzero_probe_preserves_numeric_exit_and_stderr_before_failure(self):
+        result, files = self.probe("""
+            import sys
+            print('fixture failure', file=sys.stderr)
+            sys.exit(7)
+        """)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+        self.assertIn(b"fixture failure", result.stderr)
+        self.assertEqual(files["probe.stderr"], b"fixture failure\n")
+        self.assertEqual(files["probe.exit"], b"7\n")
+
+    def test_oversized_stdout_or_stderr_fails_child_and_keeps_both_files_bounded(self):
+        for channel in (1, 2):
+            with self.subTest(channel=channel):
+                result, files = self.probe("""
+                    import os
+                    for _ in range(128):
+                        os.write(%d, b'x' * 4096)
+                """ % channel)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotEqual(int(files["probe.exit"]), 0)
+                self.assertEqual(result.stdout, b"")
+                self.assertGreater(len(files["probe.stdout" if channel == 1 else "probe.stderr"]), 512)
+
+
 class InjectorEnvironmentShellGuardTest(unittest.TestCase):
     """Run the exact read-only pre-exec shell with every kernel path redirected."""
 

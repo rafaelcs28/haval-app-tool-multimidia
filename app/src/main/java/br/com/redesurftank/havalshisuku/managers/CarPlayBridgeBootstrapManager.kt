@@ -383,11 +383,21 @@ object CarPlayBridgeBootstrapManager {
     /** A root-owned admission marker precedes the one probe. A pending/crashed probe is never rerun. */
     private fun ensureInjectorPreflight(bundle: Payload): Boolean {
         if (preflightEnvironment != null && preflightRevision == bundle.revision) return true
+        var stage = "snapshot-before"
+        var beforeEvidence: CarPlayResidentProof.Environment? = null
+        var afterEvidence: CarPlayResidentProof.Environment? = null
+        var versionEvidence = ""
+        fun record(error: Exception? = null) = savePreflightDiagnostic(bundle, stage, error,
+            beforeEvidence, afterEvidence, versionEvidence)
         return try {
+            record()
             val before = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+            beforeEvidence = before
             val directory = CarPlayResidentProof.preflightDirectory(before.bootId, bundle.revision)
             val receipt = "$directory/success.json"
+            stage = "admission"; record()
             val admission = root.run(script("""
+                command -v timeout >/dev/null 2>&1 || exit 127
                 test ! -L ${q("$ROOT/preflight")} || exit 1
                 mkdir -p ${q("$ROOT/preflight")} || exit 1
                 chown 0:0 ${q("$ROOT/preflight")}; chmod 700 ${q("$ROOT/preflight")}
@@ -403,6 +413,7 @@ object CarPlayBridgeBootstrapManager {
             """)).trim()
             val environment = when (admission) {
                 "existing" -> {
+                    stage = "adopt-existing"; record()
                     val text = root.run(script("""
                         test -f ${q(receipt)} && test ! -L ${q(receipt)} || exit 1
                         test "§(stat -c %u ${q(receipt)})" = 0 && test "§(stat -c %a ${q(receipt)})" = 400 || exit 1
@@ -414,10 +425,29 @@ object CarPlayBridgeBootstrapManager {
                     before
                 }
                 "admitted" -> {
+                    stage = "probe"; record()
+                    val start = JSONObject(CarPlayResidentProof.preflightReceipt(before, bundle.revision))
+                        .put("state", "probe-started").toString()
                     val version = root.run(CarPlayResidentProof.environmentStateGuard(before, bundle.injector) +
-                        "${q(bundle.injector)} --version", 15_000).trim()
+                        script("""
+                            test ! -e ${q("$directory/probe-start.json")} || exit 1
+                            printf '%s\n' ${q(start)} > ${q("$directory/probe-start.json")} || exit 1
+                            chmod 400 ${q("$directory/probe-start.json")} || exit 1
+                            ( ulimit -f 16 || exit 125; exec timeout 10 ${q(bundle.injector)} --version < /dev/null ) > ${q("$directory/probe.stdout")} 2> ${q("$directory/probe.stderr")}
+                            cpb_probe_rc=§?
+                            printf '%s\n' "§cpb_probe_rc" > ${q("$directory/probe.exit")} || exit 1
+                            chmod 400 ${q("$directory/probe.stdout")} ${q("$directory/probe.stderr")} ${q("$directory/probe.exit")} || exit 1
+                            if [ "§cpb_probe_rc" != 0 ]; then head -c 4096 ${q("$directory/probe.stderr")} >&2; exit 1; fi
+                            test "§(wc -c < ${q("$directory/probe.stdout")})" -le 512 || exit 1
+                            cat ${q("$directory/probe.stdout")}
+                        """), 15_000).trim()
+                    versionEvidence = version
+                    stage = "snapshot-after"; record()
                     val after = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+                    afterEvidence = after
+                    stage = "compare"; record()
                     CarPlayResidentProof.checkPreflight(before, after, version)
+                    stage = "receipt"; record()
                     root.run(CarPlayResidentProof.environmentStateGuard(after, bundle.injector) + script("""
                         test ! -e ${q(receipt)} || exit 1
                         printf '%s\n' ${q(CarPlayResidentProof.preflightReceipt(after, bundle.revision))} > ${q("$receipt.next")} || exit 1
@@ -429,12 +459,36 @@ object CarPlayBridgeBootstrapManager {
             }
             preflightEnvironment = environment
             preflightRevision = bundle.revision
+            stage = "success"; record()
             true
         } catch (error: Exception) {
+            record(error)
             Log.w(TAG, "Injector preflight unavailable; no cold attempt admitted", error)
             report("blocked", "Verificação do carregador pendente ou interrompida; sessão preservada")
             nextReadyCheckAt = SystemClock.elapsedRealtime() + 30_000
             false
+        }
+    }
+
+    /** Bounded private evidence; never a readiness receipt or shared safety payload. */
+    private fun savePreflightDiagnostic(bundle: Payload, stage: String, error: Exception?,
+        before: CarPlayResidentProof.Environment?, after: CarPlayResidentProof.Environment?, version: String) = runCatching {
+        fun observed(value: CarPlayResidentProof.Environment?) = value?.let {
+            JSONObject(CarPlayResidentProof.preflightReceipt(it, bundle.revision)).put("state", "observed")
+        } ?: JSONObject.NULL
+        val boot = before?.bootId ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
+        val packet = JSONObject().put("schema", 1).put("bootId", boot).put("revision", bundle.revision).put("stage", stage)
+            .put("elapsedMs", SystemClock.elapsedRealtime()).put("before", observed(before)).put("after", observed(after))
+            .put("probeStdout", version.take(512)).put("failed", error != null)
+        if (error != null) packet.put("errorType", error.javaClass.simpleName)
+            .put("errorMessage", error.message.orEmpty().take(2048))
+            .put("rootRawTail", CarPlayBootstrapRoot.rawFailure(error)?.takeLast(16_384) ?: JSONObject.NULL)
+        File(requireNotNull(context).filesDir, "carplay-preflight-state.json").writeText(packet.toString())
+        if (error != null) {
+            val first = File(requireNotNull(context).filesDir, "carplay-preflight-first-failure.json")
+            val previous = runCatching { JSONObject(first.readText()) }.getOrNull()
+            if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision)
+                first.writeText(packet.toString())
         }
     }
 
@@ -732,12 +786,12 @@ object CarPlayBridgeBootstrapManager {
 
     private fun failAttempt(bundle: Payload, error: Exception) {
         Log.e(TAG, "Automatic preparation stopped; published owners are preserved", error)
-        if (error is CarPlayBootstrapRoot.CommandTimeout) runCatching {
+        CarPlayBootstrapRoot.rawFailure(error)?.let { raw -> runCatching {
             // Private, bounded evidence only. Raw console output never enters the
             // shared safety packet, preferences, public events or user-facing text.
             File(requireNotNull(context).filesDir, "carplay-root-last-timeout.txt")
-                .writeText(error.rawTail.takeLast(16_384))
-        }
+                .writeText(raw.takeLast(16_384))
+        } }
         val trace = org.json.JSONArray()
         error.stackTrace.take(12).forEach { trace.put(it.toString()) }
         val failure = JSONObject().put("eligible", false)
