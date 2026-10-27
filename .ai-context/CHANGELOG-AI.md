@@ -1373,3 +1373,13 @@ vehicle runtime test claimed. Private coordinator receipt retained.
 - Added live loaded-module display API resolution, type-111 advertisement preparation, JNI native registration, and a persistent OEM control script.
 - Kept native packaging excluded and activation default-off; Android compile and vehicle stream/frame evidence remain pending.
 - Follow-up `81923701` passed the authorized Mac Mini Debug build and JVM suite; extracted ARM64 bridge SHA-256 `aeefaa91be9dc805047e3006cfdb73ea45dd4b94ed67891d956f4cd40b534411` is now the controller default.
+## 2026-10-27 — v9 bad577ea integrated; 148 held after manual-retry report
+
+Merged the four new v9 commits; two are effective HUD preset/route-trace changes
+and the apps change is reverted upstream. Corrected the automatic preparation
+attempt scope from whole Android boot to exact OEM process identity, including the
+failure circuit, root marker and explicit-reset cleanup.65 portable tests,12 endpoint
+scenarios, OEM lock, full Mini JVM/Release/native/R8/lint/signing passed. Exact148
+APK ad32b7b5... was verified. Owner then reported manual retry also fails, exposing
+an unresolved orphaned/ambiguous-mapping path not fixed by process scoping. Release
+returned to draft; preview remains147. No vehicle mutation or OTA promotion.

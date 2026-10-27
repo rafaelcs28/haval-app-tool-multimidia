@@ -933,3 +933,13 @@ property on every exit and do not retry a `failed-pinned` process.
 2. Extend the cold controller to stage and pin `carplay_clean_map_endpoint.js` after passthrough installation.
 3. On parked hardware, prove in order: endpoint offered, Surface imported, getter advertisement accepted, type-111 Start/config, secondary frame callbacks, first D3 frame, uninterrupted D0.
 4. Exercise End, disconnect/reconnect, long sleep/wake and switch to Android Auto before enabling outside the explicit test flow.
+## NEXT — capture the manual-retry failure before promoting148
+
+When the central is next online, read only: boot ID, OEM PID/starttime, exact bridge
+mapping, attempt/ready/circuit prefs, root attempt markers and bounded
+CarPlayBridgeBoot log. Do this before pressing retry or restarting. If the process is
+new and unmapped, validate the148 process-scoped correction. If the same process has
+the exact bridge mapped but resident owners are absent, design a temporally settled,
+fresh-quiescence guarded OEM-process recovery; preserve the no-double-injection and
+real-projection gates. Rebuild only after that branch is proven. Keep the148 release
+draft and app-latest at147 meanwhile.

@@ -799,3 +799,14 @@ MapcleanNOTreleased. Physicalprincipalrendering stillawaitingownerresponse.
 - The legacy CarPlay regression checker has known base drift; compare its exact output with the 74122 base and do not weaken it.
 - Private capture ends on process death or sixty minutes and rotates after three MiB; retrieve it promptly.
 - No second CarPlay video feed or map-clean functionality is provided by this diagnostic release.
+## 2026-10-27 — manual CarPlay preparation retry can be refused
+
+The owner reports both automatic preparation and “Tentar preparação novamente”
+failing after a vehicle restart. Source inspection proves147 incorrectly shares one
+attempt across replacement OEM processes in the same Android boot;148 corrects that.
+However the manual reset also deliberately refuses any live exact bridge mapping or
+ambiguous resident owner state. If the OEM process survives sleep while resident
+injector owners disappear, neither the old automatic budget nor manual reset can
+safely replace it. The car was offline, so current mapping/owner evidence is missing.
+Do not auto-kill or reinject the OEM process until bounded current-session evidence
+distinguishes a new unmapped process from an orphaned exact mapping.

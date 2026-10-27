@@ -3449,3 +3449,31 @@ verification: comments/sentinel are intentionally absent after smali round-trip,
 although both the helper class and service class were present. Follow-up verifies
 the exact normalized helper plus the one call ordered strictly between Service
 super.onCreate and mContext assignment. The rejected artifact was not embedded.
+## HOLD — 148 built but not promoted; manual retry also fails in owner session
+
+Owner requested latest Netseek v9 and reported that automatic CarPlay preparation
+does not return after a normal vehicle restart unless preparation is done manually.
+Netseek v9 advanced from83a63219 tobad577ea; effective commits02b14247/61874cf8
+add HUD presets and route/trace changes. Commit227bf8f was immediately reverted by
+bad577ea. Merge5c4187b4 preserves local CarPlay TEXT guidance and all147 changes.
+
+Source review found147 spends its only attempt by Android boot ID. A vehicle sleep/
+wake can replace com.ts.carplay inside the same kernel boot, so commit019565ab scopes
+budget, failure circuit and root marker to boot+PID+starttime. Same process still gets
+one automatic attempt; replacement process gets its own. Explicit retry now clears
+all process-scoped keys. Version74148.65 portable/12endpoint/OEMlock PASS. Audited
+1272tracked/1168content files,8controls,digest8f296bac.... Authorized Mini Release
+job haval-impulse-133-019565abfc50ae49-20261027T225553Z-15142 passed fullJVM/native/
+R8/lint/prodcert in6m31s. APK ad32b7b5...,104370083bytes, payload
+74148-92981981aad5-487f9ab408c9. Branch pushed.
+
+After the build, owner clarified the manual retry button also errors. This is a
+separate unresolved state: resetFailureCircuit intentionally refuses when the exact
+bridge remains mapped or resident ownership is ambiguous. Process scoping alone
+does not safely repair an orphaned mapping in the same OEM process. Car was offline;
+bounded read-only collection timed out, so the exact runtime branch is unproven.
+The 148 GitHub release was briefly published only for byte verification, then moved
+back to DRAFT. app-latest remains147 and stable is untouched. Do NOT install/promote
+148 yet. On next online session, collect current identity/mapping/attempt+circuit
+prefs and CarPlayBridgeBoot log before any retry/restart. A guarded orphan-process
+restart requires evidence and must not be added speculatively.
