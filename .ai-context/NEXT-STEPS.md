@@ -1,9 +1,11 @@
-## 2026-10-27 — validate latest v9 source sync on Mini
+## 2026-10-27 — latest v9 source sync complete; owner CarPlay test remains next
 
-Integrating83a63219 after completed145; source-only synchronization, no new numbered
-release or remote vehicle work. Resolve review findings and run full JVM/Debug on
-authorized Mini. Then retain exact commit/job/artifact evidence and push private
-integration branch. Owner's installed145 CarPlay phone/route test remains pending.
+Netseek83a63219 integrated on private integration/netseek-v9-20261027-83a63219,
+tested source9981c5c0. Independent QA,41portable tests/OEM lock and full JVM/Debug
+on authorized Mini PASS (2m34s). Exact receipts in current HANDOFF. No numbered
+version, publication or car operation. Include this source in the next requested
+release. Installed/public145 remains ready for owner's five-minute phone/route test.
+Physical new map/opacity behaviour also remains to validate when released later.
 
 ## Current next step — owner CarPlay route test on installed 145
 

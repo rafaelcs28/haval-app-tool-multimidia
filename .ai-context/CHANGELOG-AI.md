@@ -1,10 +1,12 @@
-## 2026-10-27 — latest v9 HUD map/opacity source integration (validation pending)
+## 2026-10-27 — latest v9 HUD map/opacity integration validated
 
-Merged Netseek83a63219 over145: roundabout exits/ring progress, straight-on route
-continuation, one-way exit filtering and per-part HUD opacity with legacy street
-colour migration. Combined renderer conflict with existing RPM-bar colours and
-added two alpha/default/BLUE integration tests. No CP/AA runtime/theme/contract/
-geometry changes, version bump, publication or vehicle command. Mini QA pending.
+Merged Netseek83a63219 over145 (source9981c5c0): roundabout exits/ring progress,
+straight-on route continuation, one-way exit filtering and per-part HUD opacity
+with legacy street-colour migration. Combined renderer conflict with local RPM-bar
+colours/alpha; two JVM regressions cover default/custom/BLUE interaction.41portable
+lifecycle tests/OEM lock/diffcheck and independent read-only QA PASS. Authorized
+Mini full JVM/Debug succeeded2m34s; artifacts fetched/checksumsverified. No version
+bump, public update or car action. Installed145/CarPlay owner test unchanged.
 
 ## 2026-10-26 — 145 published and installed; automatic preparation verified after reboot
 

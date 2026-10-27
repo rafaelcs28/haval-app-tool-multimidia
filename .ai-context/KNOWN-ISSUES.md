@@ -1,3 +1,12 @@
+## 2026-10-27 — new v9 map behaviour still requires physical validation
+
+Source sync83a63219 changes HUD route selection and per-part opacity only. The
+roundabout branch choosing the last OSM exit when AA reports more exits is an
+upstream heuristic; static/unit validation cannot prove the physical route. Old
+cached roads without junction metadata remain accepted and acquire that metadata
+only after refetch. No cache clear or vehicle action was performed. Completed145
+remains the public/installed release; its owner phone/route test is still pending.
+
 ## Current status after 145 — preparation and full reboot passed; phone route test pending
 
 145 fixes the observed protected-challenge mv prompt and uses a separate fixed-profile

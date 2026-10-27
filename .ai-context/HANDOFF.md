@@ -1,20 +1,34 @@
-## 2026-10-27 — latest Netseek v9 source sync; Mini validation pending
+## 2026-10-27 — latest Netseek v9 integrated and validated; installed/public145 preserved
 
-Owner reported a new v9 commit. Integrating exactly83a6321966786a561d3dddaa51cf9295dce18946
-over completed145/ebe351a9 on integration/netseek-v9-20261027-83a63219. One upstream
-commit after edc0cc61: roundabout exit selection/ring tracking, straight-on route
-continuation, one-way exit filtering and per-part HUD colour opacity (10–100%).
-Nine source/test files. One renderer merge conflict resolved by combining upstream
-opacity with local RPM-bar colours; default white/redline pair now compares RGB and
-keeps selected alpha. Inactive red segments multiply their original alpha once.
-Two new JVM integration cases cover defaults/custom/BLUE at50% opacity.
+Owner reported a new v9 commit. Merged exactly83a6321966786a561d3dddaa51cf9295dce18946
+(one commit after edc0cc61) over completed145/ebe351a9. Private integration branch:
+integration/netseek-v9-20261027-83a63219. Immutable tested source commit:
+9981c5c072ec1e1cae5771c346b4dd6e9a11ad4c (real two-parent merge).
 
-No version bump, public release/OTA promotion or vehicle command for this source sync.
-Installed/public145 and its verified automatic CarPlay preparation remain the last
-field-validated release. Phone/route test still pending owner. CP/AA controllers,
-OEM binaries, themes, contract/bridge and cluster geometry are unchanged.
-Full JVM/Debug verification must run only on authorized Mini from audited immutable
-commit; no Android/Kotlin compilation on coordinator. Read-only QA in progress.
+Changes: HUD roundabout exit selection/ring tracking, straight-on route continuation,
+one-way exit filtering, and per-part colour opacity10–100%. Nine functional/test
+files. One renderer conflict combined upstream opacity with local RPM bars. Default
+white/redline RGB pair survives alpha changes; inactive red alpha derives once from
+original77. Two integration JVM cases cover default/custom/BLUE at50% opacity.
+Legacy opaque street colour reads at prior visual60%; saving marks new opacity.
+
+Read-only independent QA CLEAR.41Python lifecycle tests, OEM CarPlay regression
+lock/assets, diffcheck PASS. Full JVM/Debug PASS only on authorized Mini in2m34s:
+job haval-impulse-133-9981c5c072ec1e1c-20261027T102031Z-28698, finished10:23:25UTC.
+Audited8build controls unchanged, allowlisted digest f6becec6833767d6934be6f9f08015e32b0d6c8bbd334011d31576cbeeb70b05.
+ArchiveSHA1ae31203185341281ba2f3816b87abc5e9bba2877eec540cb80c24521be9a93b;
+1259tracked files,1155content files scanned; no sensitive files/keys transferred.
+Fetched artifact/checksums verified. Debug APK is validation-only, no distribution.
+Receipts: originalworkspace/test-artifacts/integration-v9-20261027-83a63219/.
+Artifacts: originalworkspace/artifacts/integration-v9-20261027-83a63219-mini/.
+
+No version bump, public release/OTA promotion or vehicle command in this source sync.
+CP/AA runtime/controllers, OEM binaries, themes, contract/bridge and cluster geometry
+unchanged. Installed/public145 below remains last field-validated release; its
+physical five-minute iPhone route/HUD test remains pending owner. New map/opacity
+also needs field validation. AA count beyond OSM count selects last exit by upstream
+heuristic; old caches gain ring metadata only upon refetch. No cache clear performed.
+Next: owner tests145; include this validated source in next requested numbered release.
 
 ## 145 completed — published, installed, automatic reboot preparation verified; vehicle OFF
 
