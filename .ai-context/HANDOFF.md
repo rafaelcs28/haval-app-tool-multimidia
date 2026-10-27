@@ -1,3 +1,26 @@
+## ACTIVE — 149 cold direct arm implementation; vehicle OFF
+
+Owner approved a connection experience analogous to Android Auto. Source review
+confirmed that true warm injection is forbidden: the reviewed interceptor requires
+the three OEM modules absent and installs nine hooks at their cold load boundary.
+Implemented the safe equivalent on branch release/impulse-74149-cold-direct-arm:
+a genuinely cold OEM process with a fresh explicit CP/AA visual-clear sample can arm
+without treating retained DCM rows as a physical phone. Warm restart still requires
+the complete DCM/Bluetooth quiescence proof and never runs against an active/unknown
+projection. Added identity/ticket-bound short-lived coldAttach safety publication,
+separate root packet verification and policy/shell tests. Version defaults are
+74149/1.0.0.74.149-preview. Architecture: docs/architecture/
+carplay-149-cold-direct-arm.md.
+
+Vehicle capture before this work: installed147/new boot45cec528..., bridge unmapped,
+visual CP/AA false, but DCM retained active128/state4/listcount1. Exact DCM APK static
+evidence maps128 to USB Android Auto and state4 to CONNECTED; therefore this signature
+cannot be ignored globally. Vehicle was switched OFF once and fresh telemetry
+confirmed engine0 at23:16:08Z. Draft148 remains unpublished/held; installed/public
+preview stays147. No install, reboot or new vehicle action is authorized by this
+source phase. Next: commit/audit, authorized Mini full JVM/signed Release149, verify
+artifact and publish only after successful validation; physical READY remains pending.
+
 ## COMPLETE — 147 installed; new-boot automatic preparation READY; vehicle OFF
 
 Owner installed corrected146 and reported persistent “Aguardando confirmação de

@@ -810,3 +810,13 @@ injector owners disappear, neither the old automatic budget nor manual reset can
 safely replace it. The car was offline, so current mapping/owner evidence is missing.
 Do not auto-kill or reinject the OEM process until bounded current-session evidence
 distinguishes a new unmapped process from an orphaned exact mapping.
+
+## 2026-10-27 — retained USB Android Auto row can block CarPlay preparation
+
+On a verified no-phone boot, DCM retained active capability128/state4 and TX45 count1
+while CP/AA visuals were false. Exact profiled constants map these values to USB
+Android Auto/CONNECTED. The row is stale in this capture but can be genuine in a real
+session, so global suppression is unsafe. Preview149 source bypasses it only while the
+OEM process is provably cold and a fresh visual sample is clear. If the process is
+already warm, preparation still waits; warm bridge injection remains unsupported.
+Mini and physical149 validation are pending.

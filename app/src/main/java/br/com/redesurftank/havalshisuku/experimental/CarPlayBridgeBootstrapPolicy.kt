@@ -44,6 +44,7 @@ object CarPlayBridgeBootstrapPolicy {
         val ownersAlive: Boolean,
         val hasBridgeMapping: Boolean,
         val coldModulesAbsent: Boolean?,
+        val coldAttachSafe: Boolean,
         val observationAgeMs: Long?,
         val carPlayActive: Boolean?,
         val androidAutoActive: Boolean?,
@@ -90,6 +91,13 @@ object CarPlayBridgeBootstrapPolicy {
             if (coldModulesAbsent == null) return decide(Action.WAIT_PROCESS, Reason.COLD_STATE_UNKNOWN)
             if (observationAgeMs == null || observationAgeMs !in 0L..MAX_OBSERVATION_AGE_MS) {
                 return decide(Action.WAIT_SAFE, Reason.OBSERVATION_NOT_FRESH)
+            }
+            // A genuinely cold OEM process cannot own a running projection yet. If the
+            // current visual sample is explicitly clear, arm the reviewed cold interceptor
+            // before consulting DCM's retained connection rows. This admits no warm restart:
+            // warm processes still require the full DCM/Bluetooth quiescence proof below.
+            if (coldModulesAbsent && coldAttachSafe) {
+                return decide(Action.COLD_ATTACH, Reason.COLD_PROCESS)
             }
             if (carPlayActive != false) return decide(Action.WAIT_SAFE, Reason.CARPLAY_NOT_KNOWN_INACTIVE)
             if (androidAutoActive != false) return decide(Action.WAIT_SAFE, Reason.ANDROID_AUTO_NOT_KNOWN_INACTIVE)

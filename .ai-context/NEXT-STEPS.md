@@ -1,3 +1,13 @@
+## CURRENT — validate and publish 149 cold direct arm
+
+Source now admits only non-destructive cold attach from exact process/module identity
+plus a fresh CP/AA visual-clear sample, bypassing retained DCM rows only on that path.
+Warm restart remains fail-closed on full DCM/BT quiescence. Commit/audit and run full
+JVM/signed Release149 on the authorized Mac Mini; verify exact APK/version/certificate/
+payload before publication. Installed/public preview stays147 and vehicle is OFF.
+After publication, owner installs149 and performs one full central start; READY without
+manual reset is the required field result before connecting the iPhone.
+
 ## CURRENT — owner runs the 147 five-minute CarPlay route test
 
 147 is installed and automatic preparation is READY on the verified new boot; the

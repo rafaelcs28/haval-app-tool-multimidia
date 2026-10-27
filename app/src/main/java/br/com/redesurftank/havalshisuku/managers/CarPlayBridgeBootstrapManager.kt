@@ -46,8 +46,11 @@ object CarPlayBridgeBootstrapManager {
     private val publisher = Executors.newSingleThreadScheduledExecutor { Thread(it, "carplay-bootstrap-safety") }
     private val root = CarPlayBootstrapRoot()
     @Volatile private var context: Context? = null
-    private data class ActiveAttempt(val identity: Identity, val ticket: String) {
+    private data class ActiveAttempt(val identity: Identity, val ticket: String,
+        val action: Policy.Action, val coldClearObservedAtMs: Long = 0) {
         fun publicationKey() = CarPlaySafetyPublicationGate.Key(identity.boot, identity.pid, identity.start, ticket)
+        fun hasFreshColdClearProof(nowMs: Long) = action == Policy.Action.COLD_ATTACH &&
+            coldClearObservedAtMs > 0 && nowMs - coldClearObservedAtMs in 0..2_500
     }
     @Volatile private var activeAttempt: ActiveAttempt? = null
     @Volatile private var safety = Safety()
@@ -162,7 +165,8 @@ object CarPlayBridgeBootstrapManager {
         safety = Safety(beginWall, beginElapsed, quiet, reading.diagnostics)
         val attempt = activeAttempt
         val identity = attempt?.identity
-        val eligible = isAutomaticEnabled() && inFlight.get() && identity != null && quiet == true &&
+        val coldAttach = attempt?.hasFreshColdClearProof(SystemClock.elapsedRealtime()) == true
+        val eligible = isAutomaticEnabled() && inFlight.get() && identity != null && (quiet == true || coldAttach) &&
             System.currentTimeMillis() - beginWall in 0..2500 &&
             SystemClock.elapsedRealtime() - beginElapsed in 0..2500
         val packet = JSONObject().put("bootId", identity?.boot ?: "")
@@ -170,6 +174,7 @@ object CarPlayBridgeBootstrapManager {
             .put("targetPid", identity?.pid ?: 0).put("targetStartTime", identity?.start ?: 0)
             .put("ticket", attempt?.ticket ?: "").put("eligible", eligible)
             .put("quiescent", quiet ?: JSONObject.NULL)
+            .put("coldAttach", coldAttach)
             .put("preparationState", mutableStatus.value.state)
         synchronized(safetyWriteLock) {
             val enabled = isAutomaticEnabled()
@@ -272,6 +277,8 @@ object CarPlayBridgeBootstrapManager {
                 (observed.mappedPath == null || sameImage), phase = phase,
             ownersAlive = ownsNative && (phase != Policy.Phase.READY || ownsJava),
             hasBridgeMapping = observed.mappedPath != null, coldModulesAbsent = observed.cold,
+            coldAttachSafe = observed.cold == true && observed.visualEvidenceKnown &&
+                !observed.cpVisual && !observed.aaVisual,
             observationAgeMs = observationAgeMs,
             carPlayActive = if (observed.cpVisual) true else current.quiescent?.not(),
             androidAutoActive = if (observed.aaVisual) true else current.quiescent?.not(),
@@ -631,12 +638,29 @@ object CarPlayBridgeBootstrapManager {
             values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
     }
 
+    /** Fresh proof for the non-destructive path only; warm restart never uses this admission. */
+    private fun refreshColdAttachProof(bundle: Payload, identity: Identity,
+        action: Policy.Action): Long {
+        if (action != Policy.Action.COLD_ATTACH) return 0
+        val current = observe(bundle, minimal = true, includeVisuals = true)
+        check(current.id == identity && current.cold == true &&
+            current.mappedPath.let { it == null || it == bundle.bridge } &&
+            current.visualEvidenceKnown && !current.cpVisual && !current.aaVisual) {
+            "Cold attach safety changed"
+        }
+        return SystemClock.elapsedRealtime()
+    }
+
     private fun attempt(bundle: Payload, before: Observation, action: Policy.Action) {
         val original = before.id ?: return
         val attemptTicket = UUID.randomUUID().toString()
+        val initialColdProof = if (action == Policy.Action.COLD_ATTACH && before.cold == true &&
+            before.visualEvidenceKnown && !before.cpVisual && !before.aaVisual) {
+            SystemClock.elapsedRealtime()
+        } else 0L
         synchronized(safetyWriteLock) {
             if (!inFlight.compareAndSet(false, true)) return
-            activeAttempt = ActiveAttempt(original, attemptTicket)
+            activeAttempt = ActiveAttempt(original, attemptTicket, action, initialColdProof)
         }
         try {
             check(isAutomaticEnabled())
@@ -686,7 +710,10 @@ object CarPlayBridgeBootstrapManager {
             }
             val identity = requireNotNull(current.id)
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
-            synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
+            val coldProof = refreshColdAttachProof(bundle, identity, action)
+            synchronized(safetyWriteLock) {
+                activeAttempt = ActiveAttempt(identity, attemptTicket, action, coldProof)
+            }
             check(prefs().edit().putString("cpBridgeAttemptIdentity", identity.key).commit())
             if (identity != original) {
                 root.run("test ! -e ${q(attemptMarker(bundle, identity.key))} || exit 1; " +
@@ -716,14 +743,21 @@ object CarPlayBridgeBootstrapManager {
             check(CarPlayResidentProof.nativeArmed(proof) || CarPlayResidentProof.nativeInstalled(proof)) {
                 "Native resident peer not prepared before gate release"
             }
+            val releaseColdProof = refreshColdAttachProof(bundle, identity, action)
+            if (action == Policy.Action.COLD_ATTACH) synchronized(safetyWriteLock) {
+                activeAttempt = ActiveAttempt(identity, attemptTicket, action, releaseColdProof)
+            }
             requireFreshSafety(identity)
             check(CarPlayResidentProof.fresh(proof, SystemClock.elapsedRealtime(), System.currentTimeMillis())) {
                 "Native resident proof expired before gate release"
             }
             // Only a fresh response produced after the exact CLI exited can release the gate.
-            root.run(identityGuard(identity) + CarPlaySafetyPublicationGate.warmKillCheck(
-                CarPlaySafetyPublicationGate.Key(identity.boot, identity.pid, identity.start, attemptTicket),
-                "$INPUT/safety.json") + CarPlayResidentProof.deadlineGuard(
+            val publicationKey = CarPlaySafetyPublicationGate.Key(identity.boot, identity.pid,
+                identity.start, attemptTicket)
+            val publicationCheck = if (action == Policy.Action.COLD_ATTACH) {
+                CarPlaySafetyPublicationGate.coldAttachCheck(publicationKey, "$INPUT/safety.json")
+            } else CarPlaySafetyPublicationGate.warmKillCheck(publicationKey, "$INPUT/safety.json")
+            root.run(identityGuard(identity) + publicationCheck + CarPlayResidentProof.deadlineGuard(
                 coldBudget.releaseDeadlineMs, proof.firstElapsedMs) + "setprop $GATE " +
                 UUID.randomUUID().toString().replace("-", ""),
                 CarPlayResidentProof.rootTimeout(coldBudget.releaseDeadlineMs, SystemClock.elapsedRealtime()))
@@ -747,7 +781,10 @@ object CarPlayBridgeBootstrapManager {
         val attemptTicket = prefs().getString("cpBridgeAttemptTicket", "").orEmpty()
         check(attemptTicket.matches(Regex("[a-f0-9-]{36}")))
         check(prefs().getString("cpBridgeAttemptIdentity", "") == identity.key)
-        synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket) }
+        val action = if (prefs().getBoolean("cpBridgeAttemptWarmRestart", false)) {
+            Policy.Action.COLD_RESTART
+        } else Policy.Action.COLD_ATTACH
+        synchronized(safetyWriteLock) { activeAttempt = ActiveAttempt(identity, attemptTicket, action) }
         val deadline = prefs().getLong("cpBridgeAttemptDeadlineElapsed", 0)
         check(deadline - SystemClock.elapsedRealtime() in 1L..330_000L)
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -826,7 +863,8 @@ object CarPlayBridgeBootstrapManager {
                     val parsed = JSONObject(String(bytes, 0, count, Charsets.UTF_8))
                     JSONObject().also { safe ->
                         for (key in listOf("eligible", "enabled", "inFlight", "attemptPhase", "preparationState",
-                            "bootId", "wallMs", "elapsedMs", "targetPid", "targetStartTime", "ticket", "quiescent")) {
+                            "bootId", "wallMs", "elapsedMs", "targetPid", "targetStartTime", "ticket", "quiescent",
+                            "coldAttach")) {
                             if (parsed.has(key)) safe.put(key, parsed.get(key))
                         }
                     }

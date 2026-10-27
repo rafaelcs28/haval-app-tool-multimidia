@@ -13,7 +13,7 @@ class CarPlayBridgeBootstrapPolicyTest {
         enabled = true, rootReady = true, assetsVerified = true,
         bootIdentityKnown = true, processPresent = true, processIdentityMatches = true,
         phase = Phase.NONE, ownersAlive = false, hasBridgeMapping = false,
-        coldModulesAbsent = true, observationAgeMs = 0L,
+        coldModulesAbsent = true, coldAttachSafe = true, observationAgeMs = 0L,
         carPlayActive = false, androidAutoActive = false, attemptsForProcess = 0,
         failureCircuitOpen = false, revisionMatches = true
     )
@@ -47,14 +47,30 @@ class CarPlayBridgeBootstrapPolicyTest {
         }
     }
 
-    @Test fun connectedOrUnknownProjectionStateBlocksBothColdPaths() {
-        for (cold in listOf(true, false)) {
-            for (active in listOf(true, null)) {
-                assertEquals(Reason.CARPLAY_NOT_KNOWN_INACTIVE,
-                    decide(idle().copy(coldModulesAbsent = cold, carPlayActive = active)).reason)
-                assertEquals(Reason.ANDROID_AUTO_NOT_KNOWN_INACTIVE,
-                    decide(idle().copy(coldModulesAbsent = cold, androidAutoActive = active)).reason)
-            }
+    @Test fun warmConnectedOrUnknownProjectionStateStillBlocksRestart() {
+        for (active in listOf(true, null)) {
+            assertEquals(Reason.CARPLAY_NOT_KNOWN_INACTIVE,
+                decide(idle().copy(coldModulesAbsent = false, coldAttachSafe = false,
+                    carPlayActive = active)).reason)
+            assertEquals(Reason.ANDROID_AUTO_NOT_KNOWN_INACTIVE,
+                decide(idle().copy(coldModulesAbsent = false, coldAttachSafe = false,
+                    androidAutoActive = active)).reason)
+        }
+    }
+
+    @Test fun coldClearVisualProofCanArmBeforeRetainedDcmRowsSettle() {
+        for (carPlay in listOf(true, null)) for (androidAuto in listOf(true, null)) {
+            assertEquals(Action.COLD_ATTACH, action(idle().copy(
+                carPlayActive = carPlay, androidAutoActive = androidAuto)))
+        }
+    }
+
+    @Test fun coldAttachNeverUsesMissingOrActiveVisualEvidence() {
+        for (active in listOf(true, null)) {
+            assertEquals(Reason.CARPLAY_NOT_KNOWN_INACTIVE,
+                decide(idle().copy(coldAttachSafe = false, carPlayActive = active)).reason)
+            assertEquals(Reason.ANDROID_AUTO_NOT_KNOWN_INACTIVE,
+                decide(idle().copy(coldAttachSafe = false, androidAutoActive = active)).reason)
         }
     }
 

@@ -1,3 +1,14 @@
+## 2026-10-27 — 149 cold direct-arm source implementation
+
+Fresh no-phone boot evidence showed DCM active128/state4 despite no CP/AA visual and
+no bridge. Exact APK constants identify this as USB Android Auto/CONNECTED, so it is
+not safe to globally whitelist. Added a cold-only admission: exact cold OEM identity
+and fresh visual absence may arm without DCM quiescence; every warm restart retains
+the prior DCM/BT requirement. Added short-lived identity/ticket-bound cold safety
+packets and distinct root verification. Warm interception remains forbidden. Version
+defaults moved to149; Android Auto, themes, layouts and handoff untouched. Mini build
+and physical validation pending. Vehicle OFF confirmed before source changes.
+
 ## 2026-10-27 — 147 DCM residual fix published and verified
 
 Owner installed146 and it waited at central disconnect confirmation with no phone.

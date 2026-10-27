@@ -61,7 +61,8 @@ class CarPlaySafetyPublicationGateTest {
     private fun packet(elapsed: Long = 99_900) = """{"eligible":true,"enabled":true,"inFlight":true,"attemptPhase":"preparing","quiescent":true,"bootId":"${key.boot}","ticket":"${key.ticket}","targetPid":${key.pid},"targetStartTime":${key.start},"elapsedMs":$elapsed}"""
     private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
 
-    private fun shellCheck(packet: String, replacement: String? = null): Boolean {
+    private fun shellCheck(packet: String, replacement: String? = null,
+        coldAttach: Boolean = false): Boolean {
         val directory = Files.createTempDirectory("carplay-safety-").toFile()
         try {
             val safety = File(directory, "safety ' snapshot.json").apply { writeText(packet) }
@@ -82,7 +83,8 @@ class CarPlaySafetyPublicationGateTest {
                 cat() { printf 'read\n' >> ${quote(reads.path)}; command cat "§@"; }
                 $replaceHook
             """.trimIndent().replace('§', '$') + "\n" +
-                CarPlaySafetyPublicationGate.warmKillCheck(key, safety.path, clock.path) +
+                (if (coldAttach) CarPlaySafetyPublicationGate.coldAttachCheck(key, safety.path, clock.path)
+                else CarPlaySafetyPublicationGate.warmKillCheck(key, safety.path, clock.path)) +
                 "printf 'authorized\\n' > ${quote(marker.path)}\n"
             val process = ProcessBuilder("/bin/sh", "-c", code).redirectErrorStream(true).start()
             try {
@@ -98,6 +100,16 @@ class CarPlaySafetyPublicationGateTest {
 
     @Test fun warmKillUsesOneFreshCoherentPacket() {
         assertTrue(shellCheck(packet()))
+    }
+
+    @Test fun coldAttachRequiresItsOwnFreshAdmissionInsteadOfQuiescence() {
+        val cold = packet().replace("\"quiescent\":true", "\"quiescent\":false,\"coldAttach\":true")
+        assertTrue(shellCheck(cold, coldAttach = true))
+        assertFalse(shellCheck(packet().replace("\"quiescent\":true", "\"quiescent\":false"),
+            coldAttach = true))
+        assertFalse(shellCheck(cold.replace("\"coldAttach\":true", "\"coldAttach\":false"),
+            coldAttach = true))
+        assertFalse(shellCheck(cold, coldAttach = false))
     }
 
     @Test fun warmKillDoesNotRequireVehicleTelemetryOrInterpretLegacyGearAndSpeed() {

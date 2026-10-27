@@ -18,18 +18,19 @@ internal class CarPlaySafetyPublicationGate {
     companion object {
         private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
 
-        /** Read once, after expensive checks. All predicates describe this same immutable sample. */
-        fun warmKillCheck(key: Key, safetyPath: String, uptimePath: String = "/proc/uptime"): String {
+        private fun checkedPacket(key: Key, safetyPath: String, uptimePath: String,
+            admissionCheck: String): String {
             require(key.pid > 0 && key.start > 0)
             require(key.boot.matches(Regex("[a-f0-9-]{36}")) && key.ticket.matches(Regex("[a-f0-9-]{36}")))
             val checks = listOf(
                 "\"eligible\":true", "\"enabled\":true", "\"inFlight\":true",
-                "\"attemptPhase\":\"preparing\"", "\"quiescent\":true",
+                "\"attemptPhase\":\"preparing\"",
                 "\"bootId\":\"${key.boot}\"", "\"ticket\":\"${key.ticket}\""
             ).joinToString("\n") { "printf '%s\\n' \"\$cpb_safety\" | grep -Fq ${quote(it)} || exit 1" }
             return """
                 cpb_safety=§(cat ${quote(safetyPath)}) || exit 1
                 $checks
+                $admissionCheck
                 printf '%s\n' "§cpb_safety" | grep -Eq '"targetPid":${key.pid}([,}])' || exit 1
                 printf '%s\n' "§cpb_safety" | grep -Eq '"targetStartTime":${key.start}([,}])' || exit 1
                 cpb_stamp=§(printf '%s\n' "§cpb_safety" | sed -n 's/.*"elapsedMs":\([0-9]*\).*/\1/p')
@@ -39,5 +40,15 @@ internal class CarPlaySafetyPublicationGate {
                 test §((cpb_now-cpb_stamp)) -ge -30 && test §((cpb_now-cpb_stamp)) -le 3000 || exit 1
             """.trimIndent().replace('§', '$') + "\n"
         }
+
+        /** Read once, after expensive checks. All predicates describe this same immutable sample. */
+        fun warmKillCheck(key: Key, safetyPath: String, uptimePath: String = "/proc/uptime"): String =
+            checkedPacket(key, safetyPath, uptimePath,
+                "printf '%s\\n' \"\$cpb_safety\" | grep -Eq '\"quiescent\":true([,}])' || exit 1")
+
+        /** A cold attach never kills the OEM process; require a fresh exact cold/clear proof. */
+        fun coldAttachCheck(key: Key, safetyPath: String, uptimePath: String = "/proc/uptime"): String =
+            checkedPacket(key, safetyPath, uptimePath,
+                "printf '%s\\n' \"\$cpb_safety\" | grep -Eq '\"coldAttach\":true([,}])' || exit 1")
     }
 }
