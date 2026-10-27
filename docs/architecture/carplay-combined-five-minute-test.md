@@ -50,9 +50,10 @@ falhou. O proprietário também informou ausência de texto no HUD, apesar de la
 AR, navegação habilitada e janela 4096 criada. A captura não registra a decisão do
 árbitro HUD; recebimento de payload elegível não comprova publicação/renderização.
 
-A sincronização v9 da 146 não altera esses caminhos e não corrige esse resultado.
-São necessários motivos discriminados da admissão e da seleção HUD, preservando os
-critérios existentes, sem ruas, GPS ou bypass de prioridade. Evidências privadas em
+A 146 preliminar, apenas com a sincronização v9 (fonte `4cc520fd`), não altera esses
+caminhos e não foi publicada. A 146 corrigida trata observações, espera e desenho
+textual conforme [a arquitetura da correção](carplay-146-output-readiness.md);
+a validação física continua pendente. Evidências privadas em
 `test-artifacts/release-74146-v9-20261027/` no workspace original. A sessão completa
 foi reconstruída de dois snapshots com 235 linhas de sobreposição exata e contagens
 start/stop consistentes; a tentativa de obter o hash do arquivo histórico inteiro
@@ -60,8 +61,9 @@ expirou e não constitui uma cópia verificada desse arquivo completo.
 
 ## Procedimento de campo
 
-1. Abra Recursos > Teste CarPlay · cluster + HUD e toque em `Iniciar teste CarPlay`.
-2. Conecte o CarPlay e inicie uma rota no Apple Maps ou Waze.
+1. Após instalar e reiniciar sem telefones, espere `Bridge preparada para esta sessão`.
+2. Conecte o iPhone e inicie uma rota no Apple Maps. Em Recursos > Teste CarPlay,
+   toque em `Iniciar teste CarPlay` e volte à tela do CarPlay na central.
 3. Percorra até cinco minutos. O passageiro pode tocar em `Encerrar teste`; caso contrário,
    a sessão termina automaticamente ao completar cinco minutos.
 4. Mantenha a central online ao final para recuperar os arquivos privados e o log do cluster.

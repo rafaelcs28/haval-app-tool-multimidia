@@ -1,3 +1,12 @@
+## CURRENT — finish corrected146 and publish for manual installation
+
+Owner parked/offline and requests146WITHcorrection; no remotevehicleoperations.
+Fix/review HUDsourceobservation+textdrawing andclusteradmission/deferredrequest from
+freshactualD0/D3; preserveAApriority/retirement/deadlines. Freezeagents, fullJVM/signed
+MiniReleaseONLY, verifyactualAPK, publishverifiedpreview146 andOTAmanifestlast.
+Manualownerinstall/reboot/AppleMapstestlater; no actualfieldvalidationclaim. Detailed
+ownership/decisions/sourceprofile/publicationconstraints in latestHANDOFF.
+
 ## CURRENT — wait for owner parked P/projection disconnected; then finish146 workflow
 
 Owner still driving and will advise.145five-minute Apple Maps test captured in full:

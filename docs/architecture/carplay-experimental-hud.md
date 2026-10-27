@@ -17,10 +17,11 @@ so the later Binder/stream snapshot cannot establish its state during the test.
 
 There is also a confirmed rendering gap: CarPlay text-only bypasses AR geometry
 and uses HERO/FAR, whose renderers draw distance but do not draw the street name.
-That gap alone does not explain a completely absent distance. No guard was bypassed
-and 146's v9 synchronization does not change either path. A later correction needs
-bounded private policy/publication diagnostics and tests preserving AA priority,
-data freshness, source generation and absence of inferred arrows.
+That gap alone does not explain a completely absent distance. The preliminary,
+unpublished v9-only146 did not change these paths. The corrected146 uses a pinned
+passive observer, a dedicated text renderer and bounded private publication/frame
+diagnostics, as described in [the correction](carplay-146-output-readiness.md).
+Physical validation remains pending; the original field cause is not uniquely proven.
 
 ## Scope
 

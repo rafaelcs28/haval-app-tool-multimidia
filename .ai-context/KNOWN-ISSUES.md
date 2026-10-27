@@ -1,3 +1,13 @@
+## CURRENT corrected146 — source gaps fixed; manual physical validation pending
+
+The unpublished v9-only146(source4cc520fd/SHA5fe6262e) is superseded and MUSTNOTpublish.
+Corrected146 adds actualfreshD0/D3, boundedwaitingbeforeendpointrequest, preservedoffer
+lease/retirement, pinnedpassiveAAinactiveproof andTEXTstreet+distanceHUD. Privategates/
+publication/actualHUDframe diagnostics now discriminate unknowns. Original145field
+cause notuniquelyproven; no guaranteeofactualtype111frames/HUDvisibilitywithoutowner
+test. ExactAAfirmwareprofile mandatory; unknown/transitionalstates remainblocked.
+Ownercaroffline/manualinstall-reboot-testlater; no remotevehicleactions inthisphase.
+
 ## 2026-10-27 — 145 owner CarPlay test received guidance but no cluster map/HUD text
 
 Real owner Apple Maps session completed300035ms/265callbacks/zero errors or drops;

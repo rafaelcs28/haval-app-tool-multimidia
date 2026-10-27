@@ -1,3 +1,60 @@
+## CURRENT — corrected146 for manual installation; vehicle offline, no remote actions
+
+Owner reports parked car without internet and explicitly requests146WITHcorrection,
+then manual installation/reboot/test later. This supersedes the earlier remote
+wake/install/reboot/OFF workflow for this phase. Do not contact or power vehicle.
+Publish corrected146 preview after audited MiniRelease/JVM/certificate verification;
+actualvehicle/newboot/map/HUD validation is deferred to owner's manual test and must
+be labelledpending. No additional permission is needed for authorized routine fixes
+or publication. Public146does not exist yet; existing publicpreview145 remains.
+
+BaseprivateHEADa626060d/source4cc520fd preliminary146 only hadv9; it is held and must
+NEVERbe published as corrected146. New op originalworkspace/test-artifacts/
+release-74146-carplay-fix-20261027/; finalartifacts/pubdirectories must be NEW.
+Oldpublish-74146-20261027/DO_NOT_PUBLISH_YET explicitlymarks superseded5fe6262eAPK.
+New scope preserves Netseekv9through83a63219 and all145bootstrap/controller/native
+assets. No OEM APK/hooks/bridge/theme/clustergeometry changes planned.
+
+Implementation frozen after explicitAGENTScomplex-task agent mapping and independentQA:
+root: TEXT HUDstyle draws road+distance inexistingfreebox, clamps/ellipsizes/clips,
+no inferredarrow; native4096framebooleandiagnostics; testUIplainwaitreasons and return
+toCarPlayD0instruction; Capturedeadlinepassed andleaseacquiredbeforefirstmapreason.
+cp_141_deadline_review: actual AMtask sample/offmain500ms plusoriginalreadSTARTtimestamp
+sharedcache; strictall-taskparser; pure boundedWAIT/REQUEST/OFFER/STARTledger, offer5s
+notrenewed, overall300s, max3REQUESTs/backoff1s/preofferwait30s. No retries afterconsumer.
+Use actual D0/D3 not staleorchestratorenum; AArawrequestedonlyintent whenfreshexplicit
+AAinactiveproof exists; activeAA/session/surface/UIguards remain. OwnMapfilesonly.
+runtime_fix_qa: pinned passive AAgetLinkStatus reader (flags0, workeroutsidecapture,
+500ms/nonoverlap/epoch/session/deadline/1.5swatchdog) andHUDpolicy/diagnostics. Exact
+APKc40147275d9bd0f32e89230d4fcce0e8b073877faf8e9d57f920033495e35cd7/2472405bytes
+requiredBEFOREbindandperBinder. REAconfirms thisPATCHEDonServiceStartisNop+return;
+onBindcannotactivateprojectionthroughit. No generalfirmwareclaim orAArecoverycommands.
+TX21profilegetteronly; -1knownnoDevice/power/controller and1/5/6/10 mayproveinactive
+onlyafter1ssettle +twofreshsamples>=500ms;3/7/8active;0/2/4/9/unknown/errors/mismatch
+stayunknown. LegacyAAfalsecannotadmitCPalone; passivefreshnegativeREQUIRED, while
+legacypositive/AAdata/session/surfacealwayswin. No AAcontroller/JSON edits.
+aa_background_review: independentread-only QA of integration, especiallylatecallbacks,
+proofages/ledger/retirement and negativelegacybypass. No localAndroid/Kotlin builds.
+
+Known original145fieldcause still NOTuniquelyestablished: actualhostdenialwascollapsed
+andHUDpublicationunrecorded. These are deterministic source/lifecycle gaps reproduced
+in modeltests, plus discriminatingprivatebooleans/reasons for nexttest. Do not claim
+physicalmap/HUDfixvalidated. REA skill read/informedowner; retained evidence private
+qa-aa-absence-rea.json. Firmwareunknown and pendingAAtransitions must failclosed.
+
+IndependentQA CLEAR; allagentsfrozen. Root additionally preserves AAobserverpoll scheduling
+when Binder changes between firmware verification and TX.41Pythonlifecycle,12Nodeendpoint,
+3Pythonobserverfixtures/OEMlock/diffcheck PASS. NewJVMcases awaitMini; no localcompile.
+RootnativeHUDframe diagnostics only on actual4096 anddeduplicatedbooleans.
+
+Next: immutable
+commit/audit/allowlistcontrolsdigest(currentf54a8a9c...), signedRelease146 on authorized
+MiniONLY. FetchNEWdir andverifyexactAPKsignature/version/runtime/assets/newmarkers.
+Publishfourexplicitassets on publictagbase048749ae (NEVERprivatehistory), verifyfull
+publicAPKbytes/SHA, promote app-latest/app-preview.json LAST withcurrent145precondition.
+Provide release link and minimalmanualsteps: install146, rebootwithoutphones, waitREADY,
+connectiPhone/startAppleMapsroute/starttest/returnCarPlayD0. Ownerphysicaltestpending.
+
 ## CURRENT — 145 owner test captured; 146 not installed; owner still driving
 
 Owner confirmed parked/open-air, then manually powered on and started a five-minute

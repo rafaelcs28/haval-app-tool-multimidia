@@ -1662,18 +1662,22 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
         carPlayCleanMapSlotLease = CarPlayCleanMapCoordinator.attachSlot(
             slot,
             CarPlaySecondaryClusterHost.SnapshotProvider {
+                val now = SystemClock.elapsedRealtime()
+                val tasks = CarPlayCleanMapCoordinator.currentTaskObservation()
                 CarPlayClusterHostPolicy.Snapshot(
-                    SystemClock.elapsedRealtime(),
+                    tasks.observedAtElapsedMs,
                     slot.display?.displayId ?: -1,
                     CarPlayCleanMapCoordinator.isExperimentEnabled(),
                     carPlayCleanMapSlot === slot && slot.parent === root,
-                    !AndroidAutoClusterController.isSessionActive() &&
-                        !AndroidAutoClusterController.isClusterRequested() &&
+                    br.com.redesurftank.havalshisuku.navigation.CarPlayExperimentalHud.isAndroidAutoKnownInactive(now) &&
+                        !AndroidAutoClusterController.isSessionActive() &&
                         !AndroidAutoClusterController.isSurfaceAttached(),
-                    br.com.redesurftank.havalshisuku.managers.CarPlayDisplayOrchestrator.currentState ==
-                        br.com.redesurftank.havalshisuku.managers.CarPlayDisplayState.CONNECTED_ON_D0,
+                    tasks.carPlayOnMain,
                     !isWarningActive && !hvacNativePanelActive && !avmNativePreviewActive,
-                    !isAnyAppOnDisplay3
+                    !isAnyAppOnDisplay3,
+                    tasks.known,
+                    tasks.carPlayOnSecondary,
+                    AndroidAutoClusterController.isClusterRequested()
                 )
             }
         )

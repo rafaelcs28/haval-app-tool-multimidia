@@ -1,3 +1,11 @@
+## 2026-10-27 — owner requests corrected146 for offline/manual vehicle test
+
+Supersedes remoteinstallationphase. Implementing realD0/D3 admission/fixedleasebounded
+waiting, pinnedpassiveAAabsenceobservation/strictHUDselection, TEXTroad+distanceHUD
+withoutarrow andprivateframe/decisiondiagnostics. Latestv9retained; bootstrap/native/
+OEMassets/themes/AApublishedcontractunchanged. Agentmappingcompleted, independentQA
+ongoing. New corrected146Mini/package/publication pending. No car calls in thisphase.
+
 ## 2026-10-27 — first owner145 Apple Maps field test captured, output failure isolated
 
 Confirmed realnewboot145READY9nativehooks/Javaarmed. Owner five-minute test produced

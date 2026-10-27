@@ -474,11 +474,27 @@ class HudArArrowTest {
         val ar = HudOverlayModel.Config(layout = HudOverlayModel.Layout.AR)
         val text = Directions(active = true, distance = "150 m", street = "Via de teste")
         val tbt = HudOverlayModel.tbtFor(text, ar)!!
-        assertTrue(tbt.style != HudOverlayModel.TbtStyle.AR)
+        assertEquals(HudOverlayModel.TbtStyle.TEXT, tbt.style)
+        assertEquals("Via de teste", tbt.street)
+        assertEquals("150", tbt.distanceValue)
+        assertEquals("m", tbt.distanceUnit)
         assertNull(tbt.arAngle)
         assertNull(tbt.arMeters)
         assertNull(tbt.guideAngle)
         assertNull(tbt.arDestination)
+
+        // Both user-selected layouts reach the renderer's road/distance-only path,
+        // including a distance that would otherwise choose the FAR icon row.
+        for (layout in listOf(HudOverlayModel.Layout.NAVIGATION, HudOverlayModel.Layout.AR)) {
+            val farText = HudOverlayModel.tbtFor(text.copy(distance = "1,5 km"), ar.copy(layout = layout))!!
+            assertEquals(HudOverlayModel.TbtStyle.TEXT, farText.style)
+            assertEquals(text.street, farText.street)
+            assertEquals("1,5", farText.distanceValue)
+            assertEquals("km", farText.distanceUnit)
+            assertEquals("", farText.icon)
+            assertNull(farText.arAngle)
+            assertNull(farText.arMeters)
+        }
 
         // An AA step with its numeric distance or maneuver identity retains upstream's
         // straight-on fallback, even when the maneuver token itself is not recognized yet.
