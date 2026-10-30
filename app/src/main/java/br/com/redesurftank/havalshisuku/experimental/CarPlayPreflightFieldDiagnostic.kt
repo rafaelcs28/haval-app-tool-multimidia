@@ -1,5 +1,7 @@
 package br.com.redesurftank.havalshisuku.experimental
 
+import java.io.File
+
 /**
  * Diagnostic-only, read-only. Produces a BOUNDED, explicit report of the preflight
  * environment-snapshot fields BEFORE they are parsed/validated, so a rejected
@@ -9,8 +11,11 @@ package br.com.redesurftank.havalshisuku.experimental
  * Contract (reviewer constraints):
  *  - No raw stdout, no full field map, no secrets. Only explicit per-field facts:
  *    presence, length, format validity, equality vs expected, and an 8-char prefix
- *    purely for cross-read correlation (a sha256 prefix is not a secret).
- *  - Pure function: no Android, no I/O, no clock. Fully unit-testable.
+ *    ONLY when the whole value is a valid sha256 (a prefix of a valid sha is not a secret;
+ *    malformed values never emit a prefix).
+ *  - The fingerprint check mirrors the real validator exactly (size pinned AND :0:500).
+ *  - Pure functions: no Android, no clock. Fully unit-testable, including the best-effort
+ *    contract and the bounded atomic write.
  *  - Never throws on malformed/absent input (that is exactly what we must capture).
  *  - Output is a single bounded JSON line; the caller writes it best-effort and must
  *    not let a write failure hide the original exception or release any gate.
@@ -18,18 +23,40 @@ package br.com.redesurftank.havalshisuku.experimental
 internal object CarPlayPreflightFieldDiagnostic {
 
     private val HEX64 = Regex("[a-f0-9]{64}")
-
-    /** Fields the environment snapshot is expected to emit. Checked explicitly, no raw values kept. */
-    private val HASH_FIELDS = listOf("env_policy_sha", "env_injector_sha")
+    const val MAX_BYTES = 4096
     private val SCALAR_FIELDS = listOf("env_boot", "env_system_pid", "env_system_start", "env_injector_fingerprint")
+
+    /**
+     * Best-effort contract helper. The read result/exception is authoritative: a read
+     * exception propagates (so no gate is released on a diagnostic path), and a diagnostic
+     * failure is swallowed and never observed by the caller. Pure and unit-tested.
+     */
+    inline fun <T> captureBestEffort(read: () -> T, diagnostic: (T) -> Unit): T {
+        val value = read()
+        runCatching { diagnostic(value) }
+        return value
+    }
+
+    /** Bounded, atomic write (temp + rename) so a reader never sees a truncated JSON. */
+    fun writeAtomicBounded(file: File, content: String, maxBytes: Int = MAX_BYTES) {
+        val bounded = if (content.length > maxBytes) content.substring(0, maxBytes) else content
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(bounded)
+        if (!tmp.renameTo(file)) {
+            file.writeText(bounded)
+            tmp.delete()
+        }
+    }
 
     /**
      * @param read "before" or "after".
      * @param fields the parsed key->value map from the snapshot (pre-parse, pre-validation).
      * @param clkTck Os.sysconf(_SC_CLK_TCK) as read by the caller (-1 if unavailable).
      * @param readStartMs/readEndMs monotonic bounds of the root read (elapsedRealtime).
-     * @param rootExit exit code of the read command (0 on success; the caller only reaches
-     *                 here on a successful read, so this is 0, but it is explicit for the record).
+     * @param injectorShaExit/policyShaExit/statExit per-command exit codes from a bounded
+     *   diagnostic re-probe (sha256sum / sha256sum / stat), -1 if the probe was unavailable.
+     *   These distinguish a read failure masked by the aggregate pipeline from a genuinely
+     *   wrong value, WITHOUT affecting the original validator decision.
      */
     fun report(
         attemptId: String,
@@ -41,11 +68,13 @@ internal object CarPlayPreflightFieldDiagnostic {
         clkTck: Long,
         readStartMs: Long,
         readEndMs: Long,
-        rootExit: Int,
+        injectorShaExit: Int,
+        policyShaExit: Int,
+        statExit: Int,
         expectedInjectorSha: String,
         injectorSize: Long,
     ): String {
-        val fpRegex = Regex("[0-9]+:[0-9]+:$injectorSize:[0-9]+:[0-9]+:[0-9]+:[0-9]+")
+        val fpRegex = Regex("[0-9]+:[0-9]+:$injectorSize:[0-9]+:[0-9]+:0:500")
         val sb = StringBuilder(2048)
         sb.append('{')
         kv(sb, "schema", 1); sb.append(',')
@@ -59,35 +88,34 @@ internal object CarPlayPreflightFieldDiagnostic {
         kv(sb, "readStartMs", readStartMs); sb.append(',')
         kv(sb, "readEndMs", readEndMs); sb.append(',')
         kv(sb, "readElapsedMs", (readEndMs - readStartMs).coerceAtLeast(-1)); sb.append(',')
-        kv(sb, "rootExit", rootExit.toLong()); sb.append(',')
         kv(sb, "fieldCount", fields.size.toLong()); sb.append(',')
+
+        // Per-command exits from the diagnostic re-probe (not the aggregate shell exit).
+        sb.append("\"probeExit\":{")
+        kv(sb, "injectorSha", injectorShaExit.toLong()); sb.append(',')
+        kv(sb, "policySha", policyShaExit.toLong()); sb.append(',')
+        kv(sb, "stat", statExit.toLong())
+        sb.append("},")
 
         // The field that drives L18: env_injector_sha must equal the PATCHED sha.
         val inj = fields["env_injector_sha"]
-        sb.append("\"injector\":{")
-        kvb(sb, "present", inj != null); sb.append(',')
-        kv(sb, "length", (inj?.length ?: -1).toLong()); sb.append(',')
-        kvb(sb, "hex64", inj != null && HEX64.matches(inj)); sb.append(',')
-        kvb(sb, "equalsExpected", inj != null && inj == expectedInjectorSha); sb.append(',')
-        qkv(sb, "prefix", prefix(inj)); sb.append(',')
-        qkv(sb, "expectedPrefix", prefix(expectedInjectorSha))
-        sb.append("},")
+        sb.append("\"injector\":")
+        hashBlock(sb, inj, equalsExpected = inj != null && inj == expectedInjectorSha)
+        sb.append(',')
+        qkv(sb, "expectedPrefix", prefix(expectedInjectorSha)); sb.append(',')
 
         // The other L18 condition: policy sha must be a valid sha256 (format only).
         val pol = fields["env_policy_sha"]
-        sb.append("\"policy\":{")
-        kvb(sb, "present", pol != null); sb.append(',')
-        kv(sb, "length", (pol?.length ?: -1).toLong()); sb.append(',')
-        kvb(sb, "hex64", pol != null && HEX64.matches(pol)); sb.append(',')
-        qkv(sb, "prefix", prefix(pol))
-        sb.append("},")
+        sb.append("\"policy\":")
+        hashBlock(sb, pol, equalsExpected = null)
+        sb.append(',')
 
-        // The immutable-executable guard: fingerprint must match the size-pinned shape.
+        // The immutable-executable guard (L19): fingerprint must match size AND :0:500.
         val fp = fields["env_injector_fingerprint"]
         sb.append("\"fingerprint\":{")
         kvb(sb, "present", fp != null); sb.append(',')
         kv(sb, "length", (fp?.length ?: -1).toLong()); sb.append(',')
-        kvb(sb, "sizeShapeOk", fp != null && fpRegex.matches(fp))
+        kvb(sb, "shapeOk", fp != null && fpRegex.matches(fp))
         sb.append("},")
 
         // Scalar identity fields: presence/length only (no values).
@@ -102,10 +130,23 @@ internal object CarPlayPreflightFieldDiagnostic {
         }
         sb.append("},")
 
-        // One-line verdict for why checkEnvironment (L18/L19/L20) would reject this read.
+        // One-line verdict for why checkEnvironment (L18/L19) would reject this read.
         qkv(sb, "wouldRejectReason", rejectReason(inj, pol, fp, expectedInjectorSha, fpRegex))
         sb.append('}')
         return sb.toString()
+    }
+
+    /** present/length/hex64 always; prefix ONLY when the whole value is a valid sha256. */
+    private fun hashBlock(sb: StringBuilder, v: String?, equalsExpected: Boolean?) {
+        val valid = v != null && HEX64.matches(v)
+        sb.append('{')
+        kvb(sb, "present", v != null); sb.append(',')
+        kv(sb, "length", (v?.length ?: -1).toLong()); sb.append(',')
+        kvb(sb, "hex64", valid)
+        if (equalsExpected != null) { sb.append(','); kvb(sb, "equalsExpected", equalsExpected) }
+        sb.append(',')
+        if (valid) qkv(sb, "prefix", v!!.take(8)) else nkv(sb, "prefix")
+        sb.append('}')
     }
 
     private fun rejectReason(
@@ -121,11 +162,8 @@ internal object CarPlayPreflightFieldDiagnostic {
         else -> "none"
     }
 
-    private fun prefix(v: String?): String = v?.take(8)?.filter { it in "0123456789abcdef" } ?: ""
+    private fun prefix(v: String?): String = if (v != null && HEX64.matches(v)) v.take(8) else ""
 
-    // Keep ASCII identifier chars only; strips quotes/backslashes/control chars so the
-    // hand-built JSON stays valid without escaping. Covers uuids, revisions, "before"/"after"
-    // and stage names like "snapshot-after".
     private fun safe(v: String, max: Int): String =
         v.take(max).filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in "-._:" }
 
@@ -133,4 +171,5 @@ internal object CarPlayPreflightFieldDiagnostic {
     private fun kv(sb: StringBuilder, k: String, v: Int) = kv(sb, k, v.toLong())
     private fun kvb(sb: StringBuilder, k: String, v: Boolean) { sb.append('"').append(k).append("\":").append(v) }
     private fun qkv(sb: StringBuilder, k: String, v: String) { sb.append('"').append(k).append("\":\"").append(v).append('"') }
+    private fun nkv(sb: StringBuilder, k: String) { sb.append('"').append(k).append("\":null") }
 }

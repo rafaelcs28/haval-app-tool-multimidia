@@ -520,20 +520,39 @@ object CarPlayBridgeBootstrapManager {
      */
     private fun readSnapshotFields(bundle: Payload, attemptId: String, read: String, stage: String): Map<String, String> {
         val start = SystemClock.elapsedRealtime()
-        val raw = fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000))
-        val end = SystemClock.elapsedRealtime()
-        runCatching {
-            val clk = runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }.getOrDefault(-1L)
-            val boot = raw["env_boot"]
-                ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
-            val report = CarPlayPreflightFieldDiagnostic.report(
-                attemptId, boot, bundle.revision, read, stage, raw, clk, start, end, 0,
-                CarPlayResidentProof.PATCHED_INJECTOR_SHA, CarPlayResidentProof.INJECTOR_SIZE)
-            val name = if (read == "after") "carplay-fieldcheck-after.json" else "carplay-fieldcheck-before.json"
-            File(requireNotNull(context).filesDir, name).writeText(report.take(4096))
-        }
-        return raw
+        // captureBestEffort: the read's result/exception is authoritative (a read failure
+        // propagates exactly as before, no gate released); only the diagnostic is swallowed.
+        return CarPlayPreflightFieldDiagnostic.captureBestEffort(
+            read = { fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)) },
+            diagnostic = { raw ->
+                val end = SystemClock.elapsedRealtime()
+                val clk = runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }.getOrDefault(-1L)
+                val (iRc, pRc, sRc) = probeReadExits(bundle)
+                val boot = raw["env_boot"]
+                    ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
+                val report = CarPlayPreflightFieldDiagnostic.report(
+                    attemptId, boot, bundle.revision, read, stage, raw, clk, start, end,
+                    iRc, pRc, sRc, CarPlayResidentProof.PATCHED_INJECTOR_SHA, CarPlayResidentProof.INJECTOR_SIZE)
+                val name = if (read == "after") "carplay-fieldcheck-after.json" else "carplay-fieldcheck-before.json"
+                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(File(requireNotNull(context).filesDir, name), report)
+            })
     }
+
+    /**
+     * Bounded, diagnostic-only re-probe of the INDIVIDUAL read commands' exit codes, so a read
+     * failure masked by the aggregate snapshot pipeline (e.g. sha256sum failing while cut still
+     * returns 0) can be told apart from a genuinely wrong value. Never affects the validator
+     * decision; returns (-1,-1,-1) if the probe is unavailable.
+     */
+    private fun probeReadExits(bundle: Payload): Triple<Int, Int, Int> = runCatching {
+        val out = root.run(script("""
+            printf 'i=%s\n' "§(sha256sum ${q(bundle.injector)} >/dev/null 2>&1; echo §?)"
+            printf 'p=%s\n' "§(sha256sum /sys/fs/selinux/policy >/dev/null 2>&1; echo §?)"
+            printf 's=%s\n' "§(stat -c '%d' ${q(bundle.injector)} >/dev/null 2>&1; echo §?)"
+        """), 8_000)
+        val m = fields(out)
+        Triple(m["i"]?.toIntOrNull() ?: -1, m["p"]?.toIntOrNull() ?: -1, m["s"]?.toIntOrNull() ?: -1)
+    }.getOrDefault(Triple(-1, -1, -1))
 
     private fun copyVerified(file: File, digest: String, size: Long, input: () -> InputStream) {
         check(digest.matches(Regex("[a-f0-9]{64}")) && size > 0)

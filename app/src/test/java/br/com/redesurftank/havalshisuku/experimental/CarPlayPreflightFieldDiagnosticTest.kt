@@ -2,6 +2,8 @@ package br.com.redesurftank.havalshisuku.experimental
 
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 class CarPlayPreflightFieldDiagnosticTest {
     private val patched = CarPlayResidentProof.PATCHED_INJECTOR_SHA
@@ -19,13 +21,15 @@ class CarPlayPreflightFieldDiagnosticTest {
         "env_injector_fingerprint" to fingerprint,
     )
 
-    private fun report(fields: Map<String, String>, read: String = "after") =
+    private fun report(fields: Map<String, String>, read: String = "after",
+                       iRc: Int = 0, pRc: Int = 0, sRc: Int = 0) =
         CarPlayPreflightFieldDiagnostic.report(
             attemptId = "a1b2c3d4-0000-0000-0000-000000000000",
             bootId = "b7013e51-250a-410c-8fed-4ff37e2cf163",
             revision = "74149-b1b3cd38152a-92d27fb67416",
             read = read, stage = "snapshot-after", fields = fields,
-            clkTck = 100, readStartMs = 1000, readEndMs = 1120, rootExit = 0,
+            clkTck = 100, readStartMs = 1000, readEndMs = 1120,
+            injectorShaExit = iRc, policyShaExit = pRc, statExit = sRc,
             expectedInjectorSha = patched, injectorSize = size,
         )
 
@@ -38,61 +42,123 @@ class CarPlayPreflightFieldDiagnosticTest {
         assertTrue(r.contains("\"read\":\"after\""))
         assertTrue(r.contains("\"clkTck\":100"))
         assertTrue(r.contains("\"readElapsedMs\":120"))
+        assertTrue(r.contains("\"shapeOk\":true"))
     }
 
-    @Test fun injector_absent_is_flagged() {
+    @Test fun probe_exits_are_recorded() {
+        val r = report(valid(), iRc = 0, pRc = 0, sRc = 0)
+        assertTrue(r.contains("\"probeExit\":{\"injectorSha\":0,\"policySha\":0,\"stat\":0}"))
+        val u = report(valid(), iRc = -1, pRc = -1, sRc = -1)
+        assertTrue(u.contains("\"probeExit\":{\"injectorSha\":-1,\"policySha\":-1,\"stat\":-1}"))
+        // a read failure masked by the pipeline: value absent but probe shows sha256sum failed
+        val f = valid().apply { remove("env_injector_sha") }
+        val m = report(f, iRc = 1)
+        assertEquals("injector_sha_absent", reason(m))
+        assertTrue(m.contains("\"injectorSha\":1"))
+    }
+
+    @Test fun injector_absent_is_flagged_without_prefix() {
         val f = valid().apply { remove("env_injector_sha") }
         val r = report(f)
         assertEquals("injector_sha_absent", reason(r))
         assertTrue(r.contains("\"injector\":{\"present\":false"))
+        assertTrue(r.contains("\"prefix\":null"))     // no prefix for absent
     }
 
-    @Test fun injector_malformed_is_flagged() {
+    @Test fun injector_malformed_is_flagged_without_prefix() {
         val f = valid().apply { this["env_injector_sha"] = "not-a-hash" }
         val r = report(f)
         assertEquals("injector_sha_malformed", reason(r))
         assertTrue(r.contains("\"hex64\":false"))
+        // malformed value must NOT leak even a prefix.
+        assertTrue(r.contains("\"prefix\":null"))
+        assertFalse(r.contains("not-a-ha"))
     }
 
-    @Test fun injector_divergent_original_is_flagged() {
-        // The exact confusion seen in the field: a valid-format sha that is the ORIGINAL, not PATCHED.
+    @Test fun injector_divergent_original_is_flagged_with_prefix() {
         val f = valid().apply { this["env_injector_sha"] = original }
         val r = report(f)
         assertEquals("injector_sha_divergent", reason(r))
         assertTrue(r.contains("\"equalsExpected\":false"))
-        // prefix present for correlation, but the full value must NOT leak.
-        assertTrue(r.contains("\"prefix\":\"${original.take(8)}\""))
+        assertTrue(r.contains("\"prefix\":\"${original.take(8)}\""))  // divergent but valid-format: prefix ok
         assertFalse(r.contains(original))
         assertFalse(r.contains(patched))
     }
 
-    @Test fun policy_absent_is_flagged() {
-        val f = valid().apply { remove("env_policy_sha") }
-        assertEquals("policy_sha_absent", reason(report(f)))
+    @Test fun policy_absent_and_malformed() {
+        assertEquals("policy_sha_absent", reason(report(valid().apply { remove("env_policy_sha") })))
+        assertEquals("policy_sha_malformed", reason(report(valid().apply { this["env_policy_sha"] = "xyz" })))
     }
 
-    @Test fun policy_malformed_is_flagged() {
-        val f = valid().apply { this["env_policy_sha"] = "xyz" }
-        assertEquals("policy_sha_malformed", reason(report(f)))
-    }
-
-    @Test fun fingerprint_shape_mismatch_is_flagged() {
-        val f = valid().apply { this["env_injector_fingerprint"] = "64784:274764:999:1:1:0:500" }
-        assertEquals("fingerprint_shape_mismatch", reason(report(f)))
+    @Test fun fingerprint_mirrors_validator_uid0_mode500() {
+        // The exact confusion from the field: the stale injector had uid=1000.
+        assertEquals("none", reason(report(valid())))  // :0:500 accepted
+        val wrongUid = valid().apply { this["env_injector_fingerprint"] = "64784:274764:$size:1:1:1000:500" }
+        assertEquals("fingerprint_shape_mismatch", reason(report(wrongUid)))
+        val wrongMode = valid().apply { this["env_injector_fingerprint"] = "64784:274764:$size:1:1:0:777" }
+        assertEquals("fingerprint_shape_mismatch", reason(report(wrongMode)))
+        val wrongSize = valid().apply { this["env_injector_fingerprint"] = "64784:274764:999:1:1:0:500" }
+        assertEquals("fingerprint_shape_mismatch", reason(report(wrongSize)))
     }
 
     @Test fun empty_map_never_throws_and_is_bounded() {
         val r = report(emptyMap())
         assertEquals("injector_sha_absent", reason(r))
-        assertTrue(r.length <= 4096)
+        assertTrue(r.length <= CarPlayPreflightFieldDiagnostic.MAX_BYTES)
         assertFalse(r.contains("\n"))
         assertEquals(r.count { it == '{' }, r.count { it == '}' })
     }
 
     @Test fun never_leaks_raw_hash_values_even_when_valid() {
         val r = report(valid())
-        assertFalse(r.contains(patched))     // only the 8-char prefix is emitted
+        assertFalse(r.contains(patched))
         assertFalse(r.contains(policy))
         assertTrue(r.contains("\"prefix\":\"${patched.take(8)}\""))
+    }
+
+    // ---- best-effort contract: the read is authoritative, the diagnostic is swallowed ----
+
+    @Test fun captureBestEffort_returns_read_value_even_when_diagnostic_throws() {
+        var diagRan = false
+        val v = CarPlayPreflightFieldDiagnostic.captureBestEffort(
+            read = { "VALUE" },
+            diagnostic = { diagRan = true; throw RuntimeException("disk full") })
+        assertEquals("VALUE", v)      // diagnostic failure never reaches the caller
+        assertTrue(diagRan)
+    }
+
+    @Test fun captureBestEffort_propagates_read_exception_and_skips_diagnostic() {
+        var diagRan = false
+        try {
+            CarPlayPreflightFieldDiagnostic.captureBestEffort<String>(
+                read = { throw IllegalStateException("read failed") },
+                diagnostic = { diagRan = true })
+            fail("read exception must propagate")
+        } catch (e: IllegalStateException) {
+            assertEquals("read failed", e.message)
+        }
+        assertFalse(diagRan)          // gate-bearing read failure is never masked by the diagnostic
+    }
+
+    // ---- bounded atomic write ----
+
+    @Test fun writeAtomicBounded_writes_full_content_and_separate_files() {
+        val dir = Files.createTempDirectory("fieldcheck").toFile()
+        val before = File(dir, "carplay-fieldcheck-before.json")
+        val after = File(dir, "carplay-fieldcheck-after.json")
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(before, report(valid(), read = "before"))
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(after, report(valid(), read = "after"))
+        assertTrue(before.readText().contains("\"read\":\"before\""))
+        assertTrue(after.readText().contains("\"read\":\"after\""))
+        // distinct attempts/reads never share a file.
+        assertFalse(before.readText().contains("\"read\":\"after\""))
+        assertFalse(File(dir, "carplay-fieldcheck-before.json.tmp").exists())
+    }
+
+    @Test fun writeAtomicBounded_truncates_to_limit() {
+        val dir = Files.createTempDirectory("fieldcheck2").toFile()
+        val f = File(dir, "big.json")
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, "x".repeat(10_000), maxBytes = 100)
+        assertEquals(100, f.readText().length)
     }
 }
