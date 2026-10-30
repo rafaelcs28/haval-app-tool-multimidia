@@ -29,7 +29,7 @@ class CarPlayPreflightFieldDiagnosticTest {
             revision = "74149-b1b3cd38152a-92d27fb67416",
             read = read, stage = "snapshot-after", fields = fields,
             clkTck = 100, readStartMs = 1000, readEndMs = 1120,
-            injectorShaExit = iRc, policyShaExit = pRc, statExit = sRc,
+            injectorShaExit = iRc, policyShaExit = pRc, fingerprintExit = sRc,
             expectedInjectorSha = patched, injectorSize = size,
         )
 
@@ -45,12 +45,12 @@ class CarPlayPreflightFieldDiagnosticTest {
         assertTrue(r.contains("\"shapeOk\":true"))
     }
 
-    @Test fun probe_exits_are_recorded() {
+    @Test fun read_exits_are_recorded() {
         val r = report(valid(), iRc = 0, pRc = 0, sRc = 0)
-        assertTrue(r.contains("\"probeExit\":{\"injectorSha\":0,\"policySha\":0,\"stat\":0}"))
+        assertTrue(r.contains("\"readExit\":{\"injectorSha\":0,\"policySha\":0,\"fingerprint\":0}"))
         val u = report(valid(), iRc = -1, pRc = -1, sRc = -1)
-        assertTrue(u.contains("\"probeExit\":{\"injectorSha\":-1,\"policySha\":-1,\"stat\":-1}"))
-        // a read failure masked by the pipeline: value absent but probe shows sha256sum failed
+        assertTrue(u.contains("\"readExit\":{\"injectorSha\":-1,\"policySha\":-1,\"fingerprint\":-1}"))
+        // a read failure masked by the pipeline: value absent but the original sha256sum exit != 0
         val f = valid().apply { remove("env_injector_sha") }
         val m = report(f, iRc = 1)
         assertEquals("injector_sha_absent", reason(m))
@@ -155,10 +155,30 @@ class CarPlayPreflightFieldDiagnosticTest {
         assertFalse(File(dir, "carplay-fieldcheck-before.json.tmp").exists())
     }
 
-    @Test fun writeAtomicBounded_truncates_to_limit() {
+    @Test fun writeAtomicBounded_rejects_oversize_instead_of_cutting_json() {
         val dir = Files.createTempDirectory("fieldcheck2").toFile()
         val f = File(dir, "big.json")
-        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, "x".repeat(10_000), maxBytes = 100)
-        assertEquals(100, f.readText().length)
+        try {
+            CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, "x".repeat(10_000), maxBytes = 100)
+            fail("over-limit content must be rejected, never truncated into invalid JSON")
+        } catch (e: IllegalArgumentException) {
+            assertFalse(f.exists())   // nothing written
+        }
+    }
+
+    @Test fun writeAtomicBounded_preserves_previous_on_rename_failure() {
+        val dir = Files.createTempDirectory("fieldcheck3").toFile()
+        // Make the destination a NON-EMPTY directory so renameTo(file->dir) fails.
+        val dest = File(dir, "dest.json").apply { mkdirs() }
+        File(dest, "keep").writeText("previous")
+        try {
+            CarPlayPreflightFieldDiagnostic.writeAtomicBounded(dest, "{\"ok\":1}")
+            fail("rename failure must surface (caller handles best-effort)")
+        } catch (e: IllegalStateException) {
+            // previous content preserved, stale tmp cleaned
+            assertTrue(dest.isDirectory)
+            assertTrue(File(dest, "keep").exists())
+            assertFalse(File(dir, "dest.json.tmp").exists())
+        }
     }
 }

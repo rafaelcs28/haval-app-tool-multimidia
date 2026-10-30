@@ -37,14 +37,22 @@ internal object CarPlayPreflightFieldDiagnostic {
         return value
     }
 
-    /** Bounded, atomic write (temp + rename) so a reader never sees a truncated JSON. */
+    /**
+     * Bounded, atomic write (temp + rename) so a reader never sees a truncated JSON.
+     * - Rejects an over-limit report by BYTE length instead of cutting it into invalid JSON
+     *   (the report is bounded by construction; this is a guard, not a code path).
+     * - On a rename failure the previous destination report is preserved untouched (the stale
+     *   tmp is removed); it never falls back to a non-atomic overwrite that could truncate.
+     * Throws on failure; the caller runs this best-effort so the gate is never affected.
+     */
     fun writeAtomicBounded(file: File, content: String, maxBytes: Int = MAX_BYTES) {
-        val bounded = if (content.length > maxBytes) content.substring(0, maxBytes) else content
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        require(bytes.size <= maxBytes) { "Diagnostic report exceeds ${maxBytes}B (${bytes.size})" }
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(bounded)
+        tmp.writeBytes(bytes)
         if (!tmp.renameTo(file)) {
-            file.writeText(bounded)
             tmp.delete()
+            error("Atomic rename failed; previous report preserved")
         }
     }
 
@@ -70,7 +78,7 @@ internal object CarPlayPreflightFieldDiagnostic {
         readEndMs: Long,
         injectorShaExit: Int,
         policyShaExit: Int,
-        statExit: Int,
+        fingerprintExit: Int,
         expectedInjectorSha: String,
         injectorSize: Long,
     ): String {
@@ -90,11 +98,13 @@ internal object CarPlayPreflightFieldDiagnostic {
         kv(sb, "readElapsedMs", (readEndMs - readStartMs).coerceAtLeast(-1)); sb.append(',')
         kv(sb, "fieldCount", fields.size.toLong()); sb.append(',')
 
-        // Per-command exits from the diagnostic re-probe (not the aggregate shell exit).
-        sb.append("\"probeExit\":{")
+        // Per-command exits captured inline by the ORIGINAL read (not a re-run, not the
+        // aggregate shell exit): distinguishes a read failure masked by the pipeline from a
+        // genuinely wrong value. -1 when the field was not present in the read.
+        sb.append("\"readExit\":{")
         kv(sb, "injectorSha", injectorShaExit.toLong()); sb.append(',')
         kv(sb, "policySha", policyShaExit.toLong()); sb.append(',')
-        kv(sb, "stat", statExit.toLong())
+        kv(sb, "fingerprint", fingerprintExit.toLong())
         sb.append("},")
 
         // The field that drives L18: env_injector_sha must equal the PATCHED sha.
