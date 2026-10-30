@@ -12,6 +12,7 @@ import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeAttemptScope
+import br.com.redesurftank.havalshisuku.experimental.CarPlayPreflightFieldDiagnostic
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
@@ -400,6 +401,7 @@ object CarPlayBridgeBootstrapManager {
     /** A root-owned admission marker precedes the one probe. A pending/crashed probe is never rerun. */
     private fun ensureInjectorPreflight(bundle: Payload): Boolean {
         if (preflightEnvironment != null && preflightRevision == bundle.revision) return true
+        val attemptId = UUID.randomUUID().toString()
         var stage = "snapshot-before"
         var beforeEvidence: CarPlayResidentProof.Environment? = null
         var afterEvidence: CarPlayResidentProof.Environment? = null
@@ -408,7 +410,7 @@ object CarPlayBridgeBootstrapManager {
             beforeEvidence, afterEvidence, versionEvidence)
         return try {
             record()
-            val before = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+            val before = parseEnvironment(readSnapshotFields(bundle, attemptId, "before", stage))
             beforeEvidence = before
             val directory = CarPlayResidentProof.preflightDirectory(before.bootId, bundle.revision)
             val receipt = "$directory/success.json"
@@ -460,7 +462,7 @@ object CarPlayBridgeBootstrapManager {
                         """), 15_000).trim()
                     versionEvidence = version
                     stage = "snapshot-after"; record()
-                    val after = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+                    val after = parseEnvironment(readSnapshotFields(bundle, attemptId, "after", stage))
                     afterEvidence = after
                     stage = "compare"; record()
                     CarPlayResidentProof.checkPreflight(before, after, version)
@@ -507,6 +509,30 @@ object CarPlayBridgeBootstrapManager {
             if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision)
                 first.writeText(packet.toString())
         }
+    }
+
+    /**
+     * Diagnostic-only, bounded, read-only. Reads the environment snapshot and records an explicit
+     * per-field check BEFORE parseEnvironment runs checkEnvironment inline, so a rejected read
+     * (which is otherwise never persisted) becomes understandable. Best-effort: a diagnostic write
+     * failure is swallowed and never hides the read's own exception nor releases any gate. The read
+     * itself (root.run) is intentionally NOT guarded here; its failure propagates exactly as before.
+     */
+    private fun readSnapshotFields(bundle: Payload, attemptId: String, read: String, stage: String): Map<String, String> {
+        val start = SystemClock.elapsedRealtime()
+        val raw = fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000))
+        val end = SystemClock.elapsedRealtime()
+        runCatching {
+            val clk = runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }.getOrDefault(-1L)
+            val boot = raw["env_boot"]
+                ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
+            val report = CarPlayPreflightFieldDiagnostic.report(
+                attemptId, boot, bundle.revision, read, stage, raw, clk, start, end, 0,
+                CarPlayResidentProof.PATCHED_INJECTOR_SHA, CarPlayResidentProof.INJECTOR_SIZE)
+            val name = if (read == "after") "carplay-fieldcheck-after.json" else "carplay-fieldcheck-before.json"
+            File(requireNotNull(context).filesDir, name).writeText(report.take(4096))
+        }
+        return raw
     }
 
     private fun copyVerified(file: File, digest: String, size: Long, input: () -> InputStream) {
