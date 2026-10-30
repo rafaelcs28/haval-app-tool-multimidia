@@ -512,11 +512,18 @@ object CarPlayBridgeBootstrapManager {
     }
 
     /**
-     * Diagnostic-only, bounded, read-only. Reads the environment snapshot and records an explicit
-     * per-field check BEFORE parseEnvironment runs checkEnvironment inline, so a rejected read
-     * (which is otherwise never persisted) becomes understandable. Best-effort: a diagnostic write
-     * failure is swallowed and never hides the read's own exception nor releases any gate. The read
-     * itself (root.run) is intentionally NOT guarded here; its failure propagates exactly as before.
+     * Diagnostic-only, bounded. Reads the environment snapshot and records an explicit per-field
+     * check BEFORE parseEnvironment runs checkEnvironment inline, so a rejected read (otherwise
+     * never persisted) becomes understandable. Best-effort: a diagnostic failure is swallowed and
+     * never hides the read's own exception nor releases any gate; the read (root.run) is NOT guarded
+     * here, so its failure propagates exactly as before.
+     *
+     * Temporal note: no extra reads are added (the per-command exits are emitted inline by the
+     * original snapshot). The only added critical-path cost is one small synchronous local file
+     * write per snapshot — bounded, but NOT zero. It runs after the read, so it is outside
+     * readElapsedMs. A stat() failure aborts the snapshot upstream (root.run throws) before this
+     * fieldcheck runs, so fingerprint's readExit here is 0 when present; the fingerprint VALUE
+     * shape (uid 0 / mode 500) is the diagnostic signal for that case.
      */
     private fun readSnapshotFields(bundle: Payload, attemptId: String, read: String, stage: String): Map<String, String> {
         val start = SystemClock.elapsedRealtime()

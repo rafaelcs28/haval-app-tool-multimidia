@@ -49,10 +49,14 @@ internal object CarPlayPreflightFieldDiagnostic {
         val bytes = content.toByteArray(Charsets.UTF_8)
         require(bytes.size <= maxBytes) { "Diagnostic report exceeds ${maxBytes}B (${bytes.size})" }
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(bytes)
-        if (!tmp.renameTo(file)) {
-            tmp.delete()
-            error("Atomic rename failed; previous report preserved")
+        var renamed = false
+        try {
+            tmp.writeBytes(bytes)
+            renamed = tmp.renameTo(file)
+            if (!renamed) error("Atomic rename failed; previous report preserved")
+        } finally {
+            // Clean a partial/stale tmp whether writeBytes threw or the rename failed.
+            if (!renamed) runCatching { tmp.delete() }
         }
     }
 

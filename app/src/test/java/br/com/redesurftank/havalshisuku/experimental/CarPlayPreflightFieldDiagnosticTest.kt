@@ -163,7 +163,17 @@ class CarPlayPreflightFieldDiagnosticTest {
             fail("over-limit content must be rejected, never truncated into invalid JSON")
         } catch (e: IllegalArgumentException) {
             assertFalse(f.exists())   // nothing written
+            assertFalse(File(dir, "big.json.tmp").exists())   // no stale tmp
         }
+    }
+
+    @Test fun writeAtomicBounded_round_trips_utf8_and_leaves_no_tmp() {
+        val dir = Files.createTempDirectory("fieldcheck4").toFile()
+        val f = File(dir, "ok.json")
+        val content = report(valid())
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, content)
+        assertEquals(content, f.readText())
+        assertFalse(File(dir, "ok.json.tmp").exists())
     }
 
     @Test fun writeAtomicBounded_preserves_previous_on_rename_failure() {
