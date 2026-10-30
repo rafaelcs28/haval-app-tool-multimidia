@@ -167,13 +167,25 @@ class CarPlayPreflightFieldDiagnosticTest {
         }
     }
 
-    @Test fun writeAtomicBounded_round_trips_utf8_and_leaves_no_tmp() {
+    @Test fun writeAtomicBounded_round_trips_report_and_leaves_no_tmp() {
+        // The report itself is ASCII by construction (safe() + hex/digit values).
         val dir = Files.createTempDirectory("fieldcheck4").toFile()
         val f = File(dir, "ok.json")
         val content = report(valid())
         CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, content)
         assertEquals(content, f.readText())
         assertFalse(File(dir, "ok.json.tmp").exists())
+    }
+
+    @Test fun writeAtomicBounded_round_trips_multibyte_utf8() {
+        // Exercises the actual UTF-8 encoding path and the byte-length (not char-length) bound.
+        val dir = Files.createTempDirectory("fieldcheck5").toFile()
+        val f = File(dir, "u.json")
+        val content = "{\"x\":\"café ☕ 日本 €\"}"
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, content)
+        assertEquals(content, f.readText(Charsets.UTF_8))
+        assertTrue(content.toByteArray(Charsets.UTF_8).size > content.length)  // genuinely multibyte
+        assertFalse(File(dir, "u.json.tmp").exists())
     }
 
     @Test fun writeAtomicBounded_preserves_previous_on_rename_failure() {
