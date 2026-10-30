@@ -12,6 +12,7 @@ import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeAttemptScope
+import br.com.redesurftank.havalshisuku.experimental.CarPlayPreflightFieldDiagnostic
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
 import br.com.redesurftank.havalshisuku.experimental.CarPlaySafetyPublicationGate
@@ -400,6 +401,7 @@ object CarPlayBridgeBootstrapManager {
     /** A root-owned admission marker precedes the one probe. A pending/crashed probe is never rerun. */
     private fun ensureInjectorPreflight(bundle: Payload): Boolean {
         if (preflightEnvironment != null && preflightRevision == bundle.revision) return true
+        val attemptId = UUID.randomUUID().toString()
         var stage = "snapshot-before"
         var beforeEvidence: CarPlayResidentProof.Environment? = null
         var afterEvidence: CarPlayResidentProof.Environment? = null
@@ -408,7 +410,7 @@ object CarPlayBridgeBootstrapManager {
             beforeEvidence, afterEvidence, versionEvidence)
         return try {
             record()
-            val before = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+            val before = parseEnvironment(readSnapshotFields(bundle, attemptId, "before", stage))
             beforeEvidence = before
             val directory = CarPlayResidentProof.preflightDirectory(before.bootId, bundle.revision)
             val receipt = "$directory/success.json"
@@ -460,7 +462,7 @@ object CarPlayBridgeBootstrapManager {
                         """), 15_000).trim()
                     versionEvidence = version
                     stage = "snapshot-after"; record()
-                    val after = parseEnvironment(fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)))
+                    val after = parseEnvironment(readSnapshotFields(bundle, attemptId, "after", stage))
                     afterEvidence = after
                     stage = "compare"; record()
                     CarPlayResidentProof.checkPreflight(before, after, version)
@@ -507,6 +509,45 @@ object CarPlayBridgeBootstrapManager {
             if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision)
                 first.writeText(packet.toString())
         }
+    }
+
+    /**
+     * Diagnostic-only, bounded. Reads the environment snapshot and records an explicit per-field
+     * check BEFORE parseEnvironment runs checkEnvironment inline, so a rejected read (otherwise
+     * never persisted) becomes understandable. Best-effort: a diagnostic failure is swallowed and
+     * never hides the read's own exception nor releases any gate; the read (root.run) is NOT guarded
+     * here, so its failure propagates exactly as before.
+     *
+     * Temporal note: no extra reads are added (the per-command exits are emitted inline by the
+     * original snapshot). The only added critical-path cost is one small synchronous local file
+     * write per snapshot — bounded, but NOT zero. It runs after the read, so it is outside
+     * readElapsedMs. A stat() failure aborts the snapshot upstream (root.run throws) before this
+     * fieldcheck runs, so fingerprint's readExit here is 0 when present; the fingerprint VALUE
+     * shape (uid 0 / mode 500) is the diagnostic signal for that case.
+     */
+    private fun readSnapshotFields(bundle: Payload, attemptId: String, read: String, stage: String): Map<String, String> {
+        val start = SystemClock.elapsedRealtime()
+        // captureBestEffort: the read's result/exception is authoritative (a read failure
+        // propagates exactly as before, no gate released); only the diagnostic is swallowed.
+        return CarPlayPreflightFieldDiagnostic.captureBestEffort(
+            read = { fields(root.run(CarPlayResidentProof.environmentSnapshot(bundle.injector), 15_000)) },
+            diagnostic = { raw ->
+                val end = SystemClock.elapsedRealtime()
+                val clk = runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }.getOrDefault(-1L)
+                // Exit codes come from the ORIGINAL read (emitted inline by environmentSnapshot),
+                // not a re-run: re-reading would add ~8s/read to the critical path and could itself
+                // blow the 10s cold window we are diagnosing.
+                val pRc = raw["env_policy_sha_rc"]?.toIntOrNull() ?: -1
+                val iRc = raw["env_injector_sha_rc"]?.toIntOrNull() ?: -1
+                val fRc = raw["env_injector_fingerprint_rc"]?.toIntOrNull() ?: -1
+                val boot = raw["env_boot"]
+                    ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
+                val report = CarPlayPreflightFieldDiagnostic.report(
+                    attemptId, boot, bundle.revision, read, stage, raw, clk, start, end,
+                    iRc, pRc, fRc, CarPlayResidentProof.PATCHED_INJECTOR_SHA, CarPlayResidentProof.INJECTOR_SIZE)
+                val name = if (read == "after") "carplay-fieldcheck-after.json" else "carplay-fieldcheck-before.json"
+                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(File(requireNotNull(context).filesDir, name), report)
+            })
     }
 
     private fun copyVerified(file: File, digest: String, size: Long, input: () -> InputStream) {

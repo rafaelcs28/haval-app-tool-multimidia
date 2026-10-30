@@ -47,15 +47,18 @@ internal object CarPlayResidentProof {
         cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail
         case "§1" in Z|X|x) exit 1;; esac
         shift 19; cpb_env_start=§1
-        cpb_env_policy=§(sha256sum /sys/fs/selinux/policy | cut -d' ' -f1) || exit 1
-        cpb_env_injector=§(sha256sum ${quote(injector)} | cut -d' ' -f1) || exit 1
-        cpb_env_fingerprint=§(stat -c '%d:%i:%s:%Y:%Z:%u:%a' ${quote(injector)}) || exit 1
+        cpb_env_policy_raw=§(sha256sum /sys/fs/selinux/policy); cpb_env_policy_rc=§?
+        cpb_env_policy=§(printf '%s' "§cpb_env_policy_raw" | cut -d' ' -f1) || exit 1
+        cpb_env_injector_raw=§(sha256sum ${quote(injector)}); cpb_env_injector_rc=§?
+        cpb_env_injector=§(printf '%s' "§cpb_env_injector_raw" | cut -d' ' -f1) || exit 1
+        cpb_env_fingerprint=§(stat -c '%d:%i:%s:%Y:%Z:%u:%a' ${quote(injector)}); cpb_env_fingerprint_rc=§?
+        test "§cpb_env_fingerprint_rc" = 0 || exit 1
         test "§(cat /proc/sys/kernel/random/boot_id)" = "§cpb_env_boot" || exit 1
         test "§(pidof system_server)" = "§cpb_env_pid" || exit 1
         cpb_env_stat=§(cat /proc/§cpb_env_pid/stat) || exit 1
         cpb_env_tail=§{cpb_env_stat##*) }; set -- §cpb_env_tail; shift 19
         test "§1" = "§cpb_env_start" && test "§(cat /sys/fs/selinux/enforce)" = 0 || exit 1
-        printf 'env_boot=%s\nenv_system_pid=%s\nenv_system_start=%s\nenv_policy_sha=%s\nenv_injector_sha=%s\nenv_injector_fingerprint=%s\n' "§cpb_env_boot" "§cpb_env_pid" "§cpb_env_start" "§cpb_env_policy" "§cpb_env_injector" "§cpb_env_fingerprint"
+        printf 'env_boot=%s\nenv_system_pid=%s\nenv_system_start=%s\nenv_policy_sha=%s\nenv_injector_sha=%s\nenv_injector_fingerprint=%s\nenv_policy_sha_rc=%s\nenv_injector_sha_rc=%s\nenv_injector_fingerprint_rc=%s\n' "§cpb_env_boot" "§cpb_env_pid" "§cpb_env_start" "§cpb_env_policy" "§cpb_env_injector" "§cpb_env_fingerprint" "§cpb_env_policy_rc" "§cpb_env_injector_rc" "§cpb_env_fingerprint_rc"
     """.trimIndent().replace('§', '$') + "\n"
 
     fun environmentStateGuard(environment: Environment, injector: String): String {
