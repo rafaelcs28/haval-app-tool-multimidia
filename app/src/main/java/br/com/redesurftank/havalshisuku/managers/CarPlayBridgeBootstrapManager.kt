@@ -512,19 +512,23 @@ object CarPlayBridgeBootstrapManager {
                 .put("rootRawTail", rawTail?.takeLast(16_384) ?: JSONObject.NULL)
         }
         val dir = requireNotNull(context).filesDir
-        File(dir, "carplay-preflight-state.json").writeText(packet.toString())
+        // Atomic write (temp+rename) so an interruption never leaves a half-written record.
+        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(File(dir, "carplay-preflight-state.json"), packet.toString(), 65_536)
         if (error != null) {
             val first = File(dir, "carplay-preflight-first-failure.json")
             val previous = runCatching { JSONObject(first.readText()) }.getOrNull()
             if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision) {
-                first.writeText(packet.toString())
-                // Freeze THIS first failure's field-check so later retries (new attemptId) cannot
-                // overwrite it. Only copy a fieldcheck from the SAME attempt (never a stale one).
-                for (read in listOf("before", "after")) runCatching {
-                    val src = File(dir, "carplay-fieldcheck-$read.json")
-                    if (src.isFile && src.readText().contains("\"attemptId\":\"$attemptId\""))
-                        src.copyTo(File(dir, "carplay-fieldcheck-first-$read.json"), overwrite = true)
+                // Embed THIS attempt's field-check INTO the first-failure record so the set is coherent
+                // and published atomically (one file). Each read is the same-attempt field-check, or an
+                // EXPLICIT "absent" marker — never a stale earlier attempt and never a leftover file.
+                fun fieldcheck(read: String): Any {
+                    val txt = runCatching { File(dir, "carplay-fieldcheck-$read.json").readText() }.getOrNull()
+                    return if (CarPlayPreflightFieldDiagnostic.belongsToAttempt(txt, attemptId))
+                        runCatching { JSONObject(txt) }.getOrDefault(JSONObject().put("state", "unparsable").put("read", read))
+                    else JSONObject().put("state", "absent").put("read", read)
                 }
+                packet.put("fieldcheckBefore", fieldcheck("before")).put("fieldcheckAfter", fieldcheck("after"))
+                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(first, packet.toString(), 65_536)
             }
         }
     }

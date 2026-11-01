@@ -48,9 +48,13 @@ internal object CarPlayPreflightFieldDiagnostic {
      */
     data class FailureEvidence(val realExit: String, val childSignalText: String, val killedPid: String)
 
+    // The framed marker is a WHOLE line "cpb_<32hex>_end=N"; a loose "_end=N" substring
+    // (e.g. a "stage_end=7" in the payload) must NOT be read as the real exit.
+    private val END_MARKER = Regex("(?m)^cpb_[0-9a-f]{32}_end=(\\d+)$")
+
     fun failureEvidence(rawTail: String?): FailureEvidence {
         if (rawTail.isNullOrEmpty()) return FailureEvidence("unknown", "none", "unknown")
-        val exit = Regex("_end=(\\d+)").findAll(rawTail).lastOrNull()?.groupValues?.get(1) ?: "unknown"
+        val exit = END_MARKER.findAll(rawTail).lastOrNull()?.groupValues?.get(1) ?: "unknown"
         val signal = when {
             Regex("(?m)^Killed\\b").containsMatchIn(rawTail) -> "Killed"
             Regex("(?m)^Terminated\\b").containsMatchIn(rawTail) -> "Terminated"
@@ -58,6 +62,13 @@ internal object CarPlayPreflightFieldDiagnostic {
         }
         return FailureEvidence(exit, signal, "unknown")
     }
+
+    /**
+     * Whether a persisted carplay-fieldcheck-*.json belongs to THIS attempt (so the first-failure
+     * record embeds only same-attempt evidence, never a stale earlier attempt). Pure/testable.
+     */
+    fun belongsToAttempt(fileText: String?, attemptId: String): Boolean =
+        fileText != null && fileText.contains("\"attemptId\":\"$attemptId\"")
 
     /**
      * Bounded, atomic write (temp + rename) so a reader never sees a truncated JSON.
