@@ -12,6 +12,7 @@ import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeAttemptScope
+import br.com.redesurftank.havalshisuku.experimental.CarPlayColdAttachTrace
 import br.com.redesurftank.havalshisuku.experimental.CarPlayPreflightFieldDiagnostic
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
@@ -65,6 +66,11 @@ object CarPlayBridgeBootstrapManager {
     // Worker-confined. Keep a pending nonce until its lease expires, allowing the peer to finish.
     private val pendingChallenges = mutableMapOf<String, CarPlayResidentProof.Challenge>()
     private val startingBindings = mutableMapOf<String, CarPlayResidentProof.Binding>()
+    // diag3 (observability-only): worker-confined trace of the current cold/attach attempt. Serialized
+    // best-effort ONLY on failure; never read to drive a decision or touch a gate. See CarPlayColdAttachTrace.
+    private val attemptTraceSteps = ArrayList<CarPlayColdAttachTrace.Step>()
+    private var attemptTraceHeader: List<Pair<String, Any?>> = emptyList()
+    private var attemptTraceBaseMs = 0L
 
     private data class Identity(val boot: String, val pid: Int, val start: Long) {
         val key get() = "$boot-$pid-$start"
@@ -82,7 +88,10 @@ object CarPlayBridgeBootstrapManager {
         val cpVisual: Boolean, val aaVisual: Boolean,
         val nativeProof: CarPlayResidentProof.Sample? = null,
         val javaProof: CarPlayResidentProof.Sample? = null,
-        val visualEvidenceKnown: Boolean = false)
+        val visualEvidenceKnown: Boolean = false,
+        // diag3: the raw grep token ("yes"/"no"/other/absent) that produced `cold`, carried on the SAME
+        // Observation so cold + its raw source always come from one read (no stale side-channel).
+        val coldRaw: String? = null)
 
     private fun prefs() = requireNotNull(context).getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
     @JvmStatic fun isAutomaticEnabled(): Boolean = runCatching {
@@ -154,6 +163,24 @@ object CarPlayBridgeBootstrapManager {
 
     private fun report(state: String, message: String) {
         mutableStatus.value = Status(isAutomaticEnabled(), state, message)
+    }
+
+    // diag3: start a fresh trace for this attempt. Worker-confined; clears prior steps so memory stays bounded.
+    private fun traceStart(action: Policy.Action, before: Observation, ticket: String, bundle: Payload) {
+        attemptTraceBaseMs = SystemClock.elapsedRealtime()
+        attemptTraceSteps.clear()
+        attemptTraceHeader = listOf(
+            "action" to action.name, "ticket" to ticket, "build" to bundle.revision,
+            "clockBaseElapsedMs" to attemptTraceBaseMs, "clockBaseWallMs" to System.currentTimeMillis(),
+            "beforeId" to before.id?.key, "beforeCold" to CarPlayColdAttachTrace.coldTri(before.cold))
+    }
+
+    // diag3: record one step best-effort. Never throws into the attempt path (observability must not affect control flow).
+    private fun trace(stage: String, vararg fields: Pair<String, Any?>) {
+        runCatching {
+            CarPlayColdAttachTrace.append(attemptTraceSteps,
+                CarPlayColdAttachTrace.Step(stage, SystemClock.elapsedRealtime() - attemptTraceBaseMs, fields.toList()))
+        }
     }
 
     private fun publishSafety() {
@@ -643,6 +670,7 @@ object CarPlayBridgeBootstrapManager {
             true
         """))
         val values = fields(output)
+        val coldRaw = values["cold"] // diag3: raw grep token (yes=cold/rc1, no=warm/rc0, absent/other=null)
         val boot = values["boot"]?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
         val pid = values["pid"]?.toIntOrNull()
         val start = startTime(values["stat"].orEmpty(), pid ?: -1)
@@ -652,7 +680,8 @@ object CarPlayBridgeBootstrapManager {
         }
         if (id == null) return Observation(null, null, mapped, JSONObject(), false, 0, 0,
             values["cp_visual"] != "0", values["aa_visual"] != "0",
-            visualEvidenceKnown = values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
+            visualEvidenceKnown = values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"),
+            coldRaw = coldRaw)
         val run = id.directory
         val details = root.run(script("""
             printf 'native='; if [ -f ${q("$run/cold-state.json")} ]; then cat ${q("$run/cold-state.json")}; else echo '{}'; fi
@@ -701,11 +730,12 @@ object CarPlayBridgeBootstrapManager {
             .put("replacements", nativeProof.replacements).put("pinned", nativeProof.pinned)
             .put("failure", if (nativeProof.failureAbsent) JSONObject.NULL else "Resident native failure")
             else recordedNative
-        return Observation(id, values["cold"]?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
+        return Observation(id, coldRaw?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
             mapped, nativeState, javaProof?.armed == true,
             owner("native_owner"), owner("java_owner"), values["cp_visual"] != "0", values["aa_visual"] != "0",
             nativeProof, javaProof,
-            values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
+            values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"),
+            coldRaw = coldRaw)
     }
 
     /** Fresh proof for the non-destructive path only; warm restart never uses this admission. */
@@ -733,6 +763,8 @@ object CarPlayBridgeBootstrapManager {
             activeAttempt = ActiveAttempt(original, attemptTicket, action, initialColdProof)
         }
         try {
+            traceStart(action, before, attemptTicket, bundle)
+            trace("entry", "initialColdProofSet" to (initialColdProof > 0L))
             check(isAutomaticEnabled())
             check(prefs().edit().putString("cpBridgeAttemptBoot", original.boot)
                 .putString("cpBridgeAttemptRevision", bundle.revision).putString("cpBridgeAttemptPhase", "preparing")
@@ -744,14 +776,20 @@ object CarPlayBridgeBootstrapManager {
             // Mount-only work belongs to the existing patch manager. Never start a
             // cold attempt against a different/unmounted service APK.
             check(root.run("md5sum /vendor/app/TsCarPlayService/TsCarPlayService.apk").trim().startsWith(SERVICE_MD5))
+            trace("post_md5")
             // A root-owned atomic marker also survives app death and transport timeouts.
             root.run("mkdir -p ${q("$ROOT/attempts")}; chmod 700 ${q("$ROOT/attempts")}; " +
                 "mkdir ${q(attemptMarker(bundle, original.key))} || exit 1; " +
                 "chmod 700 ${q(attemptMarker(bundle, original.key))}")
+            trace("post_marker")
             val existing = root.run("getprop $GATE").trim()
             val nonce = existing.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: UUID.randomUUID().toString().replace("-", "")
             root.run("setprop $GATE $nonce")
-            repeat(8) { if (File(INPUT, "safety.json").isFile) return@repeat; Thread.sleep(100) }
+            // diag3: property valid/invalid and equal/changed only — never the nonce value.
+            trace("post_gate", "propertyValid" to existing.matches(Regex("[a-f0-9]{32}")), "propertyChanged" to (nonce != existing))
+            var safetyPresent = false
+            repeat(8) { if (File(INPUT, "safety.json").isFile) { safetyPresent = true; return@repeat }; Thread.sleep(100) }
+            trace("post_safety_wait", "safetyPresent" to safetyPresent)
             if (action == Policy.Action.COLD_RESTART) {
                 requireFreshSafety(original)
                 val checked = observe(bundle)
@@ -773,12 +811,19 @@ object CarPlayBridgeBootstrapManager {
             }
             val waitUntil = SystemClock.elapsedRealtime() + 5_000
             var current = before
+            var observeCount = 0
             while (SystemClock.elapsedRealtime() < waitUntil) {
                 current = observe(bundle, minimal = true)
+                observeCount++
                 if (current.id != null && (action == Policy.Action.COLD_ATTACH || current.id != original)) break
                 Thread.sleep(80)
             }
+            trace("observe_loop", "observeCount" to observeCount, "finalId" to current.id?.key,
+                "finalCold" to CarPlayColdAttachTrace.coldTri(current.cold), "finalColdRaw" to current.coldRaw)
             val identity = requireNotNull(current.id)
+            trace("precheck_cold", "currentId" to identity.key,
+                "cold" to CarPlayColdAttachTrace.coldTri(current.cold), "coldRaw" to current.coldRaw,
+                "idMatchesOriginal" to (identity == original), "initialColdProofSet" to (initialColdProof > 0L))
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
             val coldProof = refreshColdAttachProof(bundle, identity, action)
             synchronized(safetyWriteLock) {
@@ -942,6 +987,15 @@ object CarPlayBridgeBootstrapManager {
             }.getOrNull()
             failure.put("preFailureSafety", priorSafety ?: JSONObject.NULL)
                 .put("failureElapsedMs", SystemClock.elapsedRealtime()).put("failureWallMs", System.currentTimeMillis())
+            // diag3: compact summary into the failure packet for a quick pull; full bounded trace to its own
+            // file so it never bloats the packet. Best-effort: a trace failure never affects cancellation.
+            runCatching {
+                val steps = ArrayList(attemptTraceSteps)
+                failure.put("coldTrace", JSONObject(CarPlayColdAttachTrace.summary(attemptTraceHeader, steps)))
+                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(
+                    File(requireNotNull(context).filesDir, "carplay-coldattach-trace.json"),
+                    CarPlayColdAttachTrace.document(attemptTraceHeader, steps), CarPlayColdAttachTrace.MAX_BYTES)
+            }
             publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
             pendingChallenges.clear()
             startingBindings.clear()
