@@ -173,7 +173,8 @@ object CarPlayCleanMapCoordinator {
                     statusMessage = "A saída experimental foi interrompida; sessão principal preservada"
                 }
                 ClusterPersistentEventLogger.log("carplay_clean_map_failure",
-                    mapOf("failure" to failure.name, "consumer" to (consumerFailure?.name ?: "none")))
+                    mapOf("failure" to failure.name, "consumer" to (consumerFailure?.name ?: "none"),
+                        "cause" to (next.consumerGrantCause() ?: "none"))) // diag4: bounded grant cause
             }
             override fun onHidden() { ClusterPersistentEventLogger.log("carplay_clean_map_hidden") }
             override fun onRetired() {

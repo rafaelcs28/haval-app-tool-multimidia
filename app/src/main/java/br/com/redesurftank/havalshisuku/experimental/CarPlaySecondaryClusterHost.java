@@ -121,6 +121,12 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
 
     public boolean hasStartedConsumer() { return started; }
 
+    /** diag4: the consumer's bounded grant-failure cause (null if no consumer or none). */
+    public String consumerGrantCause() {
+        CarPlaySecondarySurfaceConsumer current = consumer;
+        return current == null ? null : current.grantFailureCause();
+    }
+
     public CarPlayClusterHostPolicy.Reason eligibilityReason() {
         return eligibilityReason(slot, consumer, snapshots);
     }
