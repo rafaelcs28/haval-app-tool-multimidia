@@ -174,7 +174,7 @@ class CarPlayPreflightFieldDiagnosticTest {
         val content = report(valid())
         CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, content)
         assertEquals(content, f.readText())
-        assertFalse(File(dir, "ok.json.tmp").exists())
+        assertEquals(0, dir.listFiles { _, n -> n.endsWith(".tmp") }?.size ?: 0)  // unique tmp cleaned
     }
 
     @Test fun writeAtomicBounded_round_trips_multibyte_utf8() {
@@ -185,7 +185,7 @@ class CarPlayPreflightFieldDiagnosticTest {
         CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, content)
         assertEquals(content, f.readText(Charsets.UTF_8))
         assertTrue(content.toByteArray(Charsets.UTF_8).size > content.length)  // genuinely multibyte
-        assertFalse(File(dir, "u.json.tmp").exists())
+        assertEquals(0, dir.listFiles { _, n -> n.endsWith(".tmp") }?.size ?: 0)  // unique tmp cleaned
     }
 
     @Test fun writeAtomicBounded_preserves_previous_on_rename_failure() {
@@ -200,7 +200,7 @@ class CarPlayPreflightFieldDiagnosticTest {
             // previous content preserved, stale tmp cleaned
             assertTrue(dest.isDirectory)
             assertTrue(File(dest, "keep").exists())
-            assertFalse(File(dir, "dest.json.tmp").exists())
+            assertEquals(0, dir.listFiles { _, n -> n.endsWith(".tmp") }?.size ?: 0)  // unique tmp cleaned
         }
     }
 
@@ -231,9 +231,13 @@ class CarPlayPreflightFieldDiagnosticTest {
         val a = report(valid(), read = "before"); val b = report(valid(), read = "after")
         CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, a)
         val bad = java.util.concurrent.atomic.AtomicInteger(0)
-        val reader = Thread { repeat(400) { val t = runCatching { f.readText() }.getOrNull(); if (t != null && t != a && t != b) bad.incrementAndGet() } }
-        val writer = Thread { repeat(60) { CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, if (it % 2 == 0) a else b) } }
+        val errs = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+        // Reader PROPAGATES any throwable (a read must never fail under atomic rename), and flags
+        // any partial/mixed content.
+        val reader = Thread { try { repeat(400) { val t = f.readText(); if (t != a && t != b) bad.incrementAndGet() } } catch (t: Throwable) { errs.add(t) } }
+        val writer = Thread { try { repeat(60) { CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, if (it % 2 == 0) a else b) } } catch (t: Throwable) { errs.add(t) } }
         reader.start(); writer.start(); reader.join(); writer.join()
+        assertTrue("reader/writer threw: ${errs.firstOrNull()}", errs.isEmpty())
         assertEquals(0, bad.get())  // atomic rename => a concurrent reader only ever sees a complete report
     }
 

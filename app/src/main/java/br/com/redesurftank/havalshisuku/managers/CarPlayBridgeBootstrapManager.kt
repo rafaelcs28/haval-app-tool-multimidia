@@ -509,11 +509,13 @@ object CarPlayBridgeBootstrapManager {
             packet.put("errorType", error.javaClass.simpleName)
                 .put("errorMessage", error.message.orEmpty().take(2048))
                 .put("realExit", ev.realExit).put("childSignalText", ev.childSignalText).put("killedPid", ev.killedPid)
-                .put("rootRawTail", rawTail?.takeLast(16_384) ?: JSONObject.NULL)
+                .put("rootRawTail", rawTail?.takeLast(8_192) ?: JSONObject.NULL)
         }
         val dir = requireNotNull(context).filesDir
-        // Atomic write (temp+rename) so an interruption never leaves a half-written record.
-        CarPlayPreflightFieldDiagnostic.writeAtomicBounded(File(dir, "carplay-preflight-state.json"), packet.toString(), 65_536)
+        // Independent atomic writes: a state write failure must NOT block the first-failure record.
+        runCatching {
+            CarPlayPreflightFieldDiagnostic.writeAtomicBounded(File(dir, "carplay-preflight-state.json"), packet.toString(), 65_536)
+        }
         if (error != null) {
             val first = File(dir, "carplay-preflight-first-failure.json")
             val previous = runCatching { JSONObject(first.readText()) }.getOrNull()
@@ -528,7 +530,12 @@ object CarPlayBridgeBootstrapManager {
                     else JSONObject().put("state", "absent").put("read", read)
                 }
                 packet.put("fieldcheckBefore", fieldcheck("before")).put("fieldcheckAfter", fieldcheck("after"))
-                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(first, packet.toString(), 65_536)
+                // Bound the SERIALIZED envelope by bytes (JSON escapes can inflate the raw tail past
+                // the limit): drop rootRawTail from THIS file if over, keeping the structured evidence.
+                if (packet.toString().toByteArray(Charsets.UTF_8).size > 65_536) packet.remove("rootRawTail")
+                runCatching {
+                    CarPlayPreflightFieldDiagnostic.writeAtomicBounded(first, packet.toString(), 65_536)
+                }
             }
         }
     }
