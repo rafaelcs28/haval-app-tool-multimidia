@@ -406,7 +406,7 @@ object CarPlayBridgeBootstrapManager {
         var beforeEvidence: CarPlayResidentProof.Environment? = null
         var afterEvidence: CarPlayResidentProof.Environment? = null
         var versionEvidence = ""
-        fun record(error: Exception? = null) = savePreflightDiagnostic(bundle, stage, error,
+        fun record(error: Exception? = null) = savePreflightDiagnostic(bundle, attemptId, stage, error,
             beforeEvidence, afterEvidence, versionEvidence)
         return try {
             record()
@@ -490,24 +490,42 @@ object CarPlayBridgeBootstrapManager {
     }
 
     /** Bounded private evidence; never a readiness receipt or shared safety payload. */
-    private fun savePreflightDiagnostic(bundle: Payload, stage: String, error: Exception?,
+    private fun savePreflightDiagnostic(bundle: Payload, attemptId: String, stage: String, error: Exception?,
         before: CarPlayResidentProof.Environment?, after: CarPlayResidentProof.Environment?, version: String) = runCatching {
         fun observed(value: CarPlayResidentProof.Environment?) = value?.let {
             JSONObject(CarPlayResidentProof.preflightReceipt(it, bundle.revision)).put("state", "observed")
         } ?: JSONObject.NULL
         val boot = before?.bootId ?: runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrDefault("")
-        val packet = JSONObject().put("schema", 1).put("bootId", boot).put("revision", bundle.revision).put("stage", stage)
+        // attemptId correlates this record with the same attempt's carplay-fieldcheck-*.json.
+        val packet = JSONObject().put("schema", 1).put("attemptId", attemptId)
+            .put("bootId", boot).put("revision", bundle.revision).put("stage", stage)
             .put("elapsedMs", SystemClock.elapsedRealtime()).put("before", observed(before)).put("after", observed(after))
             .put("probeStdout", version.take(512)).put("failed", error != null)
-        if (error != null) packet.put("errorType", error.javaClass.simpleName)
-            .put("errorMessage", error.message.orEmpty().take(2048))
-            .put("rootRawTail", CarPlayBootstrapRoot.rawFailure(error)?.takeLast(16_384) ?: JSONObject.NULL)
-        File(requireNotNull(context).filesDir, "carplay-preflight-state.json").writeText(packet.toString())
         if (error != null) {
-            val first = File(requireNotNull(context).filesDir, "carplay-preflight-first-failure.json")
+            val rawTail = CarPlayBootstrapRoot.rawFailure(error)
+            // Real exit + signal TEXT from the already-captured tail (no re-run, no guard change);
+            // killedPid stays "unknown" — no direct PID evidence.
+            val ev = CarPlayPreflightFieldDiagnostic.failureEvidence(rawTail)
+            packet.put("errorType", error.javaClass.simpleName)
+                .put("errorMessage", error.message.orEmpty().take(2048))
+                .put("realExit", ev.realExit).put("childSignalText", ev.childSignalText).put("killedPid", ev.killedPid)
+                .put("rootRawTail", rawTail?.takeLast(16_384) ?: JSONObject.NULL)
+        }
+        val dir = requireNotNull(context).filesDir
+        File(dir, "carplay-preflight-state.json").writeText(packet.toString())
+        if (error != null) {
+            val first = File(dir, "carplay-preflight-first-failure.json")
             val previous = runCatching { JSONObject(first.readText()) }.getOrNull()
-            if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision)
+            if (previous == null || previous.optString("bootId") != boot || previous.optString("revision") != bundle.revision) {
                 first.writeText(packet.toString())
+                // Freeze THIS first failure's field-check so later retries (new attemptId) cannot
+                // overwrite it. Only copy a fieldcheck from the SAME attempt (never a stale one).
+                for (read in listOf("before", "after")) runCatching {
+                    val src = File(dir, "carplay-fieldcheck-$read.json")
+                    if (src.isFile && src.readText().contains("\"attemptId\":\"$attemptId\""))
+                        src.copyTo(File(dir, "carplay-fieldcheck-first-$read.json"), overwrite = true)
+                }
+            }
         }
     }
 

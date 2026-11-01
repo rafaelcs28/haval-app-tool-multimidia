@@ -38,6 +38,28 @@ internal object CarPlayPreflightFieldDiagnostic {
     }
 
     /**
+     * Evidence-only extraction from an ALREADY-captured root rawTail (no re-run, no new command,
+     * no guard change, no wait). Reviewer rule: report signal/PID ONLY with direct evidence.
+     *  - realExit: the integer from the framed `<tag>_end=N` marker (the command's own exit), last
+     *    occurrence; "unknown" if the marker is absent.
+     *  - childSignalText: the literal shell notice on its own line ("Killed"/"Terminated") IF present —
+     *    TEXT evidence that a child was signalled, NOT proof of which process or which signal.
+     *  - killedPid: always "unknown" — the rawTail carries no direct PID evidence.
+     */
+    data class FailureEvidence(val realExit: String, val childSignalText: String, val killedPid: String)
+
+    fun failureEvidence(rawTail: String?): FailureEvidence {
+        if (rawTail.isNullOrEmpty()) return FailureEvidence("unknown", "none", "unknown")
+        val exit = Regex("_end=(\\d+)").findAll(rawTail).lastOrNull()?.groupValues?.get(1) ?: "unknown"
+        val signal = when {
+            Regex("(?m)^Killed\\b").containsMatchIn(rawTail) -> "Killed"
+            Regex("(?m)^Terminated\\b").containsMatchIn(rawTail) -> "Terminated"
+            else -> "none"
+        }
+        return FailureEvidence(exit, signal, "unknown")
+    }
+
+    /**
      * Bounded, atomic write (temp + rename) so a reader never sees a truncated JSON.
      * - Rejects an over-limit report by BYTE length instead of cutting it into invalid JSON
      *   (the report is bounded by construction; this is a guard, not a code path).
@@ -48,7 +70,9 @@ internal object CarPlayPreflightFieldDiagnostic {
     fun writeAtomicBounded(file: File, content: String, maxBytes: Int = MAX_BYTES) {
         val bytes = content.toByteArray(Charsets.UTF_8)
         require(bytes.size <= maxBytes) { "Diagnostic report exceeds ${maxBytes}B (${bytes.size})" }
-        val tmp = File(file.parentFile, file.name + ".tmp")
+        // Unique tmp per writer so concurrent writes never corrupt a shared tmp; the rename is the
+        // atomic swap, so a reader always sees one complete file (last writer wins), never a mix.
+        val tmp = File(file.parentFile, file.name + "." + Thread.currentThread().id + "." + System.nanoTime() + ".tmp")
         var renamed = false
         try {
             tmp.writeBytes(bytes)

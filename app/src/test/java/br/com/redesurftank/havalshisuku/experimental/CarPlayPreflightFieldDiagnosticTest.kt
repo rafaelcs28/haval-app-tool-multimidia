@@ -203,4 +203,60 @@ class CarPlayPreflightFieldDiagnosticTest {
             assertFalse(File(dir, "dest.json.tmp").exists())
         }
     }
+
+    @Test fun writeAtomicBounded_is_safe_under_concurrency() {
+        val dir = Files.createTempDirectory("fc-conc").toFile()
+        val f = File(dir, "c.json")
+        val a = report(valid(), read = "before")
+        val b = report(valid(), read = "after")
+        val threads = (1..20).map { i ->
+            Thread { repeat(15) { CarPlayPreflightFieldDiagnostic.writeAtomicBounded(f, if (i % 2 == 0) a else b) } }
+        }
+        threads.forEach { it.start() }; threads.forEach { it.join() }
+        // The file is always ONE complete report (last rename wins) — never a mix/truncation —
+        // and no per-writer tmp is left behind.
+        val txt = f.readText()
+        assertTrue(txt == a || txt == b)
+        assertEquals(0, dir.listFiles { _, n -> n.endsWith(".tmp") }?.size ?: 0)
+    }
+
+    // ---- failure evidence: evidence-only, from the already-captured rawTail (no re-run) ----
+
+    @Test fun failureEvidence_reads_real_exit_and_killed_signal_text() {
+        val tail = "\ntag_begin\nKilled \n\ntag_end=1\n"
+        val ev = CarPlayPreflightFieldDiagnostic.failureEvidence(tail)
+        assertEquals("1", ev.realExit)
+        assertEquals("Killed", ev.childSignalText)
+        assertEquals("unknown", ev.killedPid)   // never claim a PID without direct evidence
+    }
+
+    @Test fun failureEvidence_clean_exit_has_no_signal() {
+        val ev = CarPlayPreflightFieldDiagnostic.failureEvidence("\ntag_begin\n17.5.2\ntag_end=0\n")
+        assertEquals("0", ev.realExit)
+        assertEquals("none", ev.childSignalText)
+        assertEquals("unknown", ev.killedPid)
+    }
+
+    @Test fun failureEvidence_does_not_false_positive_on_kill_command_text() {
+        // The command text itself contains "kill -15" (warm restart); that must NOT read as a signal.
+        val ev = CarPlayPreflightFieldDiagnostic.failureEvidence("\ntag_begin\nkill -15 1234\ntag_end=0\n")
+        assertEquals("none", ev.childSignalText)
+    }
+
+    @Test fun failureEvidence_handles_terminated_last_exit_and_absent_tail() {
+        assertEquals("Terminated", CarPlayPreflightFieldDiagnostic.failureEvidence("x\nTerminated\ntag_end=143\n").childSignalText)
+        // multiple markers -> last one
+        assertEquals("2", CarPlayPreflightFieldDiagnostic.failureEvidence("a_end=0\n...\nb_end=2\n").realExit)
+        val none = CarPlayPreflightFieldDiagnostic.failureEvidence(null)
+        assertEquals("unknown", none.realExit); assertEquals("none", none.childSignalText); assertEquals("unknown", none.killedPid)
+    }
+
+    @Test fun attemptId_is_the_correlation_key_for_the_stale_guard() {
+        // The Manager's "preserve first failure" copy only fires when the fieldcheck carries THIS
+        // attempt's id — so a fieldcheck from a different (stale) attempt is never copied.
+        val mine = CarPlayPreflightFieldDiagnostic.report(
+            "ATT-ME", "boot", "rev", "before", "snapshot-before", valid(), 100, 1, 2, 0, 0, 0, patched, size)
+        assertTrue(mine.contains("\"attemptId\":\"ATT-ME\""))
+        assertFalse(mine.contains("\"attemptId\":\"ATT-OTHER\""))
+    }
 }
