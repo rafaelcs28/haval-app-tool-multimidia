@@ -174,7 +174,8 @@ object CarPlayCleanMapCoordinator {
                 }
                 ClusterPersistentEventLogger.log("carplay_clean_map_failure",
                     mapOf("failure" to failure.name, "consumer" to (consumerFailure?.name ?: "none"),
-                        "cause" to (next.consumerGrantCause() ?: "none"))) // diag4: bounded grant cause
+                        // diag4: bounded grant cause, attached ONLY to GRANT_FAILED (never a stale revoke cause)
+                        "cause" to CarPlayGrantFailureCause.reportedGrantCause(consumerFailure?.name, next.consumerGrantCause())))
             }
             override fun onHidden() { ClusterPersistentEventLogger.log("carplay_clean_map_hidden") }
             override fun onRetired() {

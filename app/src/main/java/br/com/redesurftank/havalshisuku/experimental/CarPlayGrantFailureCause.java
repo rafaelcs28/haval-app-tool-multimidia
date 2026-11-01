@@ -23,10 +23,10 @@ public final class CarPlayGrantFailureCause {
     }
 
     private static final String ACTIVATION_PREFIX = "Native runtime activation failed: ";
-    // The activation value is produced by our own native layer (CarPlaySurfaceEndpoint), not by a
-    // remote peer; the range is a sanity bound so a malformed/implausible value never reaches the log.
-    private static final int ACTIVATION_MIN = -999;
-    private static final int ACTIVATION_MAX = 999;
+    // The native activation contract returns 0..10 (8 == NATIVE_INSTALLED success, which never throws
+    // this exception). Negatives and larger values are not valid returns and must never be reported.
+    private static final int ACTIVATION_MIN = 0;
+    private static final int ACTIVATION_MAX = 10;
 
     public static String describe(Throwable failure) {
         try {
@@ -73,13 +73,8 @@ public final class CarPlayGrantFailureCause {
     static Integer activationCode(String message) {
         if (message == null || !message.startsWith(ACTIVATION_PREFIX)) return null;
         String tail = message.substring(ACTIVATION_PREFIX.length());
-        if (tail.isEmpty() || tail.length() > 4) return null; // bounds the parse; "-999".length()==4
-        int start = 0;
-        if (tail.charAt(0) == '-') {
-            if (tail.length() == 1) return null;
-            start = 1;
-        }
-        for (int i = start; i < tail.length(); i++) {
+        if (tail.isEmpty() || tail.length() > 2) return null; // "10".length()==2; no sign, bounds the parse
+        for (int i = 0; i < tail.length(); i++) {
             char c = tail.charAt(i);
             if (c < '0' || c > '9') return null;
         }
@@ -90,5 +85,15 @@ public final class CarPlayGrantFailureCause {
         } catch (NumberFormatException notANumber) {
             return null;
         }
+    }
+
+    /**
+     * The cause to report for a clean-map failure event: the classified grant cause ONLY for a
+     * GRANT_FAILED consumer failure, otherwise "none". This stops a later REVOKE_UNCONFIRMED (or any
+     * other) failure from inheriting the stale grant cause (the consumer keeps the last grant cause).
+     */
+    public static String reportedGrantCause(String consumerFailureName, String grantCause) {
+        if (!"GRANT_FAILED".equals(consumerFailureName)) return "none";
+        return grantCause == null ? "none" : grantCause;
     }
 }

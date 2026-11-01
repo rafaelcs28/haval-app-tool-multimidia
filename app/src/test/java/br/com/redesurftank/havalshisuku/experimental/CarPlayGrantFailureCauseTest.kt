@@ -30,20 +30,33 @@ class CarPlayGrantFailureCauseTest {
         assertEquals("unknown_generation", d(IllegalStateException("Unknown generation")))
     }
 
-    @Test fun activation_code_only_from_exact_format_and_validated_range() {
+    @Test fun activation_code_only_from_exact_format_and_contract_range_0_to_10() {
+        assertEquals("native_activation_failed:0", d(IllegalStateException("Native runtime activation failed: 0")))
         assertEquals("native_activation_failed:3", d(IllegalStateException("Native runtime activation failed: 3")))
-        assertEquals("native_activation_failed:8", d(IllegalStateException("Native runtime activation failed: 8")))
-        assertEquals("native_activation_failed:-5", d(IllegalStateException("Native runtime activation failed: -5")))
-        // out of range / malformed / secret-ish tail -> category WITHOUT code, no leak
+        assertEquals("native_activation_failed:10", d(IllegalStateException("Native runtime activation failed: 10")))
+        // out of contract range (0..10), negative, malformed, secret-ish -> category WITHOUT code, no leak
+        assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: 11")))
+        assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: -5")))
         assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: 100000")))
         assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: abc")))
         assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: TOKENxyz")))
         assertEquals("illegal_state_other", d(IllegalStateException("Native runtime activation failed: ")))
         // activationCode() helper directly
         assertEquals(8, CarPlayGrantFailureCause.activationCode("Native runtime activation failed: 8"))
-        assertNull(CarPlayGrantFailureCause.activationCode("Native runtime activation failed: 100000"))
+        assertNull(CarPlayGrantFailureCause.activationCode("Native runtime activation failed: 11"))
+        assertNull(CarPlayGrantFailureCause.activationCode("Native runtime activation failed: -1"))
         assertNull(CarPlayGrantFailureCause.activationCode("totally different message"))
         assertNull(CarPlayGrantFailureCause.activationCode(null))
+    }
+
+    @Test fun cause_reported_only_for_grant_failed_never_cross_attributed_to_revoke() {
+        assertEquals("native_import_failed",
+            CarPlayGrantFailureCause.reportedGrantCause("GRANT_FAILED", "native_import_failed"))
+        // the later REVOKE_UNCONFIRMED must NOT inherit the stale grant cause
+        assertEquals("none",
+            CarPlayGrantFailureCause.reportedGrantCause("REVOKE_UNCONFIRMED", "native_import_failed"))
+        assertEquals("none", CarPlayGrantFailureCause.reportedGrantCause(null, "native_import_failed"))
+        assertEquals("none", CarPlayGrantFailureCause.reportedGrantCause("GRANT_FAILED", null))
     }
 
     @Test fun large_or_secret_messages_never_leak_text() {
