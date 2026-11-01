@@ -9055,19 +9055,22 @@ object DisplayAppLauncher {
         }
     }
 
-    /** Single cached AM sample with its original monotonic age; caller must run off the UI thread. */
-    internal fun readCarPlayCleanMapTasks(): br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskObservation {
+    /** Dedicated uncached AM sample; it never holds the shared stack-cache lock while shell runs. */
+    internal fun readCarPlayCleanMapTasks(startedAt: Long): br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskRead {
         check(android.os.Looper.myLooper() != android.os.Looper.getMainLooper())
-        synchronized(stackListCacheLock) {
-            val raw = getStackList()
-            val sourceAt = cachedStackListObservedAtMs
-            if (sourceAt <= 0 || cachedStackList !== raw) {
-                return br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskObservation.unknown()
-            }
-            return br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskObservation.parse(
-                raw, sourceAt)
+        require(startedAt >= 0 && startedAt <= SystemClock.elapsedRealtime())
+        val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", "am stack list 2>&1"))
+        val completedAt = SystemClock.elapsedRealtime()
+        val observation = if (completedAt - startedAt <= CARPLAY_CLEAN_MAP_MAX_READ_MS) {
+            br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskObservation.parse(raw, startedAt)
+        } else {
+            br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskObservation.unknown()
         }
+        return br.com.redesurftank.havalshisuku.experimental.CarPlayCleanMapTaskRead(
+            observation, startedAt, completedAt)
     }
+
+    private const val CARPLAY_CLEAN_MAP_MAX_READ_MS = 1_000L
 
     private data class StackInfo(val stackId: Int, val windowingMode: String, val isFreeform: Boolean)
     private data class StackTaskInfo(

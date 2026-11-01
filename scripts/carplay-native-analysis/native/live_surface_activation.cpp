@@ -1,4 +1,5 @@
 #include "live_surface_activation.h"
+#include "pipeline_trace.h"
 
 #include "hook_permit.h"
 #include "initial_entry_bootstrap.h"
@@ -92,7 +93,6 @@ HookInstallResult activateLiveSurface(std::int64_t surfaceHandle, std::uint32_t 
             !heightMillimeters || heightMillimeters > 2000) {
             return HookInstallResult::rejected;
         }
-
         auto api = std::make_shared<LiveDisplayApis>(entry->nativeOwners());
         stagedApi = api;
         {
@@ -101,6 +101,7 @@ HookInstallResult activateLiveSurface(std::int64_t surfaceHandle, std::uint32_t 
             activeApiOwner = api;
             activeApis.store(api.get());
         }
+        PipelineTrace::reset(requestId, geometry->first, geometry->second);
         constexpr const char* secondaryName = "impulse-navigation-v1";
         constexpr std::uint32_t utf8Encoding = 0x08000100U;
         auto* secondary = api->createString(nullptr, secondaryName, utf8Encoding);
@@ -152,6 +153,11 @@ HookInstallResult activateLiveSurface(std::int64_t surfaceHandle, std::uint32_t 
                 return preparePinnedSurfaceRuntime(std::move(surface));
             }));
         const auto result = installer.install(authorization);
+        if (result == HookInstallResult::installed || result == HookInstallResult::alreadyInstalled) {
+            PipelineTrace::summary("activation_installed");
+        } else {
+            PipelineTrace::fault("activation_failed", static_cast<std::int32_t>(result));
+        }
         if (result != HookInstallResult::installed &&
             result != HookInstallResult::alreadyInstalled &&
             result != HookInstallResult::publicationFailedPinned) {

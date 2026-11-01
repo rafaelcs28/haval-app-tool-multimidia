@@ -21,6 +21,14 @@ object CarPlayCleanMapCoordinator {
     @Volatile var statusMessage: String = "Mapa experimental desligado"
         private set
     @Volatile private var taskObservation = CarPlayCleanMapTaskObservation.unknown()
+    private data class ReadStatus(
+        val startedAtMs: Long = -1,
+        val completedAtMs: Long = -1,
+        val inFlight: Boolean = false,
+        val lastKnown: Boolean = false
+    )
+    private val readStatusLock = Any()
+    private var readStatus = ReadStatus()
     private var slot: FrameLayout? = null
     private var snapshots: CarPlaySecondaryClusterHost.SnapshotProvider? = null
     private var offer: Offer? = null
@@ -28,6 +36,8 @@ object CarPlayCleanMapCoordinator {
     private var sampler: CarPlayCleanMapSampler? = null
     private var admission: CarPlayCleanMapAdmission? = null
     private var lastDecision: String? = null
+    private var taskSampleCount = 0L
+    private var lastTaskSampleState: String? = null
     private val stopAtDeadline = Runnable { disable("deadline") }
     private val pendingPoll = object : Runnable {
         override fun run() {
@@ -57,16 +67,49 @@ object CarPlayCleanMapCoordinator {
             val epoch = leaseEpoch
             admission = CarPlayCleanMapAdmission(deadlineElapsedMs)
             taskObservation = CarPlayCleanMapTaskObservation.unknown()
+            synchronized(readStatusLock) { readStatus = ReadStatus() }
             lastDecision = null
+            taskSampleCount = 0L
+            lastTaskSampleState = null
             ClusterPersistentEventLogger.log("carplay_clean_map_gate", mapOf("enabled" to true))
-            sampler = CarPlayCleanMapSampler(deadlineElapsedMs) { sample ->
-                main.post {
+            CarPlayPipelineTraceCollector.beginSession()
+            sampler = CarPlayCleanMapSampler(
+                deadlineElapsedMs,
+                onReadStarted = { startedAt ->
+                    if (enabled && leaseEpoch == epoch) synchronized(readStatusLock) {
+                        val current = readStatus
+                        if (startedAt > current.startedAtMs) {
+                            readStatus = current.copy(startedAtMs = startedAt, inFlight = true)
+                        }
+                    }
+                },
+                publish = { sample -> main.post {
                     if (enabled && leaseEpoch == epoch) {
-                        taskObservation = sample
+                        synchronized(readStatusLock) {
+                            val current = readStatus
+                            readStatus = current.copy(
+                                completedAtMs = maxOf(current.completedAtMs, sample.completedAtElapsedMs),
+                                inFlight = current.startedAtMs != sample.startedAtElapsedMs,
+                                lastKnown = sample.observation.known)
+                        }
+                        if (sample.observation.known) taskObservation = sample.observation
+                        taskSampleCount++
+                        val sampleState = "${sample.observation.known}:" +
+                            "${sample.observation.carPlayOnMain}:${sample.observation.carPlayOnSecondary}"
+                        if (taskSampleCount == 1L || taskSampleCount % 20L == 0L ||
+                            sample.durationMs > 300L || sampleState != lastTaskSampleState) {
+                            ClusterPersistentEventLogger.log("carplay_clean_map_task_sample", mapOf(
+                                "sample" to taskSampleCount,
+                                "known" to sample.observation.known,
+                                "duration_ms" to sample.durationMs,
+                                "main" to sample.observation.carPlayOnMain,
+                                "secondary" to sample.observation.carPlayOnSecondary))
+                        }
+                        lastTaskSampleState = sampleState
                         reevaluate()
                     }
-                }
-            }
+                }}
+            )
             main.postDelayed(stopAtDeadline, deadlineElapsedMs - now)
             main.postDelayed(pendingPoll, 500)
             reevaluate()
@@ -75,6 +118,10 @@ object CarPlayCleanMapCoordinator {
 
     fun isExperimentEnabled(): Boolean = enabled && SystemClock.elapsedRealtime() < deadlineElapsedMs
     fun currentTaskObservation(): CarPlayCleanMapTaskObservation = taskObservation
+    fun currentReadStatus(): LongArray = synchronized(readStatusLock) {
+        longArrayOf(readStatus.startedAtMs, readStatus.completedAtMs,
+            if (readStatus.inFlight) 1 else 0, if (readStatus.lastKnown) 1 else 0)
+    }
 
     fun attachSlot(target: FrameLayout, provider: CarPlaySecondaryClusterHost.SnapshotProvider): AutoCloseable {
         check(Looper.myLooper() == Looper.getMainLooper())
@@ -164,6 +211,12 @@ object CarPlayCleanMapCoordinator {
                 statusMessage = "Saída experimental criada; confira a imagem no cluster"
                 ClusterPersistentEventLogger.log("carplay_clean_map_surface_ready",
                     mapOf("generation" to generation, "width" to width, "height" to height))
+                CarPlayPipelineTraceCollector.collect("surface_ready")
+            }
+            override fun onFramePresented(generation: Long, frameCount: Long) {
+                ClusterPersistentEventLogger.log("carplay_clean_map_texture_updated",
+                    mapOf("generation" to generation, "frames" to frameCount))
+                if (frameCount == 1L) CarPlayPipelineTraceCollector.collect("first_texture_update")
             }
             override fun onFailure(failure: CarPlaySecondaryClusterHost.Failure,
                 consumerFailure: CarPlaySecondarySurfaceConsumer.Failure?) {
@@ -176,6 +229,7 @@ object CarPlayCleanMapCoordinator {
                     mapOf("failure" to failure.name, "consumer" to (consumerFailure?.name ?: "none"),
                         // diag4: bounded grant cause, attached ONLY to GRANT_FAILED (never a stale revoke cause)
                         "cause" to CarPlayGrantFailureCause.reportedGrantCause(consumerFailure?.name, next.consumerGrantCause())))
+                CarPlayPipelineTraceCollector.collect("failure")
             }
             override fun onHidden() { ClusterPersistentEventLogger.log("carplay_clean_map_hidden") }
             override fun onRetired() {
@@ -185,6 +239,7 @@ object CarPlayCleanMapCoordinator {
                     if (offer === pending) clearOffer()
                 }
                 ClusterPersistentEventLogger.log("carplay_clean_map_retired")
+                CarPlayPipelineTraceCollector.collect("retired", force = true)
             }
         })
         host = next
@@ -198,11 +253,13 @@ object CarPlayCleanMapCoordinator {
 
     private fun recordDecision(reason: CarPlayClusterHostPolicy.Reason) {
         val requested = AndroidAutoClusterController.isClusterRequested()
-        val signature = "${reason.name}:$requested"
+        val grace = host?.isUsingFreshnessGrace() == true
+        val signature = "${reason.name}:$requested:$grace"
         if (signature == lastDecision) return
         lastDecision = signature
         ClusterPersistentEventLogger.log("carplay_clean_map_eligibility", mapOf(
             "reason" to reason.name, "aa_requested" to requested,
+            "freshness_grace" to grace,
             "task_known" to taskObservation.known, "carplay_main" to taskObservation.carPlayOnMain,
             "carplay_secondary" to taskObservation.carPlayOnSecondary,
             "aa_session_active" to AndroidAutoClusterController.isSessionActive(),
@@ -233,11 +290,13 @@ object CarPlayCleanMapCoordinator {
         sampler?.close()
         sampler = null
         taskObservation = CarPlayCleanMapTaskObservation.unknown()
+        synchronized(readStatusLock) { readStatus = ReadStatus() }
         if (wasEnabled) {
             broadcast(ACTION_REVOKE)
             ClusterPersistentEventLogger.log("carplay_clean_map_gate", mapOf("enabled" to false))
         }
         retire(reason)
+        CarPlayPipelineTraceCollector.collect("test_end_$reason", force = true)
         statusMessage = if (reason == "deadline") "Teste encerrado após cinco minutos" else "Mapa experimental desligado"
     }
 

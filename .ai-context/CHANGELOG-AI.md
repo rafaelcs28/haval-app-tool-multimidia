@@ -1,3 +1,15 @@
+## 2026-11-01 — clean-map pipeline trace and bounded active freshness grace
+
+Joint Codex/Claude review accepted the Binder `TF_ACCEPT_FDS` correction and found
+two still-conflated failures after Surface grant: a transient stale task snapshot and
+missing native frames. Added strict-admission/active-only freshness grace, preserving
+immediate AA/safety/slot/fresh-negative retirement. Added payload-free, power-of-two
+native milestones from OEM getter through MediaCodec render plus app TextureView
+presentation, with forced terminal collection into persistent diagnostics. Slow AM
+reads use start timestamps, publish unknown after 1s and rest 100ms. Native ASan/
+UBSan routing tests, 15 OEM modes, portable endpoint tests, pure policy javac and the
+AA/CarPlay regression lock pass. Full JVM/Android Debug remains pending Mac Mini.
+
 ## 2026-10-27 — 149 cold direct-arm source implementation
 
 Fresh no-phone boot evidence showed DCM active128/state4 despite no CP/AA visual and

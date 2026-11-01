@@ -1,3 +1,14 @@
+## CURRENT — Surface grant succeeds but visible clean-map output is unproven
+
+Field evidence reached `carplay_clean_map_surface_ready` and then retired around2.4s
+later as `SNAPSHOT_STALE`, with no visible flash. Existing logs cannot prove whether
+the retire happened before a frame could present or whether the type111/AVC/MediaCodec
+pipeline produced no frame at all. The diagnostic branch adds a bounded active-only
+freshness grace and stage counters, but neither hypothesis is resolved until a new
+same-generation vehicle trace is captured. A missing type111 advertisement remains a
+moderate hypothesis, not a confirmed root cause. Principal CarPlay and Android Auto
+behavior must remain unchanged.
+
 ## CURRENT 147 — false device wait corrected and new-boot READY verified
 
 146 can block automatic preparation on the central's exact inactive DCM/Wi-Fi

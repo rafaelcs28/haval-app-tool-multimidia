@@ -21,6 +21,7 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
 
     public interface Listener {
         void onReady(long generation, int width, int height);
+        void onFramePresented(long generation, long frameCount);
         void onFailure(Failure failure, CarPlaySecondarySurfaceConsumer.Failure consumerFailure);
         void onHidden();
         void onRetired();
@@ -37,6 +38,7 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
     private boolean hidden;
     private boolean retirementComplete;
     private boolean retiredNotified;
+    private boolean surfaceReady;
 
     private final Runnable policyPoll = new Runnable() {
         @Override
@@ -88,7 +90,15 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
                 public void onReady(long activeGeneration, int width, int height) {
                     if (closing) { return; }
                     if (!allowed()) { deny(); return; }
+                    surfaceReady = true;
                     try { listener.onReady(activeGeneration, width, height); }
+                    catch (RuntimeException failure) { close(); }
+                }
+
+                @Override
+                public void onFramePresented(long activeGeneration, long frameCount) {
+                    if (closing || !surfaceReady) { return; }
+                    try { listener.onFramePresented(activeGeneration, frameCount); }
                     catch (RuntimeException failure) { close(); }
                 }
 
@@ -128,12 +138,26 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
     }
 
     public CarPlayClusterHostPolicy.Reason eligibilityReason() {
-        return eligibilityReason(slot, consumer, snapshots);
+        return eligibilityReason(slot, consumer, snapshots, surfaceReady);
+    }
+
+    public boolean isUsingFreshnessGrace() {
+        if (!surfaceReady) return false;
+        try {
+            return CarPlayClusterHostPolicy.usesActiveFreshnessGrace(
+                snapshots.current(), SystemClock.elapsedRealtime());
+        } catch (RuntimeException failure) { return false; }
     }
 
     /** Cheap UI checks and a cached immutable observation only; never reads ActivityManager. */
     public static CarPlayClusterHostPolicy.Reason eligibilityReason(FrameLayout slot, View consumer,
                                                                    SnapshotProvider snapshots) {
+        return eligibilityReason(slot, consumer, snapshots, false);
+    }
+
+    private static CarPlayClusterHostPolicy.Reason eligibilityReason(FrameLayout slot, View consumer,
+                                                                     SnapshotProvider snapshots,
+                                                                     boolean allowActiveFreshnessGrace) {
         if (consumer == null ? slot.getChildCount() != 0 :
                 slot.getChildCount() != 1 || slot.getChildAt(0) != consumer) {
             return CarPlayClusterHostPolicy.Reason.SLOT_OCCUPIED;
@@ -148,7 +172,8 @@ public final class CarPlaySecondaryClusterHost implements AutoCloseable {
         if (slot.getWidth() > 4096 || slot.getHeight() > 2160) return CarPlayClusterHostPolicy.Reason.SLOT_SIZE_INVALID;
         if (AndroidAutoClusterController.INSTANCE.isSessionActive()) return CarPlayClusterHostPolicy.Reason.AA_SESSION_ACTIVE;
         if (AndroidAutoClusterController.INSTANCE.isSurfaceAttached()) return CarPlayClusterHostPolicy.Reason.AA_SURFACE_ATTACHED;
-        try { return CarPlayClusterHostPolicy.reason(snapshots.current(), SystemClock.elapsedRealtime()); }
+        try { return CarPlayClusterHostPolicy.reason(
+            snapshots.current(), SystemClock.elapsedRealtime(), allowActiveFreshnessGrace); }
         catch (RuntimeException failure) { return CarPlayClusterHostPolicy.Reason.SNAPSHOT_ERROR; }
     }
 

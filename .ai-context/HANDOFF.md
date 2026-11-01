@@ -1,3 +1,33 @@
+## ACTIVE — clean-map pipeline diagnostic build, 2026-11-01
+
+Branch `diag/carplay-cleanmap-pipeline-trace` starts at field checkpoint
+`fa3df9f3bbefeffe468430c30d41e0c5b3c70e4d`. Joint Codex/Claude source review says
+the `TF_ACCEPT_FDS` grant fix is correct, but current evidence cannot distinguish
+transient `SNAPSHOT_STALE` retirement from no frames after a valid Surface grant.
+
+Implemented a conservative active-only grace: admission and grant remain strict;
+only a Surface already marked ready may retain the last known-positive D0 task sample
+through one bounded in-flight/unknown AM read. Live AA, safety UI, competing content,
+slot loss and fresh CarPlay task negatives still retire immediately. The dedicated
+sampler stamps observations at read start, declares reads over1s unknown and keeps a
+100ms minimum post-read gap.
+
+Added `ImpulseCPMap` native milestones for activation/getter/type111/dimensions/AVCC/
+packet+IDR/codec input+output+render and app-side TextureView presentation. Logs are
+payload-free and rate-limited at powers of two. Full tag capture is deduplicated into
+cluster diagnostics on ready/first frame/failure/retirement/end, including forced
+terminal capture inside the normal cooldown. Canonical design and field interpretation:
+`docs/architecture/carplay-clean-map-pipeline-trace.md`.
+
+Validation before commit: pure Java policy compile PASS; native VideoBridge and
+SecondaryRuntime ASan/UBSan PASS; all15 OEM runtime modes ASan/UBSan PASS; endpoint
+bundle8(1skip), runtime5, persistent assets7(2skip), residency3 PASS; regression lock
+PASS and Android Auto patch unchanged. Local Node callback-signature test cannot run
+because agent `node_modules` is intentionally absent; authorized Mac build must run
+`npm ci` and full JVM/Android Debug. No vehicle operation or field validation in this
+phase. Do not claim visible cluster output until a same-generation field trace reaches
+app `frame_presented` and the owner confirms the image.
+
 ## ACTIVE — 149 cold direct arm implementation; vehicle OFF
 
 Owner approved a connection experience analogous to Android Auto. Source review

@@ -1,3 +1,14 @@
+## CURRENT — build and field-test the clean-map pipeline trace
+
+Commit the diagnostic branch and run the full JVM/Android Debug job only on the
+authorized Mac Mini. If green, install on a later owner-controlled parked session,
+cold-boot without a phone, wait for bridge READY, connect CarPlay, start Apple Maps,
+start the five-minute test and return CarPlay to display0 with doors closed. Retrieve
+the persisted `clean_map` and native trace events and classify the first missing stage
+using `docs/architecture/carplay-clean-map-pipeline-trace.md`. Do not loosen policy or
+redesign advertisement until this trace separates stale retirement from frame
+production. No current vehicle wake/install/reboot is part of this source task.
+
 ## CURRENT — validate and publish 149 cold direct arm
 
 Source now admits only non-destructive cold attach from exact process/module identity

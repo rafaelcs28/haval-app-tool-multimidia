@@ -1,6 +1,7 @@
 #include "video_bridge.h"
 #include "packet_conversion.h"
 #include "avc_configuration.h"
+#include "pipeline_trace.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -69,18 +70,22 @@ VideoBridge::Status VideoBridge::initialize(Stream stream, const StreamIdentity*
     }
     if (!acceptingSecondary_.load()) {
         record->retired = true;
+        PipelineTrace::initialized(true, rejected);
         return rejected;
     }
     try {
         record->decoder = factory_(record->identity);
     } catch (...) {
         record->retired = true;
+        PipelineTrace::initialized(true, decoderFailure);
         return decoderFailure;
     }
     if (!record->decoder) {
         record->retired = true;
+        PipelineTrace::initialized(true, decoderFailure);
         return decoderFailure;
     }
+    PipelineTrace::initialized(true, 0);
     return 0;
 }
 
@@ -170,12 +175,15 @@ VideoBridge::Status VideoBridge::setWidthHeight(Stream stream, std::uint32_t wid
     }
     if (!width || !height || width > config_.maximumWidth || height > config_.maximumHeight ||
         (record->configured && (width != record->width || height != record->height))) {
+        PipelineTrace::dimensions(width, height, invalidInput);
         retire(*record);
         return invalidInput;
     }
     record->width = width;
     record->height = height;
-    return configureIfReady(*record);
+    const auto status = configureIfReady(*record);
+    PipelineTrace::dimensions(width, height, status);
+    return status;
 }
 
 VideoBridge::Status VideoBridge::setAVCC(Stream stream, const std::uint8_t* bytes, std::size_t length) {
@@ -191,11 +199,13 @@ VideoBridge::Status VideoBridge::setAVCC(Stream stream, const std::uint8_t* byte
         return rejected;
     }
     if (!bytes || length < 7 || length > config_.maximumConfigurationBytes || bytes[0] != 1) {
+        PipelineTrace::avcc(length, invalidInput);
         retire(*record);
         return invalidInput;
     }
     if (record->configured &&
         (record->avcc.size() != length || !std::equal(record->avcc.begin(), record->avcc.end(), bytes))) {
+        PipelineTrace::avcc(length, invalidInput);
         retire(*record);
         return invalidInput;
     }
@@ -203,16 +213,20 @@ VideoBridge::Status VideoBridge::setAVCC(Stream stream, const std::uint8_t* byte
         std::vector<std::uint8_t> configuration(bytes, bytes + length);
         const auto parsed = parseAvcConfiguration(configuration, config_.maximumConfigurationBytes);
         if (!parsed.valid) {
+            PipelineTrace::avcc(length, invalidInput);
             retire(*record);
             return invalidInput;
         }
         record->avcc = std::move(configuration);
         record->lengthBytes = parsed.lengthBytes;
     } catch (...) {
+        PipelineTrace::avcc(length, decoderFailure);
         retire(*record);
         return decoderFailure;
     }
-    return configureIfReady(*record);
+    const auto status = configureIfReady(*record);
+    PipelineTrace::avcc(length, status);
+    return status;
 }
 
 VideoBridge::Status VideoBridge::start(Stream stream, const StreamIdentity& identity,
@@ -269,6 +283,7 @@ VideoBridge::Status VideoBridge::processData(Stream stream, const std::uint8_t* 
         return unsupportedCompletion;
     }
     if (!record->configured) {
+        PipelineTrace::packet(length, false, notReady);
         return notReady;
     }
     if (!bytes || !length || length > config_.maximumPacketBytes) {
@@ -279,19 +294,30 @@ VideoBridge::Status VideoBridge::processData(Stream stream, const std::uint8_t* 
         const std::vector<std::uint8_t> input(bytes, bytes + length);
         auto packet = convertLengthPrefixedPacket(input, record->lengthBytes, config_.maximumPacketBytes);
         if (packet.status != PacketStatus::ready) {
+            PipelineTrace::packet(length, false, invalidInput);
             retire(*record);
             return invalidInput;
+        }
+        bool idr = false;
+        for (std::size_t index = 0; index + 3 < packet.bytes.size(); ++index) {
+            if (packet.bytes[index] == 0 && packet.bytes[index + 1] == 0 &&
+                ((packet.bytes[index + 2] == 1 && (packet.bytes[index + 3] & 0x1fU) == 5U) ||
+                 (index + 4 < packet.bytes.size() && packet.bytes[index + 2] == 0 && packet.bytes[index + 3] == 1 &&
+                  (packet.bytes[index + 4] & 0x1fU) == 5U))) { idr = true; break; }
         }
         const auto submitted = record->decoder->submit(packet.bytes, ticks);
         if (submitted == SecondaryDecoder::SubmitResult::Retryable) {
             // MediaCodec backpressure is transient. Keep this generation alive; the
             // secondary path may lose this packet but must not tear down the OEM stream.
+            PipelineTrace::packet(length, idr, 1);
             return 0;
         }
         if (submitted == SecondaryDecoder::SubmitResult::Fatal) {
+            PipelineTrace::packet(length, idr, decoderFailure);
             retire(*record);
             return decoderFailure;
         }
+        PipelineTrace::packet(length, idr, 0);
     } catch (...) {
         retire(*record);
         return decoderFailure;
@@ -300,6 +326,7 @@ VideoBridge::Status VideoBridge::processData(Stream stream, const std::uint8_t* 
 }
 
 void VideoBridge::shutdownSecondary() {
+    PipelineTrace::summary("secondary_shutdown");
     acceptingSecondary_.store(false);
     std::vector<std::shared_ptr<Record>> records;
     {
