@@ -17,6 +17,27 @@ class CarPlayGrantFailureCauseTest {
         assertEquals("security_other", d(SecurityException("something else entirely")))
     }
 
+    @Test fun diag5_unauthorized_mask_decodes_which_conditions_tripped() {
+        assertEquals("security_unauthorized:flags", d(SecurityException("Unauthorized Surface transport [v1 m=4]")))
+        assertEquals("security_unauthorized:uid", d(SecurityException("Unauthorized Surface transport [v1 m=1]")))
+        assertEquals("security_unauthorized:uid+flags", d(SecurityException("Unauthorized Surface transport [v1 m=5]")))
+        assertEquals("security_unauthorized:uid+reply+flags+size",
+            d(SecurityException("Unauthorized Surface transport [v1 m=15]")))
+        assertEquals("flags", CarPlayGrantFailureCause.unauthorizedMaskLabel("Unauthorized Surface transport [v1 m=4]"))
+        assertEquals("reply+size", CarPlayGrantFailureCause.unauthorizedMaskLabel("Unauthorized Surface transport [v1 m=10]"))
+    }
+
+    @Test fun diag5_mask_malformed_or_old_message_falls_back_to_generic() {
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport")))           // old generic
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=]")))    // empty
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=99]")))  // overflow range
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=0]")))   // no bits set
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=4] x"))) // trailing extra
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v2 m=4]")))   // wrong version
+        assertNull(CarPlayGrantFailureCause.unauthorizedMaskLabel("Unauthorized Surface transport"))
+        assertNull(CarPlayGrantFailureCause.unauthorizedMaskLabel(null))
+    }
+
     @Test fun illegal_argument_categories() {
         assertEquals("invalid_grant", d(IllegalArgumentException("Invalid Surface grant")))
         assertEquals("trailing_data", d(IllegalArgumentException("Trailing data")))

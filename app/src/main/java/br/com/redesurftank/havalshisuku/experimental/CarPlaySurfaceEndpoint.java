@@ -32,14 +32,33 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
         this.token = sessionToken.clone();
     }
 
+    static final String UNAUTHORIZED = "Unauthorized Surface transport";
+
+    // diag5: a bounded, versioned reason MASK for an unauthorized GRANT/REVOKE. Bits: uid=1, reply=2,
+    // flags=4, size=8 (several may be set at once). Never includes UIDs or parcel content. Any fault
+    // falls back to the generic message so the rejection is unchanged.
+    private static String unauthorizedReason(boolean uid, boolean reply, boolean flags, boolean size) {
+        try {
+            int mask = (uid ? 1 : 0) | (reply ? 2 : 0) | (flags ? 4 : 0) | (size ? 8 : 0);
+            return UNAUTHORIZED + " [v1 m=" + mask + "]";
+        } catch (Throwable fault) {
+            return UNAUTHORIZED;
+        }
+    }
+
     @Override
     protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
         if (code != GRANT && code != REVOKE) {
             return super.onTransact(code, data, reply, flags);
         }
-        if (Binder.getCallingUid() != authorizedUid || reply == null || flags != 0 ||
-                data.dataSize() > 16384) {
-            throw new SecurityException("Unauthorized Surface transport");
+        boolean uidBad = Binder.getCallingUid() != authorizedUid;
+        boolean replyBad = reply == null;
+        boolean flagsBad = flags != 0;
+        boolean sizeBad = data.dataSize() > 16384;
+        if (uidBad || replyBad || flagsBad || sizeBad) {
+            // diag5: SAME rejection; the message carries only a bounded, versioned reason MASK (no UIDs,
+            // no parcel content). If building the descriptor fails, fall back to the generic message.
+            throw new SecurityException(unauthorizedReason(uidBad, replyBad, flagsBad, sizeBad));
         }
         data.enforceInterface(DESCRIPTOR);
         byte[] presented = new byte[32];
