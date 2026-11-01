@@ -45,21 +45,24 @@ internal object CarPlayColdAttachTrace {
     }
 
     /**
-     * Compact summary for the failure packet (a quick telnet pull): the cold tri-state and raw grep
-     * token of the FAILING observation, derived from the last "precheck_cold" step (else "observe_loop").
+     * Compact summary for the failure packet (a quick telnet pull): the cold tri-state and raw grep token of
+     * the LAST RECORDED observation, derived from the last "precheck_cold" step (else "observe_loop"). `source`
+     * names that step so a reader does NOT mistake it for the failure cause when the failure happened at a later
+     * step than the recorded observation.
      */
     fun summary(header: List<Pair<String, Any?>>, steps: List<Step>): String {
         val last = steps.lastOrNull { it.stage == "precheck_cold" }
             ?: steps.lastOrNull { it.stage == "observe_loop" }
         fun f(name: String): Any? = last?.fields?.firstOrNull { it.first == name }?.second
         val h = header.toMap()
-        val sb = StringBuilder(160)
+        val sb = StringBuilder(176)
         sb.append('{')
         emit(sb, "action", h["action"]); sb.append(',')
         emit(sb, "ticket", h["ticket"]); sb.append(',')
         emit(sb, "beforeCold", h["beforeCold"]); sb.append(',')
-        emit(sb, "currentCold", f("cold") ?: f("finalCold")); sb.append(',')
-        emit(sb, "currentColdRaw", f("coldRaw") ?: f("finalColdRaw")); sb.append(',')
+        emit(sb, "source", last?.stage); sb.append(',')
+        emit(sb, "lastObservedCold", f("cold") ?: f("finalCold")); sb.append(',')
+        emit(sb, "lastObservedColdRaw", f("coldRaw") ?: f("finalColdRaw")); sb.append(',')
         emit(sb, "idMatchesOriginal", f("idMatchesOriginal")); sb.append(',')
         emit(sb, "stepCount", steps.size.toLong())
         sb.append('}')

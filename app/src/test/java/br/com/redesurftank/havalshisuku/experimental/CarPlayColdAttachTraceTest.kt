@@ -59,8 +59,9 @@ class CarPlayColdAttachTraceTest {
         val s = CarPlayColdAttachTrace.summary(header, list)
         assertTrue(s.contains("\"action\":\"COLD_ATTACH\""))
         assertTrue(s.contains("\"beforeCold\":\"true\""))
-        assertTrue(s.contains("\"currentCold\":\"false\""))
-        assertTrue(s.contains("\"currentColdRaw\":\"no\""))
+        assertTrue(s.contains("\"source\":\"precheck_cold\""))
+        assertTrue(s.contains("\"lastObservedCold\":\"false\""))
+        assertTrue(s.contains("\"lastObservedColdRaw\":\"no\""))
         assertTrue(s.contains("\"idMatchesOriginal\":true"))
         assertTrue(s.contains("\"stepCount\":3"))
     }
@@ -71,15 +72,17 @@ class CarPlayColdAttachTraceTest {
             CarPlayColdAttachTrace.Step("observe_loop", 1300L, listOf(
                 "observeCount" to 3, "finalCold" to "null", "finalColdRaw" to null)))
         val s = CarPlayColdAttachTrace.summary(header, list)
-        assertTrue(s.contains("\"currentCold\":\"null\""))      // tri-state string "null", quoted
-        assertTrue(s.contains("\"currentColdRaw\":null"))        // genuine JSON null (grep token absent), unquoted
+        assertTrue(s.contains("\"source\":\"observe_loop\""))
+        assertTrue(s.contains("\"lastObservedCold\":\"null\""))   // tri-state string "null", quoted
+        assertTrue(s.contains("\"lastObservedColdRaw\":null"))     // genuine JSON null (grep token absent), unquoted
         assertTrue(s.contains("\"stepCount\":2"))
     }
 
     @Test fun summary_on_empty_steps_is_valid_json_with_nulls() {
         val s = CarPlayColdAttachTrace.summary(header, emptyList())
-        assertTrue(s.contains("\"currentCold\":null"))
-        assertTrue(s.contains("\"currentColdRaw\":null"))
+        assertTrue(s.contains("\"source\":null"))
+        assertTrue(s.contains("\"lastObservedCold\":null"))
+        assertTrue(s.contains("\"lastObservedColdRaw\":null"))
         assertTrue(s.contains("\"idMatchesOriginal\":null"))
         assertTrue(s.contains("\"stepCount\":0"))
     }

@@ -170,7 +170,7 @@ object CarPlayBridgeBootstrapManager {
         attemptTraceBaseMs = SystemClock.elapsedRealtime()
         attemptTraceSteps.clear()
         attemptTraceHeader = listOf(
-            "action" to action.name, "ticket" to ticket, "build" to bundle.revision,
+            "action" to action.name, "ticket" to ticket, "revision" to bundle.revision, // revision, NOT the app git SHA
             "clockBaseElapsedMs" to attemptTraceBaseMs, "clockBaseWallMs" to System.currentTimeMillis(),
             "beforeId" to before.id?.key, "beforeCold" to CarPlayColdAttachTrace.coldTri(before.cold))
     }
@@ -963,6 +963,10 @@ object CarPlayBridgeBootstrapManager {
         val failure = JSONObject().put("eligible", false)
             .put("failureType", error.javaClass.simpleName)
             .put("failureMessage", error.message ?: "").put("failureStack", trace)
+        // diag3: snapshot the trace and build the bounded document cheaply BEFORE the critical section; the slow
+        // file persist happens after cancellation (P2) so disk I/O never delays revocation or holds the publisher.
+        val traceSteps = ArrayList(attemptTraceSteps)
+        val coldTraceDoc = runCatching { CarPlayColdAttachTrace.document(attemptTraceHeader, traceSteps) }.getOrNull()
         synchronized(safetyWriteLock) {
             // Preserve a bounded, parsed packet before cancellation overwrites the evidence.
             val priorSafety = runCatching {
@@ -987,15 +991,9 @@ object CarPlayBridgeBootstrapManager {
             }.getOrNull()
             failure.put("preFailureSafety", priorSafety ?: JSONObject.NULL)
                 .put("failureElapsedMs", SystemClock.elapsedRealtime()).put("failureWallMs", System.currentTimeMillis())
-            // diag3: compact summary into the failure packet for a quick pull; full bounded trace to its own
-            // file so it never bloats the packet. Best-effort: a trace failure never affects cancellation.
-            runCatching {
-                val steps = ArrayList(attemptTraceSteps)
-                failure.put("coldTrace", JSONObject(CarPlayColdAttachTrace.summary(attemptTraceHeader, steps)))
-                CarPlayPreflightFieldDiagnostic.writeAtomicBounded(
-                    File(requireNotNull(context).filesDir, "carplay-coldattach-trace.json"),
-                    CarPlayColdAttachTrace.document(attemptTraceHeader, steps), CarPlayColdAttachTrace.MAX_BYTES)
-            }
+            // diag3: compact summary ONLY here (no I/O) so the committed failure packet carries it. The full
+            // trace document is persisted AFTER this critical section — a slow/failed write must not hold the lock.
+            runCatching { failure.put("coldTrace", JSONObject(CarPlayColdAttachTrace.summary(attemptTraceHeader, traceSteps))) }
             publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
             pendingChallenges.clear()
             startingBindings.clear()
@@ -1008,6 +1006,12 @@ object CarPlayBridgeBootstrapManager {
             runCatching { writeSafetyPacketLocked(failure) }
         }
         runCatching { root.run("setprop $GATE ''") }
+        // diag3 (P2): persist the full bounded trace OUTSIDE the critical section. Best-effort — a slow or failed
+        // write cannot delay the revocation above, hold the publisher, or hide the original failure.
+        coldTraceDoc?.let { doc -> runCatching {
+            CarPlayPreflightFieldDiagnostic.writeAtomicBounded(
+                File(requireNotNull(context).filesDir, "carplay-coldattach-trace.json"), doc, CarPlayColdAttachTrace.MAX_BYTES)
+        } }
         report("failed", "O preparo foi interrompido; sessão atual preservada")
     }
 
