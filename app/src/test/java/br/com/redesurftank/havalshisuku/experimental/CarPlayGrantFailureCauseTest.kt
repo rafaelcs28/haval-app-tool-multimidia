@@ -38,6 +38,19 @@ class CarPlayGrantFailureCauseTest {
         assertNull(CarPlayGrantFailureCause.unauthorizedMaskLabel(null))
     }
 
+    @Test fun diag6_flags_value_appended_only_on_flags_bit_and_validated() {
+        assertEquals("security_unauthorized:flags=16", d(SecurityException("Unauthorized Surface transport [v1 m=4 f=16]")))
+        assertEquals("security_unauthorized:uid+flags=16", d(SecurityException("Unauthorized Surface transport [v1 m=5 f=16]")))
+        assertEquals("flags=16", CarPlayGrantFailureCause.unauthorizedMaskLabel("Unauthorized Surface transport [v1 m=4 f=16]"))
+        assertEquals("65535", CarPlayGrantFailureCause.unauthorizedMaskLabel("Unauthorized Surface transport [v1 m=4 f=65535]")?.substringAfter("flags="))
+        // f overflow(>65535) / malformed / f without the flags bit -> reject the whole descriptor -> generic
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=4 f=99999]")))
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=4 f=abc]")))
+        assertEquals("security_unauthorized", d(SecurityException("Unauthorized Surface transport [v1 m=2 f=16]")))
+        // diag5 form (no f) still decodes
+        assertEquals("security_unauthorized:flags", d(SecurityException("Unauthorized Surface transport [v1 m=4]")))
+    }
+
     @Test fun illegal_argument_categories() {
         assertEquals("invalid_grant", d(IllegalArgumentException("Invalid Surface grant")))
         assertEquals("trailing_data", d(IllegalArgumentException("Trailing data")))

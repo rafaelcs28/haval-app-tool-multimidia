@@ -94,31 +94,48 @@ public final class CarPlayGrantFailureCause {
     }
 
     /**
-     * Parse the diag5 reason descriptor: EXACTLY {@code <UNAUTHORIZED> [v1 m=<mask>]} with mask in 1..15.
-     * Returns a bounded label built from the set bits ("uid","reply","flags","size", joined with '+');
-     * null for the old generic message or any malformed/overflowing form (strict: integral match, no extras).
+     * Parse the reason descriptor: EXACTLY {@code <UNAUTHORIZED> [v1 m=<mask>]} (diag5) or
+     * {@code <UNAUTHORIZED> [v1 m=<mask> f=<flagsValue>]} (diag6) with mask in 1..15 and flagsValue in
+     * 0..65535. Returns a bounded label from the set bits ("uid","reply","flags[=<value>]","size", joined
+     * with '+'); null for the old generic message or any malformed form (strict: integral match, no extras).
+     * The flags VALUE is appended only on the flags bit, letting us confirm it is exactly TF_ACCEPT_FDS (16).
      */
     static String unauthorizedMaskLabel(String message) {
         if (message == null || !message.startsWith(UNAUTHORIZED_MASK_PREFIX) || !message.endsWith("]")) return null;
         String tail = message.substring(UNAUTHORIZED_MASK_PREFIX.length(), message.length() - 1);
-        if (tail.isEmpty() || tail.length() > 2) return null; // "15".length() == 2
-        for (int i = 0; i < tail.length(); i++) {
-            char c = tail.charAt(i);
+        String maskPart = tail;
+        Integer flagsValue = null;
+        int fIdx = tail.indexOf(" f=");
+        if (fIdx >= 0) {
+            maskPart = tail.substring(0, fIdx);
+            flagsValue = parseBounded(tail.substring(fIdx + 3), 0, 65535, 5);
+            if (flagsValue == null) return null; // f present but malformed/overflow -> reject (strict)
+        }
+        Integer mask = parseBounded(maskPart, 1, 15, 2);
+        if (mask == null) return null;
+        boolean flagsBit = (mask & 4) != 0;
+        if (flagsValue != null && !flagsBit) return null; // f without the flags bit is inconsistent
+        StringBuilder sb = new StringBuilder(24);
+        if ((mask & 1) != 0) sb.append("uid");
+        if ((mask & 2) != 0) { if (sb.length() > 0) sb.append('+'); sb.append("reply"); }
+        if (flagsBit) { if (sb.length() > 0) sb.append('+'); sb.append("flags"); if (flagsValue != null) sb.append('=').append(flagsValue.intValue()); }
+        if ((mask & 8) != 0) { if (sb.length() > 0) sb.append('+'); sb.append("size"); }
+        return sb.toString();
+    }
+
+    // Parse a non-negative decimal within [min,max] and at most maxLen digits; null otherwise (strict).
+    private static Integer parseBounded(String s, int min, int max, int maxLen) {
+        if (s == null || s.isEmpty() || s.length() > maxLen) return null;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
             if (c < '0' || c > '9') return null;
         }
-        int mask;
         try {
-            mask = Integer.parseInt(tail);
+            int v = Integer.parseInt(s);
+            return (v < min || v > max) ? null : Integer.valueOf(v);
         } catch (NumberFormatException notANumber) {
             return null;
         }
-        if (mask < 1 || mask > 15) return null;
-        StringBuilder sb = new StringBuilder(20);
-        if ((mask & 1) != 0) sb.append("uid");
-        if ((mask & 2) != 0) { if (sb.length() > 0) sb.append('+'); sb.append("reply"); }
-        if ((mask & 4) != 0) { if (sb.length() > 0) sb.append('+'); sb.append("flags"); }
-        if ((mask & 8) != 0) { if (sb.length() > 0) sb.append('+'); sb.append("size"); }
-        return sb.toString();
     }
 
     /**

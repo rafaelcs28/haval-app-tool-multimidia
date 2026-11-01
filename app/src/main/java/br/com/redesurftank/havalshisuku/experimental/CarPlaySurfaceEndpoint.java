@@ -34,13 +34,16 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
 
     static final String UNAUTHORIZED = "Unauthorized Surface transport";
 
-    // diag5: a bounded, versioned reason MASK for an unauthorized GRANT/REVOKE. Bits: uid=1, reply=2,
-    // flags=4, size=8 (several may be set at once). Never includes UIDs or parcel content. Any fault
+    // diag5/diag6: a bounded, versioned reason MASK for an unauthorized GRANT/REVOKE. Bits: uid=1, reply=2,
+    // flags=4, size=8 (several may be set at once). diag6 also appends the raw transaction-flags value
+    // (f=<int>) ONLY when the flags bit is set, so we can confirm it is exactly TF_ACCEPT_FDS (0x10) before
+    // relaxing the guard. Binder flags are not secret; UIDs/parcel content are never included. Any fault
     // falls back to the generic message so the rejection is unchanged.
-    private static String unauthorizedReason(boolean uid, boolean reply, boolean flags, boolean size) {
+    private static String unauthorizedReason(boolean uid, boolean reply, boolean flags, boolean size, int flagsValue) {
         try {
             int mask = (uid ? 1 : 0) | (reply ? 2 : 0) | (flags ? 4 : 0) | (size ? 8 : 0);
-            return UNAUTHORIZED + " [v1 m=" + mask + "]";
+            String f = (flags && flagsValue >= 0 && flagsValue <= 0xFFFF) ? (" f=" + flagsValue) : "";
+            return UNAUTHORIZED + " [v1 m=" + mask + f + "]";
         } catch (Throwable fault) {
             return UNAUTHORIZED;
         }
@@ -58,7 +61,7 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
         if (uidBad || replyBad || flagsBad || sizeBad) {
             // diag5: SAME rejection; the message carries only a bounded, versioned reason MASK (no UIDs,
             // no parcel content). If building the descriptor fails, fall back to the generic message.
-            throw new SecurityException(unauthorizedReason(uidBad, replyBad, flagsBad, sizeBad));
+            throw new SecurityException(unauthorizedReason(uidBad, replyBad, flagsBad, sizeBad, flags));
         }
         data.enforceInterface(DESCRIPTOR);
         byte[] presented = new byte[32];
