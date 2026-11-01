@@ -33,6 +33,15 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
     }
 
     static final String UNAUTHORIZED = "Unauthorized Surface transport";
+    // fix: the Binder driver sets TF_ACCEPT_FDS (0x10) unconditionally on the transaction so the reply
+    // may carry FDs (confirmed in field: diag6 captured flags=16 on the car). It is benign and must be
+    // accepted; the guard still rejects FLAG_ONEWAY (0x1) and every other/unknown flag bit.
+    static final int TF_ACCEPT_FDS = 0x10;
+
+    /** Whether the transaction flags are disallowed: any bit OTHER than TF_ACCEPT_FDS rejects. Pure/testable. */
+    static boolean transactionFlagsRejected(int flags) {
+        return (flags & ~TF_ACCEPT_FDS) != 0;
+    }
 
     // diag5/diag6: a bounded, versioned reason MASK for an unauthorized GRANT/REVOKE. Bits: uid=1, reply=2,
     // flags=4, size=8 (several may be set at once). diag6 also appends the raw transaction-flags value
@@ -56,7 +65,7 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
         }
         boolean uidBad = Binder.getCallingUid() != authorizedUid;
         boolean replyBad = reply == null;
-        boolean flagsBad = flags != 0;
+        boolean flagsBad = transactionFlagsRejected(flags); // fix: accept TF_ACCEPT_FDS, reject oneway/unknown
         boolean sizeBad = data.dataSize() > 16384;
         if (uidBad || replyBad || flagsBad || sizeBad) {
             // diag5: SAME rejection; the message carries only a bounded, versioned reason MASK (no UIDs,
