@@ -1,4 +1,17 @@
-## CURRENT — Surface grant succeeds but visible clean-map output is unproven
+## CURRENT 153 — Surface ready, but no secondary CarPlay video packets or frames
+
+Automatic cold preparation is READY and the 1920x720 Surface grant succeeds. In the
+latest field session the native trace remains at zero packets, IDRs, codec inputs and
+renders after activation. The trace contains only `getter_entry gen=0` before
+activation, not `getter_runtime` or `session_111`. The current leading explanation is
+missing session renegotiation/advertisement for type111 when the experiment starts
+after CarPlay is already connected. This is not yet proven.
+Run the experiment before connecting the iPhone to distinguish negotiation timing
+from a deeper VideoBridge/codec defect. The HUD's missing arrow is separately expected
+from the current text-only policy, which publishes street and distance but does not
+decode the maneuver type.
+
+## HISTORICAL — Surface grant succeeded but visible clean-map output was unproven
 
 Field evidence reached `carplay_clean_map_surface_ready` and then retired around2.4s
 later as `SNAPSHOT_STALE`, with no visible flash. Existing logs cannot prove whether

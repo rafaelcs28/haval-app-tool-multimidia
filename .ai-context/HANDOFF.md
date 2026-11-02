@@ -1,4 +1,26 @@
-## ACTIVE — 74152 field preflight receipt timeout; narrow recovery implemented
+## CURRENT — 74153 bridge READY; clean-map stream still absent after Surface grant
+
+Public/installed `.153` (`versionCode 74153`) completed automatic bridge preparation
+after reboot. The owner then ran the five-minute Apple Maps experiment. The endpoint
+accepted the grant and emitted `carplay_clean_map_surface_ready` at 1920x720, with no
+policy denial during the observed active window, but the cluster remained blank.
+Native pipeline evidence recorded zero packets, IDRs, codec inputs and rendered
+frames after activation. The trace proves only `getter_entry gen=0` before the
+secondary Surface became active; it does not prove `getter_runtime` or `session_111`.
+Current leading explanation is that the already-established CarPlay session did not
+renegotiate/re-advertise display111 after activation; this remains an inference until
+a pre-connect experiment produces runtime/session111 or packet evidence. The HUD
+showing street and distance without an arrow is current `TEXT` path
+behavior: `CarPlayHudPolicy.textDirections()` does not decode `mManeuverType`.
+
+Next owner-controlled field test: start the five-minute experiment before connecting
+the iPhone, then connect CarPlay, start an Apple Maps route and return CarPlay to the
+foreground. Capture the same-generation clean-map/native events. Do not claim the
+root cause or visible cluster map until frames are observed and the owner confirms
+the image. This documentation/toolkit session authorizes no vehicle action, build,
+publication, commit or push.
+
+## HISTORICAL — 74152 field preflight receipt timeout; narrow recovery implemented
 
 Installed/public74152 on boot c87b364c showed bridge unmapped and the loader UI
 blocked. Private first-failure evidence is conclusive: before/after environment

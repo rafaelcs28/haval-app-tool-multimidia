@@ -1,4 +1,16 @@
-## CURRENT — build and field-test the clean-map pipeline trace
+## CURRENT — test `.153` with the experiment armed before CarPlay connects
+
+In an owner-controlled session, start the five-minute Impulse experiment before
+connecting the iPhone. Then connect CarPlay, start an Apple Maps route, return CarPlay
+to display0 and keep safety UI clear. Retrieve the persisted clean-map and native
+trace for that same generation. Evidence that separates the hypotheses is the first
+observed getter/runtime/session111 advertisement, packet/IDR, codec input/output and
+presented frame. If no type111/session evidence appears, investigate negotiation and
+activation ordering; if packets appear but no frame presents, continue in the
+VideoBridge/MediaCodec path. Do not weaken safety policy or claim a visible map based
+only on `surface_ready`.
+
+## HISTORICAL — build and field-test the clean-map pipeline trace
 
 Commit the diagnostic branch and run the full JVM/Android Debug job only on the
 authorized Mac Mini. If green, install on a later owner-controlled parked session,

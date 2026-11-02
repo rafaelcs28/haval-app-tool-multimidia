@@ -1,3 +1,23 @@
+## 2026-11-02 — adoção limitada do vibe-coding-toolkit
+
+Aplicado somente o subconjunto compatível com o Haval Impulse: documentos canônicos
+de produto/onboarding/design/qualidade/setup, README portátil, entrada do Claude,
+workflow de sessão corrigido e política Mac Mini explicitada. Instaladas localmente,
+com lockfile, seis skills selecionadas: gh-fix-ci, differential-review, Supabase
+Postgres, web design, writing e find-skills. Context7 foi sugerido, mas conexão no
+cliente permanece não confirmada. A memória `.ai-context` foi preservada e o topo foi
+atualizado com o estado real da `.153`: bridge automática READY, Surface 1920x720,
+zero packets/IDRs/codec/render e próximo teste armado antes da conexão do iPhone.
+
+Comparação de instruções: baseline0/5, candidato5/5. Links Markdown, frontmatter das
+skills, symlinks relativos, listagem Codex e cinco links Claude, além de
+`git diff --check`, PASS. A suíte
+portátil `cluster-widgets npm run check` também PASS, incluindo46 cenários globais de
+foco AC. A skill `writing-guidelines` foi executada como revisão e levou à inclusão
+de resumos objetivos nas novas páginas; as outras cinco foram somente instaladas.
+Nenhum Gradle/build Android, veículo, serviço externo, commit, push ou publicação
+foi executado.
+
 ## 2026-11-02 — recover interrupted CarPlay loader preflight
 
 Real74152 boot proved the loader environment, hashes and Frida17.5.2 probe valid,
