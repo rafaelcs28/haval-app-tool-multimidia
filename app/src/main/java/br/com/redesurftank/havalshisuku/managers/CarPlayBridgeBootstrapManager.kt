@@ -450,7 +450,27 @@ object CarPlayBridgeBootstrapManager {
                 test ! -L ${q(directory)} || exit 1
                 if [ -e ${q(directory)} ]; then
                   test -d ${q(directory)} && test "§(stat -c %u ${q(directory)})" = 0 && test "§(stat -c %a ${q(directory)})" = 700 || exit 1
-                  echo existing
+                  if [ -f ${q(receipt)} ]; then
+                    test ! -L ${q(receipt)} || exit 1
+                    echo existing
+                  else
+                    # A control-channel timeout can kill the receipt publication after the
+                    # immutable probe succeeded. Recover only our exact root-owned leaves;
+                    # an unknown entry or symlink keeps the gate closed.
+                    for cpb_leaf in probe-start.json probe.stdout probe.stderr probe.exit success.json.next; do
+                      cpb_path=${q(directory)}/§cpb_leaf
+                      if [ -e "§cpb_path" ] || [ -L "§cpb_path" ]; then
+                        test -f "§cpb_path" && test ! -L "§cpb_path" &&
+                          test "§(stat -c %u "§cpb_path")" = 0 &&
+                          test "§(stat -c %a "§cpb_path")" = 400 || exit 1
+                        rm -f "§cpb_path" || exit 1
+                      fi
+                    done
+                    rmdir ${q(directory)} || exit 1
+                    mkdir ${q(directory)} || exit 1
+                    chown 0:0 ${q(directory)} && chmod 700 ${q(directory)} || exit 1
+                    echo admitted
+                  fi
                 else
                   mkdir ${q(directory)} || exit 1
                   chown 0:0 ${q(directory)} && chmod 700 ${q(directory)} || exit 1
@@ -498,7 +518,7 @@ object CarPlayBridgeBootstrapManager {
                         test ! -e ${q(receipt)} || exit 1
                         printf '%s\n' ${q(CarPlayResidentProof.preflightReceipt(after, bundle.revision))} > ${q("$receipt.next")} || exit 1
                         chown 0:0 ${q("$receipt.next")} && chmod 400 ${q("$receipt.next")} && mv ${q("$receipt.next")} ${q(receipt)} || exit 1
-                    """))
+                    """), 30_000)
                     after
                 }
                 else -> error("Unknown preflight admission")

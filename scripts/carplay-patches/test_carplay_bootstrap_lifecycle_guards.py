@@ -630,6 +630,17 @@ class ResidentChallengePublicationTest(unittest.TestCase):
 class PreflightProbeEvidenceTest(unittest.TestCase):
     """Exercise the actual probe wrapper with an inert local CLI and bounded files."""
 
+    def test_incomplete_preflight_is_narrowly_recoverable_and_receipt_has_bounded_extra_time(self):
+        preflight = function_source(BOOTSTRAP.read_text(), "ensureInjectorPreflight")
+        self.assertIn("probe-start.json probe.stdout probe.stderr probe.exit success.json.next", preflight)
+        self.assertIn('test -f "§cpb_path" && test ! -L "§cpb_path"', preflight)
+        self.assertIn("rmdir ${q(directory)} || exit 1", preflight)
+        self.assertIn('mv ${q("$receipt.next")} ${q(receipt)} || exit 1\n                    \"\"\"), 30_000)', preflight)
+        # An existing success receipt is never deleted or regenerated.
+        existing = preflight.index("if [ -f ${q(receipt)} ]; then")
+        cleanup = preflight.index("for cpb_leaf in probe-start.json")
+        self.assertLess(existing, cleanup)
+
     def probe(self, cli_body):
         preflight = function_source(BOOTSTRAP.read_text(), "ensureInjectorPreflight")
         selected = re.search(r'val version = root.run.*?script\("""(.*?)"""\), 15_000\)',

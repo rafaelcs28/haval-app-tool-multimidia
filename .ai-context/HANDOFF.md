@@ -1,3 +1,21 @@
+## ACTIVE — 74152 field preflight receipt timeout; narrow recovery implemented
+
+Installed/public74152 on boot c87b364c showed bridge unmapped and the loader UI
+blocked. Private first-failure evidence is conclusive: before/after environment
+identical, injector/policy/fingerprint valid, `--version` returned17.5.2, then root
+control timed out at stage `receipt`. Directory remained without success.json;
+three owner retries reached `adopt-existing` and exited1. No injection/restart began.
+
+Source now treats only an absent receipt plus the exact known root-owned/mode400
+probe leaves as recoverable, deletes those leaves, requires rmdir success (unknown
+entries fail closed), recreates root/mode700 and reruns the probe. A valid receipt is
+never replaced. Receipt publication timeout is30s; all other bounds unchanged.
+Lifecycle guard suite43PASS. Build/sign/install/reboot/READY still pending. Owner is
+away at the gym and authorized resolving/installing/testing, including vehicle power
+if needed; open/closed parking location was not provided, so do not remote-start a
+combustion-capable vehicle until that condition is known. Current central remained
+online during diagnosis; no phone or bridge mapping observed.
+
 ## ACTIVE — clean-map pipeline diagnostic build, 2026-11-01
 
 Branch `diag/carplay-cleanmap-pipeline-trace` starts at field checkpoint

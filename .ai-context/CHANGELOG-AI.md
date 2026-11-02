@@ -1,3 +1,14 @@
+## 2026-11-02 — recover interrupted CarPlay loader preflight
+
+Real74152 boot proved the loader environment, hashes and Frida17.5.2 probe valid,
+but the root control channel timed out at final receipt publication. This left the
+boot/revision preflight directory without success.json; every manual retry entered
+adopt-existing and failed immediately. Recovery now removes only five known regular,
+root-owned mode400 incomplete leaves, refuses symlinks/unknown files, recreates the
+mode700 directory and reruns the immutable probe. Existing success receipts remain
+untouched. Final receipt publication alone receives a bounded30s timeout. Portable
+lifecycle guards43PASS; full JVM/Release and physical retry pending Mini/new build.
+
 ## 2026-11-01 — clean-map pipeline trace and bounded active freshness grace
 
 Joint Codex/Claude review accepted the Binder `TF_ACCEPT_FDS` correction and found
