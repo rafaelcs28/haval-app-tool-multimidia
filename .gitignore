@@ -6,11 +6,10 @@ build/
 # `docs/` is tracked (canonical). Do not create uppercase `DOCS/` — on
 # case-insensitive filesystems it collides with `docs/`.
 .ai-context
-.agents
+.agents/*
 .codex
 prompts/
 .docs
-AGENTS.md
 AI-README.md
 reverse/
 tools/headunit-dev/output/
@@ -50,9 +49,10 @@ google-services.json
 
 .DS_Store
 REFACTORING_SUMMARY.md
-.agents/*
 !.agents/skills/
 !.agents/skills/**
+!.agents/workflows/
+!.agents/workflows/**
 
 # AA Patch Tooling and Temporary Artifacts
 tools/
@@ -77,6 +77,7 @@ frida/
 
 # Temporary Logs and Outputs
 *.txt
+!.agents/skills/gh-fix-ci/LICENSE.txt
 *.log
 gradle_error.txt
 build_output*.txt

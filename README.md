@@ -1,20 +1,35 @@
-## Disclaimer
+# Haval Impulse
 
-# Haval App Tool
+Aplicativo Android não oficial para estudo e extensão da central multimídia Haval/GWM. O projeto reúne um host Android em Kotlin/Java, UI em Compose, temas HTML executados em WebView, integração por Shizuku e experimentos isolados de projeção no cluster.
 
-For developer-specific documentation and ADB commands, see [DEVELOPER_NOTES.md](file:///c:/Users/vanes/StudioProjects/haval-app-tool-multimidia/DEVELOPER_NOTES.md).
+O projeto não é afiliado, patrocinado ou aprovado pela Haval, GWM ou empresas relacionadas. É software experimental, sem garantia. Operações em veículo devem ser feitas apenas pelo proprietário ou por pessoa expressamente autorizada, em condições seguras.
 
-This project is an unofficial educational initiative related to the Haval GWM multimedia system. It is not affiliated with, endorsed by, or connected to Haval, GWM, or any related entities.
+## Começando
 
-**Disclaimer (English):**  
-This project is for educational and study purposes only, with no commercial intent. It involves reverse engineering for learning; users assume all risks. No warranty or liability. Does not distribute original copyrighted materials. Use may violate manufacturer terms—proceed at your own risk.
+1. Leia [AGENTS.md](AGENTS.md) e o topo de [.ai-context/HANDOFF.md](.ai-context/HANDOFF.md).
+2. Siga [docs/onboarding.md](docs/onboarding.md) para preparar o ambiente.
+3. Consulte [docs/architecture/overview.md](docs/architecture/overview.md) antes de alterar contratos, displays ou bridges.
+4. Use [docs/quality.md](docs/quality.md) para escolher a validação proporcional ao risco.
 
-**Isenção de Responsabilidade (Português):**  
-Este projeto é apenas para fins educacionais e de estudo, sem intenção comercial. Envolve engenharia reversa para aprendizado; os usuários assumem todos os riscos. Sem garantia ou responsabilidade. Não distribui materiais originais protegidos por direitos autorais. O uso pode violar os termos do fabricante—prossiga por sua conta e risco.
+Builds Android, Gradle e Kotlin são executados exclusivamente na fila autorizada do Mac Mini, a partir de um commit Git imutável e auditado. Não rode Gradle no host coordenador e não faça fallback local.
 
-## Headunit Dev Toolkit
+## Estrutura
 
-O projeto inclui um toolkit em `tools/headunit-dev/` para acelerar deploy, hot deploy do frontend, logs e diagnóstico da central.
+- `app/`: aplicativo Android e recursos embarcados.
+- `cluster-widgets/`: fontes e artefatos dos temas do cluster.
+- `docs/architecture/`: decisões e contratos técnicos canônicos.
+- `docs/operations/`: procedimentos operacionais.
+- `tools/headunit-dev/`: ferramentas de diagnóstico e implantação autorizada.
+- `.ai-context/`: estado corrente, pendências e histórico de handoff.
 
-- Visão geral e benefícios: `tools/headunit-dev/README.md`
-- Fluxos operacionais: `tools/headunit-dev/WORKFLOW.md`
+## Documentação
+
+- [Produto e limites](PRODUCT.md)
+- [Arquitetura](docs/architecture/overview.md)
+- [Design e temas](docs/design.md)
+- [Qualidade e evidências](docs/quality.md)
+- [Ferramentas e configuração](docs/setup.md)
+
+## Licença
+
+Consulte [LICENSE](LICENSE). O uso de componentes e marcas de terceiros continua sujeito aos respectivos termos.

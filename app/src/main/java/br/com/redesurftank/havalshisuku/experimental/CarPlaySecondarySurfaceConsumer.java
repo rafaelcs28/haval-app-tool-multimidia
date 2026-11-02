@@ -24,6 +24,7 @@ public final class CarPlaySecondarySurfaceConsumer extends TextureView
 
     public interface Listener {
         void onReady(long generation, int width, int height);
+        void onFramePresented(long generation, long frameCount);
         void onFailure(Failure failure);
         void onStopped();
     }
@@ -42,6 +43,12 @@ public final class CarPlaySecondarySurfaceConsumer extends TextureView
     private boolean closed;
     private boolean finished;
     private boolean ownsSlot;
+    // diag4: the classified, bounded cause of the last GRANT_FAILED, read by the host for the failure log.
+    private volatile String grantFailureCause;
+    private long presentedFrames;
+
+    /** diag4: bounded category of the last grant failure (null if none); never a free message. */
+    public String grantFailureCause() { return grantFailureCause; }
 
     private static final class Connection {
         final IBinder endpoint;
@@ -164,6 +171,7 @@ public final class CarPlaySecondarySurfaceConsumer extends TextureView
                     }
                 });
             } catch (RemoteException | RuntimeException | LinkageError failure) {
+                grantFailureCause = CarPlayGrantFailureCause.describe(failure); // diag4: never throws
                 main.post(() -> { notifyFailure(Failure.GRANT_FAILED); close(); });
             }
         });
@@ -195,6 +203,13 @@ public final class CarPlaySecondarySurfaceConsumer extends TextureView
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture texture) {
+        requireMain();
+        if (closed || lease == null || lease.texture != texture || listener == null) { return; }
+        presentedFrames++;
+        if (presentedFrames == 1 || (presentedFrames & (presentedFrames - 1)) == 0) {
+            try { listener.onFramePresented(lease.connection.generation, presentedFrames); }
+            catch (RuntimeException failure) { close(); }
+        }
     }
 
     @Override

@@ -32,14 +32,45 @@ public final class CarPlaySurfaceEndpoint extends Binder implements AutoCloseabl
         this.token = sessionToken.clone();
     }
 
+    static final String UNAUTHORIZED = "Unauthorized Surface transport";
+    // fix: the Binder driver sets TF_ACCEPT_FDS (0x10) unconditionally on the transaction so the reply
+    // may carry FDs (confirmed in field: diag6 captured flags=16 on the car). It is benign and must be
+    // accepted; the guard still rejects FLAG_ONEWAY (0x1) and every other/unknown flag bit.
+    static final int TF_ACCEPT_FDS = 0x10;
+
+    /** Whether the transaction flags are disallowed: any bit OTHER than TF_ACCEPT_FDS rejects. Pure/testable. */
+    static boolean transactionFlagsRejected(int flags) {
+        return (flags & ~TF_ACCEPT_FDS) != 0;
+    }
+
+    // diag5/diag6: a bounded, versioned reason MASK for an unauthorized GRANT/REVOKE. Bits: uid=1, reply=2,
+    // flags=4, size=8 (several may be set at once). diag6 also appends the raw transaction-flags value
+    // (f=<int>) ONLY when the flags bit is set, so we can confirm it is exactly TF_ACCEPT_FDS (0x10) before
+    // relaxing the guard. Binder flags are not secret; UIDs/parcel content are never included. Any fault
+    // falls back to the generic message so the rejection is unchanged.
+    private static String unauthorizedReason(boolean uid, boolean reply, boolean flags, boolean size, int flagsValue) {
+        try {
+            int mask = (uid ? 1 : 0) | (reply ? 2 : 0) | (flags ? 4 : 0) | (size ? 8 : 0);
+            String f = (flags && flagsValue >= 0 && flagsValue <= 0xFFFF) ? (" f=" + flagsValue) : "";
+            return UNAUTHORIZED + " [v1 m=" + mask + f + "]";
+        } catch (Throwable fault) {
+            return UNAUTHORIZED;
+        }
+    }
+
     @Override
     protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
         if (code != GRANT && code != REVOKE) {
             return super.onTransact(code, data, reply, flags);
         }
-        if (Binder.getCallingUid() != authorizedUid || reply == null || flags != 0 ||
-                data.dataSize() > 16384) {
-            throw new SecurityException("Unauthorized Surface transport");
+        boolean uidBad = Binder.getCallingUid() != authorizedUid;
+        boolean replyBad = reply == null;
+        boolean flagsBad = transactionFlagsRejected(flags); // fix: accept TF_ACCEPT_FDS, reject oneway/unknown
+        boolean sizeBad = data.dataSize() > 16384;
+        if (uidBad || replyBad || flagsBad || sizeBad) {
+            // diag5: SAME rejection; the message carries only a bounded, versioned reason MASK (no UIDs,
+            // no parcel content). If building the descriptor fails, fall back to the generic message.
+            throw new SecurityException(unauthorizedReason(uidBad, replyBad, flagsBad, sizeBad, flags));
         }
         data.enforceInterface(DESCRIPTOR);
         byte[] presented = new byte[32];

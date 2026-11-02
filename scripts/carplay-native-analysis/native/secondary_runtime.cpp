@@ -1,4 +1,5 @@
 #include "secondary_runtime.h"
+#include "pipeline_trace.h"
 
 #include <stdexcept>
 #include <utility>
@@ -85,8 +86,13 @@ observed_abi::Status SecondaryRuntime::advertiseForGetter(DisplayArray original,
 observed_abi::Status SecondaryRuntime::startSession(void* session, observed_abi::String uuid,
     std::uint32_t type, void* context) {
     if (config_.enabled && type == config_.bridge.secondary.type &&
-        (closed_.load() || !session_->advertised(generation_))) { return VideoBridge::notReady; }
-    return ingress_->startSession(session, uuid, type, context);
+        (closed_.load() || !session_->advertised(generation_))) {
+        PipelineTrace::session(type, VideoBridge::notReady);
+        return VideoBridge::notReady;
+    }
+    const auto status = ingress_->startSession(session, uuid, type, context);
+    PipelineTrace::session(type, status);
+    return status;
 }
 
 observed_abi::Status SecondaryRuntime::initialize(observed_abi::Stream stream) {

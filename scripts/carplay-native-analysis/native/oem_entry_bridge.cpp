@@ -1,4 +1,5 @@
 #include "oem_entry_bridge.h"
+#include "pipeline_trace.h"
 
 #include <stdexcept>
 #include <utility>
@@ -102,6 +103,7 @@ extern "C" observed_abi::Status impulse_carplay_entry_session(void* session, obs
     return entry([&](CoordinatedDispatch& dispatch) { return dispatch.session(session, uuid, type, context); });
 }
 extern "C" DisplayArray impulse_carplay_entry_displays(observed_abi::Status* error) noexcept {
+    PipelineTrace::getterEntry();
     auto* bridge = entryBridge.load();
     if (!bridge) { if (error) { *error = VideoBridge::notReady; } return nullptr; }
     try { return bridge->dispatch()->displays(error); }

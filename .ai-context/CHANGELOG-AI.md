@@ -1,3 +1,46 @@
+## 2026-11-02 — adoção limitada do vibe-coding-toolkit
+
+Aplicado somente o subconjunto compatível com o Haval Impulse: documentos canônicos
+de produto/onboarding/design/qualidade/setup, README portátil, entrada do Claude,
+workflow de sessão corrigido e política Mac Mini explicitada. Instaladas localmente,
+com lockfile, seis skills selecionadas: gh-fix-ci, differential-review, Supabase
+Postgres, web design, writing e find-skills. Context7 foi sugerido, mas conexão no
+cliente permanece não confirmada. A memória `.ai-context` foi preservada e o topo foi
+atualizado com o estado real da `.153`: bridge automática READY, Surface 1920x720,
+zero packets/IDRs/codec/render e próximo teste armado antes da conexão do iPhone.
+
+Comparação de instruções: baseline0/5, candidato5/5. Links Markdown, frontmatter das
+skills, symlinks relativos, listagem Codex e cinco links Claude, além de
+`git diff --check`, PASS. A suíte
+portátil `cluster-widgets npm run check` também PASS, incluindo46 cenários globais de
+foco AC. A skill `writing-guidelines` foi executada como revisão e levou à inclusão
+de resumos objetivos nas novas páginas; as outras cinco foram somente instaladas.
+Nenhum Gradle/build Android, veículo, serviço externo, commit, push ou publicação
+foi executado.
+
+## 2026-11-02 — recover interrupted CarPlay loader preflight
+
+Real74152 boot proved the loader environment, hashes and Frida17.5.2 probe valid,
+but the root control channel timed out at final receipt publication. This left the
+boot/revision preflight directory without success.json; every manual retry entered
+adopt-existing and failed immediately. Recovery now removes only five known regular,
+root-owned mode400 incomplete leaves, refuses symlinks/unknown files, recreates the
+mode700 directory and reruns the immutable probe. Existing success receipts remain
+untouched. Final receipt publication alone receives a bounded30s timeout. Portable
+lifecycle guards43PASS; full JVM/Release and physical retry pending Mini/new build.
+
+## 2026-11-01 — clean-map pipeline trace and bounded active freshness grace
+
+Joint Codex/Claude review accepted the Binder `TF_ACCEPT_FDS` correction and found
+two still-conflated failures after Surface grant: a transient stale task snapshot and
+missing native frames. Added strict-admission/active-only freshness grace, preserving
+immediate AA/safety/slot/fresh-negative retirement. Added payload-free, power-of-two
+native milestones from OEM getter through MediaCodec render plus app TextureView
+presentation, with forced terminal collection into persistent diagnostics. Slow AM
+reads use start timestamps, publish unknown after 1s and rest 100ms. Native ASan/
+UBSan routing tests, 15 OEM modes, portable endpoint tests, pure policy javac and the
+AA/CarPlay regression lock pass. Full JVM/Android Debug remains pending Mac Mini.
+
 ## 2026-10-27 — 149 cold direct-arm source implementation
 
 Fresh no-phone boot evidence showed DCM active128/state4 despite no CP/AA visual and

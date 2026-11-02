@@ -12,6 +12,7 @@ import br.com.redesurftank.havalshisuku.BuildConfig
 import br.com.redesurftank.havalshisuku.diagnostics.ClusterPersistentEventLogger
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBootstrapRoot
 import br.com.redesurftank.havalshisuku.experimental.CarPlayBridgeAttemptScope
+import br.com.redesurftank.havalshisuku.experimental.CarPlayColdAttachTrace
 import br.com.redesurftank.havalshisuku.experimental.CarPlayPreflightFieldDiagnostic
 import br.com.redesurftank.havalshisuku.experimental.CarPlayProjectionVisibilityProbe
 import br.com.redesurftank.havalshisuku.experimental.CarPlayResidentProof
@@ -65,6 +66,11 @@ object CarPlayBridgeBootstrapManager {
     // Worker-confined. Keep a pending nonce until its lease expires, allowing the peer to finish.
     private val pendingChallenges = mutableMapOf<String, CarPlayResidentProof.Challenge>()
     private val startingBindings = mutableMapOf<String, CarPlayResidentProof.Binding>()
+    // diag3 (observability-only): worker-confined trace of the current cold/attach attempt. Serialized
+    // best-effort ONLY on failure; never read to drive a decision or touch a gate. See CarPlayColdAttachTrace.
+    private val attemptTraceSteps = ArrayList<CarPlayColdAttachTrace.Step>()
+    private var attemptTraceHeader: List<Pair<String, Any?>> = emptyList()
+    private var attemptTraceBaseMs = 0L
 
     private data class Identity(val boot: String, val pid: Int, val start: Long) {
         val key get() = "$boot-$pid-$start"
@@ -82,7 +88,10 @@ object CarPlayBridgeBootstrapManager {
         val cpVisual: Boolean, val aaVisual: Boolean,
         val nativeProof: CarPlayResidentProof.Sample? = null,
         val javaProof: CarPlayResidentProof.Sample? = null,
-        val visualEvidenceKnown: Boolean = false)
+        val visualEvidenceKnown: Boolean = false,
+        // diag3: the raw grep token ("yes"/"no"/other/absent) that produced `cold`, carried on the SAME
+        // Observation so cold + its raw source always come from one read (no stale side-channel).
+        val coldRaw: String? = null)
 
     private fun prefs() = requireNotNull(context).getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
     @JvmStatic fun isAutomaticEnabled(): Boolean = runCatching {
@@ -154,6 +163,24 @@ object CarPlayBridgeBootstrapManager {
 
     private fun report(state: String, message: String) {
         mutableStatus.value = Status(isAutomaticEnabled(), state, message)
+    }
+
+    // diag3: start a fresh trace for this attempt. Worker-confined; clears prior steps so memory stays bounded.
+    private fun traceStart(action: Policy.Action, before: Observation, ticket: String, bundle: Payload) {
+        attemptTraceBaseMs = SystemClock.elapsedRealtime()
+        attemptTraceSteps.clear()
+        attemptTraceHeader = listOf(
+            "action" to action.name, "ticket" to ticket, "revision" to bundle.revision, // revision, NOT the app git SHA
+            "clockBaseElapsedMs" to attemptTraceBaseMs, "clockBaseWallMs" to System.currentTimeMillis(),
+            "beforeId" to before.id?.key, "beforeCold" to CarPlayColdAttachTrace.coldTri(before.cold))
+    }
+
+    // diag3: record one step best-effort. Never throws into the attempt path (observability must not affect control flow).
+    private fun trace(stage: String, vararg fields: Pair<String, Any?>) {
+        runCatching {
+            CarPlayColdAttachTrace.append(attemptTraceSteps,
+                CarPlayColdAttachTrace.Step(stage, SystemClock.elapsedRealtime() - attemptTraceBaseMs, fields.toList()))
+        }
     }
 
     private fun publishSafety() {
@@ -423,7 +450,27 @@ object CarPlayBridgeBootstrapManager {
                 test ! -L ${q(directory)} || exit 1
                 if [ -e ${q(directory)} ]; then
                   test -d ${q(directory)} && test "§(stat -c %u ${q(directory)})" = 0 && test "§(stat -c %a ${q(directory)})" = 700 || exit 1
-                  echo existing
+                  if [ -f ${q(receipt)} ]; then
+                    test ! -L ${q(receipt)} || exit 1
+                    echo existing
+                  else
+                    # A control-channel timeout can kill the receipt publication after the
+                    # immutable probe succeeded. Recover only our exact root-owned leaves;
+                    # an unknown entry or symlink keeps the gate closed.
+                    for cpb_leaf in probe-start.json probe.stdout probe.stderr probe.exit success.json.next; do
+                      cpb_path=${q(directory)}/§cpb_leaf
+                      if [ -e "§cpb_path" ] || [ -L "§cpb_path" ]; then
+                        test -f "§cpb_path" && test ! -L "§cpb_path" &&
+                          test "§(stat -c %u "§cpb_path")" = 0 &&
+                          test "§(stat -c %a "§cpb_path")" = 400 || exit 1
+                        rm -f "§cpb_path" || exit 1
+                      fi
+                    done
+                    rmdir ${q(directory)} || exit 1
+                    mkdir ${q(directory)} || exit 1
+                    chown 0:0 ${q(directory)} && chmod 700 ${q(directory)} || exit 1
+                    echo admitted
+                  fi
                 else
                   mkdir ${q(directory)} || exit 1
                   chown 0:0 ${q(directory)} && chmod 700 ${q(directory)} || exit 1
@@ -471,7 +518,7 @@ object CarPlayBridgeBootstrapManager {
                         test ! -e ${q(receipt)} || exit 1
                         printf '%s\n' ${q(CarPlayResidentProof.preflightReceipt(after, bundle.revision))} > ${q("$receipt.next")} || exit 1
                         chown 0:0 ${q("$receipt.next")} && chmod 400 ${q("$receipt.next")} && mv ${q("$receipt.next")} ${q(receipt)} || exit 1
-                    """))
+                    """), 30_000)
                     after
                 }
                 else -> error("Unknown preflight admission")
@@ -643,6 +690,7 @@ object CarPlayBridgeBootstrapManager {
             true
         """))
         val values = fields(output)
+        val coldRaw = values["cold"] // diag3: raw grep token (yes=cold/rc1, no=warm/rc0, absent/other=null)
         val boot = values["boot"]?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
         val pid = values["pid"]?.toIntOrNull()
         val start = startTime(values["stat"].orEmpty(), pid ?: -1)
@@ -652,7 +700,8 @@ object CarPlayBridgeBootstrapManager {
         }
         if (id == null) return Observation(null, null, mapped, JSONObject(), false, 0, 0,
             values["cp_visual"] != "0", values["aa_visual"] != "0",
-            visualEvidenceKnown = values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
+            visualEvidenceKnown = values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"),
+            coldRaw = coldRaw)
         val run = id.directory
         val details = root.run(script("""
             printf 'native='; if [ -f ${q("$run/cold-state.json")} ]; then cat ${q("$run/cold-state.json")}; else echo '{}'; fi
@@ -701,11 +750,12 @@ object CarPlayBridgeBootstrapManager {
             .put("replacements", nativeProof.replacements).put("pinned", nativeProof.pinned)
             .put("failure", if (nativeProof.failureAbsent) JSONObject.NULL else "Resident native failure")
             else recordedNative
-        return Observation(id, values["cold"]?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
+        return Observation(id, coldRaw?.let { when (it) { "yes" -> true; "no" -> false; else -> null } },
             mapped, nativeState, javaProof?.armed == true,
             owner("native_owner"), owner("java_owner"), values["cp_visual"] != "0", values["aa_visual"] != "0",
             nativeProof, javaProof,
-            values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"))
+            values["cp_visual"] in setOf("0", "1") && values["aa_visual"] in setOf("0", "1"),
+            coldRaw = coldRaw)
     }
 
     /** Fresh proof for the non-destructive path only; warm restart never uses this admission. */
@@ -733,6 +783,8 @@ object CarPlayBridgeBootstrapManager {
             activeAttempt = ActiveAttempt(original, attemptTicket, action, initialColdProof)
         }
         try {
+            traceStart(action, before, attemptTicket, bundle)
+            trace("entry", "initialColdProofSet" to (initialColdProof > 0L))
             check(isAutomaticEnabled())
             check(prefs().edit().putString("cpBridgeAttemptBoot", original.boot)
                 .putString("cpBridgeAttemptRevision", bundle.revision).putString("cpBridgeAttemptPhase", "preparing")
@@ -744,14 +796,20 @@ object CarPlayBridgeBootstrapManager {
             // Mount-only work belongs to the existing patch manager. Never start a
             // cold attempt against a different/unmounted service APK.
             check(root.run("md5sum /vendor/app/TsCarPlayService/TsCarPlayService.apk").trim().startsWith(SERVICE_MD5))
+            trace("post_md5")
             // A root-owned atomic marker also survives app death and transport timeouts.
             root.run("mkdir -p ${q("$ROOT/attempts")}; chmod 700 ${q("$ROOT/attempts")}; " +
                 "mkdir ${q(attemptMarker(bundle, original.key))} || exit 1; " +
                 "chmod 700 ${q(attemptMarker(bundle, original.key))}")
+            trace("post_marker")
             val existing = root.run("getprop $GATE").trim()
             val nonce = existing.takeIf { it.matches(Regex("[a-f0-9]{32}")) } ?: UUID.randomUUID().toString().replace("-", "")
             root.run("setprop $GATE $nonce")
-            repeat(8) { if (File(INPUT, "safety.json").isFile) return@repeat; Thread.sleep(100) }
+            // diag3: property valid/invalid and equal/changed only — never the nonce value.
+            trace("post_gate", "propertyValid" to existing.matches(Regex("[a-f0-9]{32}")), "propertyChanged" to (nonce != existing))
+            var safetyPresent = false
+            repeat(8) { if (File(INPUT, "safety.json").isFile) { safetyPresent = true; return@repeat }; Thread.sleep(100) }
+            trace("post_safety_wait", "safetyPresent" to safetyPresent)
             if (action == Policy.Action.COLD_RESTART) {
                 requireFreshSafety(original)
                 val checked = observe(bundle)
@@ -773,12 +831,19 @@ object CarPlayBridgeBootstrapManager {
             }
             val waitUntil = SystemClock.elapsedRealtime() + 5_000
             var current = before
+            var observeCount = 0
             while (SystemClock.elapsedRealtime() < waitUntil) {
                 current = observe(bundle, minimal = true)
+                observeCount++
                 if (current.id != null && (action == Policy.Action.COLD_ATTACH || current.id != original)) break
                 Thread.sleep(80)
             }
+            trace("observe_loop", "observeCount" to observeCount, "finalId" to current.id?.key,
+                "finalCold" to CarPlayColdAttachTrace.coldTri(current.cold), "finalColdRaw" to current.coldRaw)
             val identity = requireNotNull(current.id)
+            trace("precheck_cold", "currentId" to identity.key,
+                "cold" to CarPlayColdAttachTrace.coldTri(current.cold), "coldRaw" to current.coldRaw,
+                "idMatchesOriginal" to (identity == original), "initialColdProofSet" to (initialColdProof > 0L))
             check(current.cold == true && (action == Policy.Action.COLD_ATTACH || identity != original))
             val coldProof = refreshColdAttachProof(bundle, identity, action)
             synchronized(safetyWriteLock) {
@@ -918,6 +983,10 @@ object CarPlayBridgeBootstrapManager {
         val failure = JSONObject().put("eligible", false)
             .put("failureType", error.javaClass.simpleName)
             .put("failureMessage", error.message ?: "").put("failureStack", trace)
+        // diag3: snapshot the trace and build the bounded document cheaply BEFORE the critical section; the slow
+        // file persist happens after cancellation (P2) so disk I/O never delays revocation or holds the publisher.
+        val traceSteps = ArrayList(attemptTraceSteps)
+        val coldTraceDoc = runCatching { CarPlayColdAttachTrace.document(attemptTraceHeader, traceSteps) }.getOrNull()
         synchronized(safetyWriteLock) {
             // Preserve a bounded, parsed packet before cancellation overwrites the evidence.
             val priorSafety = runCatching {
@@ -942,6 +1011,9 @@ object CarPlayBridgeBootstrapManager {
             }.getOrNull()
             failure.put("preFailureSafety", priorSafety ?: JSONObject.NULL)
                 .put("failureElapsedMs", SystemClock.elapsedRealtime()).put("failureWallMs", System.currentTimeMillis())
+            // diag3: compact summary ONLY here (no I/O) so the committed failure packet carries it. The full
+            // trace document is persisted AFTER this critical section — a slow/failed write must not hold the lock.
+            runCatching { failure.put("coldTrace", JSONObject(CarPlayColdAttachTrace.summary(attemptTraceHeader, traceSteps))) }
             publicationGate.cancel(activeAttempt?.ticket ?: prefs().getString("cpBridgeAttemptTicket", ""))
             pendingChallenges.clear()
             startingBindings.clear()
@@ -954,6 +1026,12 @@ object CarPlayBridgeBootstrapManager {
             runCatching { writeSafetyPacketLocked(failure) }
         }
         runCatching { root.run("setprop $GATE ''") }
+        // diag3 (P2): persist the full bounded trace OUTSIDE the critical section. Best-effort — a slow or failed
+        // write cannot delay the revocation above, hold the publisher, or hide the original failure.
+        coldTraceDoc?.let { doc -> runCatching {
+            CarPlayPreflightFieldDiagnostic.writeAtomicBounded(
+                File(requireNotNull(context).filesDir, "carplay-coldattach-trace.json"), doc, CarPlayColdAttachTrace.MAX_BYTES)
+        } }
         report("failed", "O preparo foi interrompido; sessão atual preservada")
     }
 

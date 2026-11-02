@@ -1664,6 +1664,7 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
             CarPlaySecondaryClusterHost.SnapshotProvider {
                 val now = SystemClock.elapsedRealtime()
                 val tasks = CarPlayCleanMapCoordinator.currentTaskObservation()
+                val read = CarPlayCleanMapCoordinator.currentReadStatus()
                 CarPlayClusterHostPolicy.Snapshot(
                     tasks.observedAtElapsedMs,
                     slot.display?.displayId ?: -1,
@@ -1677,7 +1678,11 @@ class InstrumentProjector2(private val outerContext: Context, display: Display) 
                     !isAnyAppOnDisplay3,
                     tasks.known,
                     tasks.carPlayOnSecondary,
-                    AndroidAutoClusterController.isClusterRequested()
+                    AndroidAutoClusterController.isClusterRequested(),
+                    read[0],
+                    read[1],
+                    read[2] == 1L,
+                    read[3] == 1L
                 )
             }
         )

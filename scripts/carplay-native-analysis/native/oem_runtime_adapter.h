@@ -24,7 +24,7 @@ private:
     const OriginalGetDisplays original_;
     const ReleaseOwnedArray release_;
     std::atomic<std::uint64_t> faults_{0};
-    std::atomic<observed_abi::Status> advertisementStatus_{0};
+    std::atomic<observed_abi::Status> advertisementStatus_{VideoBridge::notReady};
 };
 
 bool pinRuntimeAdapterForProcess(std::unique_ptr<OemRuntimeAdapter> adapter);
