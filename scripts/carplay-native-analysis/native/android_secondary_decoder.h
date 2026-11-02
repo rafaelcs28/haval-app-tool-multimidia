@@ -30,6 +30,7 @@ private:
     std::thread outputThread_;
     std::atomic<bool> running_{false};
     std::atomic<bool> failed_{false};
+    std::atomic<bool> stopReported_{false};
     bool started_ = false;
     bool hasTimestamp_ = false;
     std::int64_t lastTimestamp_ = 0;

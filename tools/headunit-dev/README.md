@@ -35,6 +35,10 @@ Padronizar um fluxo de desenvolvimento rápido e reproduzível para:
 - foco em desenvolvimento, logs e diagnóstico;
 - sem alteração de controles críticos de condução/freio/airbag/ADAS/powertrain;
 - fallback preservado para o comportamento empacotado do APK.
+- builds Android/Gradle/Kotlin usam somente a fila autorizada do Mac Mini;
+- `deploy-apk` e `deploy-apk-adb` são fluxos legados com Gradle local e não devem
+  ser executados no host coordenador;
+- deploy, instalação, reinício e acesso ao veículo exigem autorização separada.
 
 ## Referências
 

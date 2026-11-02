@@ -3,11 +3,15 @@
 ## Fluxo 1 - Alteração Kotlin
 
 ```bash
-./tools/headunit-dev/headunit.sh deploy-apk
+scripts/build-on-mac-mini.sh <COMMIT>
 ./tools/headunit-dev/headunit.sh logcat-app
 ```
 
-`deploy-apk` faz build debug, envia para a central, instala/reinstala e reinicia o app.
+O build Android parte de um commit imutável e usa exclusivamente a fila autorizada
+do Mac Mini. Consulte `docs/BUILD_ANDROID_ON_MAC_MINI.md` para buscar o artefato.
+Instalação/reinício da central é uma etapa separada e exige autorização vigente.
+Os comandos legados `deploy-apk` e `deploy-apk-adb` fazem Gradle local e não devem
+ser usados no coordenador.
 
 ## Fluxo 2 - Alteração air-control
 

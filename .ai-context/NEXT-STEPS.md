@@ -1,3 +1,26 @@
+## CURRENT — test `.153` with the experiment armed before CarPlay connects
+
+In an owner-controlled session, start the five-minute Impulse experiment before
+connecting the iPhone. Then connect CarPlay, start an Apple Maps route, return CarPlay
+to display0 and keep safety UI clear. Retrieve the persisted clean-map and native
+trace for that same generation. Evidence that separates the hypotheses is the first
+observed getter/runtime/session111 advertisement, packet/IDR, codec input/output and
+presented frame. If no type111/session evidence appears, investigate negotiation and
+activation ordering; if packets appear but no frame presents, continue in the
+VideoBridge/MediaCodec path. Do not weaken safety policy or claim a visible map based
+only on `surface_ready`.
+
+## HISTORICAL — build and field-test the clean-map pipeline trace
+
+Commit the diagnostic branch and run the full JVM/Android Debug job only on the
+authorized Mac Mini. If green, install on a later owner-controlled parked session,
+cold-boot without a phone, wait for bridge READY, connect CarPlay, start Apple Maps,
+start the five-minute test and return CarPlay to display0 with doors closed. Retrieve
+the persisted `clean_map` and native trace events and classify the first missing stage
+using `docs/architecture/carplay-clean-map-pipeline-trace.md`. Do not loosen policy or
+redesign advertisement until this trace separates stale retirement from frame
+production. No current vehicle wake/install/reboot is part of this source task.
+
 ## CURRENT — validate and publish 149 cold direct arm
 
 Source now admits only non-destructive cold attach from exact process/module identity

@@ -1,4 +1,5 @@
 #include "oem_runtime_adapter.h"
+#include "pipeline_trace.h"
 
 #include <stdexcept>
 #include <utility>
@@ -40,9 +41,14 @@ DisplayArray OemRuntimeAdapter::getDisplays(observed_abi::Status* error) noexcep
     try {
         primary = original_(error);
         returned = true;
-        if (!runtime_->enabled() || !primary || *error != 0) { return primary; }
+        if (!runtime_->enabled() || !primary || *error != 0) {
+            PipelineTrace::getterRuntime(error ? *error : VideoBridge::notReady, false);
+            return primary;
+        }
         StagedArray staged{nullptr, release_};
-        advertisementStatus_.store(runtime_->advertiseForGetter(primary, StagedArray::publish, &staged));
+        const auto status = runtime_->advertiseForGetter(primary, StagedArray::publish, &staged);
+        advertisementStatus_.store(status);
+        PipelineTrace::getterRuntime(status, staged.value != nullptr);
         if (!staged.value) { return primary; }
         release_(primary);
         return std::exchange(staged.value, nullptr);

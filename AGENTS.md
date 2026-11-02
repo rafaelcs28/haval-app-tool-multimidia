@@ -6,6 +6,16 @@ O objetivo provável é controlar/estender funções da central, renderizar um c
 
 Stack principal: Android Kotlin/Java, Compose, WebView, JavaScript/HTML/CSS, Parcel, Shizuku, scripts shell e PowerShell.
 
+# Entradas Canônicas
+
+- Produto e escopo: `PRODUCT.md`.
+- Primeiro acesso e ambiente: `docs/onboarding.md`.
+- Arquitetura: `docs/architecture/overview.md` e documentos específicos em `docs/architecture/`.
+- Design e temas: `docs/design.md`.
+- Checks e evidências: `docs/quality.md`.
+- Ferramentas e decisões do harness: `docs/setup.md`.
+- Estado curto da tarefa atual: topo de `.ai-context/HANDOFF.md`.
+
 # Regras Obrigatórias
 
 - Sempre ler `.ai-context/` antes de implementar.
@@ -87,8 +97,8 @@ Stack principal: Android Kotlin/Java, Compose, WebView, JavaScript/HTML/CSS, Par
 - Se algum comando falhar, documentar motivo.
 - Não afirmar que testou se não testou.
 - Registrar validações em `.ai-context/CHANGELOG-AI.md`.
-- Para Android: `./gradlew :app:assembleDebug`.
-- Para testes unitários: `./gradlew :app:testDebugUnitTest`.
+- Para Android/JVM/Kotlin: nunca executar Gradle no coordenador. Submeter um commit imutável auditado com `scripts/build-on-mac-mini.sh <COMMIT>` conforme `docs/BUILD_ANDROID_ON_MAC_MINI.md`.
+- Para checks portáteis: usar apenas as suítes Python/Node/native documentadas para o fluxo alterado.
 - Para temas: build do tema alterado em `cluster-widgets/<tema>`.
 
 # Handoff
@@ -102,20 +112,18 @@ Stack principal: Android Kotlin/Java, Compose, WebView, JavaScript/HTML/CSS, Par
 
 # Skills
 
-- Usar skills em `.agents/skills` quando aplicável.
-- Se uma tarefa envolver WebView, consultar `haval-webview-lifecycle` e `haval-kotlin-js-bridge`.
-- Se envolver performance, consultar `haval-cluster-performance`.
-- Se envolver QA, consultar `haval-qa-regression`.
-- Se envolver documentação/handoff, consultar `haval-docs-handoff`.
-- Se envolver display/cluster, consultar `haval-display-resolution-safety` e `haval-android-secondary-display`.
-- Se envolver CarPlay no cluster 3, tela preta ou handoff display 0/3, consultar `haval-carplay-cluster-diagnostics`.
+- Usar somente skills realmente presentes em `.agents/skills`; conferir o `SKILL.md` antes de agir.
+- Skills genéricas complementam, mas não substituem, as regras deste arquivo nem os contratos do projeto.
+- WebView/bridge: consultar `docs/architecture/overview.md`, `docs/architecture/themes-contract-v1.md` e o código afetado.
+- Display/cluster e CarPlay: consultar `docs/carplay-cluster-regression-contract.md` e os documentos específicos em `docs/architecture/`.
+- QA e handoff: seguir `docs/quality.md` e `.ai-context/`.
 
 # Custom Agents
 
-- Usar agents em `.codex/agents` quando a tarefa for complexa.
+- Usar subagentes nativos disponíveis no cliente quando a tarefa for complexa e realmente paralelizável.
 - Preferir agents read-only para análise, arquitetura e QA.
 - Usar agent de implementação apenas após análise.
-- `haval-architect` e `haval-code-mapper` devem preceder mudanças amplas.
+- Mudanças amplas devem receber mapeamento de arquitetura e revisão independente antes da implementação.
 
 ---
 

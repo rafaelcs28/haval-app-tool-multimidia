@@ -8,16 +8,26 @@ import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher
 /** ActivityManager reads stay off the UI thread and exist only for the explicit test. */
 internal class CarPlayCleanMapSampler(
     private val deadlineElapsedMs: Long,
-    private val publish: (CarPlayCleanMapTaskObservation) -> Unit
+    private val onReadStarted: (Long) -> Unit,
+    private val publish: (CarPlayCleanMapTaskRead) -> Unit
 ) : AutoCloseable {
     @Volatile private var closed = false
     private val poll = object : Runnable {
         override fun run() {
             if (closed || SystemClock.elapsedRealtime() >= deadlineElapsedMs) { close(); return }
-            val sample = runCatching { DisplayAppLauncher.readCarPlayCleanMapTasks() }
-                .getOrElse { CarPlayCleanMapTaskObservation.unknown() }
+            val startedAt = SystemClock.elapsedRealtime()
+            onReadStarted(startedAt)
+            val sample = runCatching { DisplayAppLauncher.readCarPlayCleanMapTasks(startedAt) }
+                .getOrElse {
+                    CarPlayCleanMapTaskRead(
+                        CarPlayCleanMapTaskObservation.unknown(), startedAt, SystemClock.elapsedRealtime())
+                }
             if (!closed && SystemClock.elapsedRealtime() < deadlineElapsedMs) publish(sample)
-            if (!closed) worker.postDelayed(this, 500)
+            if (!closed) {
+                val nextStartAt = startedAt + SAMPLE_PERIOD_MS
+                worker.postDelayed(this,
+                    (nextStartAt - SystemClock.elapsedRealtime()).coerceAtLeast(MIN_READ_GAP_MS))
+            }
         }
     }
 
@@ -33,5 +43,7 @@ internal class CarPlayCleanMapSampler(
         // All sessions share one serial daemon; close removes only its own work.
         private val thread = HandlerThread("carplay-clean-map-observe").apply { isDaemon = true; start() }
         private val worker = Handler(thread.looper)
+        private const val SAMPLE_PERIOD_MS = 500L
+        private const val MIN_READ_GAP_MS = 100L
     }
 }

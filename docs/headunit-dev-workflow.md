@@ -15,21 +15,21 @@ Reduzir o ciclo manual de build, deploy, logs e exploração da central multimí
 ## Fluxo 1: Testar alteração Kotlin
 
 1. Editar o código em `app/`.
-2. Rodar:
+2. Criar e auditar um commit imutável.
+3. Submeter o build ao Mac Mini:
 
 ```bash
-./tools/headunit-dev/headunit.sh deploy-apk
+scripts/build-on-mac-mini.sh <COMMIT>
 ```
 
-3. O comando acima:
-   - roda `./gradlew :app:assembleDebug`
-   - sobe um servidor HTTP local temporário
-   - pede para a central baixar o APK via `curl`/`wget` em Wi-Fi
-   - faz `pm install -r`
-   - reinicia o app
-   - cai para upload por Telnet + base64 apenas se o HTTP falhar
+4. Consulte `docs/BUILD_ANDROID_ON_MAC_MINI.md` para acompanhar e buscar o
+   artefato em um diretório novo. Instalação na central é uma etapa separada e exige
+   autorização vigente para o veículo e o alvo exato.
 
-4. Acompanhar logs:
+Os comandos legados `deploy-apk` e `deploy-apk-adb` ainda fazem Gradle local e não
+devem ser usados neste host. Não há fallback automático para build na VPS.
+
+5. Após uma instalação autorizada, acompanhar logs:
 
 ```bash
 ./tools/headunit-dev/headunit.sh logcat-app

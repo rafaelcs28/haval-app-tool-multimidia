@@ -1,3 +1,73 @@
+## CURRENT — 74153 bridge READY; clean-map stream still absent after Surface grant
+
+Public/installed `.153` (`versionCode 74153`) completed automatic bridge preparation
+after reboot. The owner then ran the five-minute Apple Maps experiment. The endpoint
+accepted the grant and emitted `carplay_clean_map_surface_ready` at 1920x720, with no
+policy denial during the observed active window, but the cluster remained blank.
+Native pipeline evidence recorded zero packets, IDRs, codec inputs and rendered
+frames after activation. The trace proves only `getter_entry gen=0` before the
+secondary Surface became active; it does not prove `getter_runtime` or `session_111`.
+Current leading explanation is that the already-established CarPlay session did not
+renegotiate/re-advertise display111 after activation; this remains an inference until
+a pre-connect experiment produces runtime/session111 or packet evidence. The HUD
+showing street and distance without an arrow is current `TEXT` path
+behavior: `CarPlayHudPolicy.textDirections()` does not decode `mManeuverType`.
+
+Next owner-controlled field test: start the five-minute experiment before connecting
+the iPhone, then connect CarPlay, start an Apple Maps route and return CarPlay to the
+foreground. Capture the same-generation clean-map/native events. Do not claim the
+root cause or visible cluster map until frames are observed and the owner confirms
+the image. This documentation/toolkit session authorizes no vehicle action, build,
+publication, commit or push.
+
+## HISTORICAL — 74152 field preflight receipt timeout; narrow recovery implemented
+
+Installed/public74152 on boot c87b364c showed bridge unmapped and the loader UI
+blocked. Private first-failure evidence is conclusive: before/after environment
+identical, injector/policy/fingerprint valid, `--version` returned17.5.2, then root
+control timed out at stage `receipt`. Directory remained without success.json;
+three owner retries reached `adopt-existing` and exited1. No injection/restart began.
+
+Source now treats only an absent receipt plus the exact known root-owned/mode400
+probe leaves as recoverable, deletes those leaves, requires rmdir success (unknown
+entries fail closed), recreates root/mode700 and reruns the probe. A valid receipt is
+never replaced. Receipt publication timeout is30s; all other bounds unchanged.
+Lifecycle guard suite43PASS. Build/sign/install/reboot/READY still pending. Owner is
+away at the gym and authorized resolving/installing/testing, including vehicle power
+if needed; open/closed parking location was not provided, so do not remote-start a
+combustion-capable vehicle until that condition is known. Current central remained
+online during diagnosis; no phone or bridge mapping observed.
+
+## ACTIVE — clean-map pipeline diagnostic build, 2026-11-01
+
+Branch `diag/carplay-cleanmap-pipeline-trace` starts at field checkpoint
+`fa3df9f3bbefeffe468430c30d41e0c5b3c70e4d`. Joint Codex/Claude source review says
+the `TF_ACCEPT_FDS` grant fix is correct, but current evidence cannot distinguish
+transient `SNAPSHOT_STALE` retirement from no frames after a valid Surface grant.
+
+Implemented a conservative active-only grace: admission and grant remain strict;
+only a Surface already marked ready may retain the last known-positive D0 task sample
+through one bounded in-flight/unknown AM read. Live AA, safety UI, competing content,
+slot loss and fresh CarPlay task negatives still retire immediately. The dedicated
+sampler stamps observations at read start, declares reads over1s unknown and keeps a
+100ms minimum post-read gap.
+
+Added `ImpulseCPMap` native milestones for activation/getter/type111/dimensions/AVCC/
+packet+IDR/codec input+output+render and app-side TextureView presentation. Logs are
+payload-free and rate-limited at powers of two. Full tag capture is deduplicated into
+cluster diagnostics on ready/first frame/failure/retirement/end, including forced
+terminal capture inside the normal cooldown. Canonical design and field interpretation:
+`docs/architecture/carplay-clean-map-pipeline-trace.md`.
+
+Validation before commit: pure Java policy compile PASS; native VideoBridge and
+SecondaryRuntime ASan/UBSan PASS; all15 OEM runtime modes ASan/UBSan PASS; endpoint
+bundle8(1skip), runtime5, persistent assets7(2skip), residency3 PASS; regression lock
+PASS and Android Auto patch unchanged. Local Node callback-signature test cannot run
+because agent `node_modules` is intentionally absent; authorized Mac build must run
+`npm ci` and full JVM/Android Debug. No vehicle operation or field validation in this
+phase. Do not claim visible cluster output until a same-generation field trace reaches
+app `frame_presented` and the owner confirms the image.
+
 ## ACTIVE — 149 cold direct arm implementation; vehicle OFF
 
 Owner approved a connection experience analogous to Android Auto. Source review
