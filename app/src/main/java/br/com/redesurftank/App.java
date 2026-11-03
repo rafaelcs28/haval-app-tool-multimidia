@@ -141,7 +141,8 @@ public class App extends Application {
     private boolean clusterServiceEnabled() {
         return getDeviceProtectedContext()
                 .getSharedPreferences("haval_prefs", MODE_PRIVATE)
-                .getBoolean("aaClusterServiceAutoMount", false);
+                .getBoolean("aaClusterServiceAutoMount",
+                        br.com.redesurftank.havalshisuku.managers.AndroidAutoPatchManager.CLUSTER_SERVICE_DEFAULT);
     }
 
     private boolean autoMountEnabled() {
