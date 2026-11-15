@@ -20,7 +20,7 @@ assert.doesNotMatch(html, /url\(["']?(?:https?:|\.\.)/);
 assert.doesNotMatch(html, /theme-lab|evPowerKw|setNativeMask|setClusterBackground/);
 assert.match(html, /ApexMenus/);
 assert.match(html, /createAcFocusPreference/);
-assert.match(manifest, /<version>1\.0\.16<\/version>/);
+assert.match(manifest, /<version>1\.0\.17<\/version>/);
 assert.match(html, /ApexSpeed/);
 assert.match(html, /ApexProjection/);
 assert.match(html, /window\.ApexShared = \{/);
