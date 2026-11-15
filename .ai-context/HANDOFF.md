@@ -13,6 +13,8 @@ recompilados pelas fontes. `minBridgeVersion=1.0.2` foi preservado. Dois checks 
 que ainda esperavam ApexGT 1.0.16 foram corrigidos no commit `2773533c`. `npm run
 check` do ApexGT e de `cluster-widgets` passam, incluindo 20 casos de runtime, 6 de
 projeção, 4 TBT e 46 cenários globais de foco AC. `git diff --check` passa.
+Revisão final também elevou Minimalist de 1.0.8 para 1.0.9; sem isso, instalações
+existentes não receberiam o novo fundo porque a atualização dinâmica compara versões.
 
 Build Android/JVM não foi executado: a fila autorizada recusou o commit antes da
 submissão com `build_controls_not_approved`, digest

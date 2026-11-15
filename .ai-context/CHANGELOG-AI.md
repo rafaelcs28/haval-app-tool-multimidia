@@ -6,6 +6,8 @@ todo o histórico v10/v9 divergente, foram cherry-picked os seis commits novos a
 sessão AA, ApexGT 1.0.17 com TBT e modos de projeção, e limite de altura do diálogo do
 launcher. Artefatos Default/ApexGT foram reconstruídos pelas fontes e bridge1.0.2 foi
 preservada. Corrigidas duas expectativas stale de versão 1.0.16 nos checks ApexGT.
+Minimalist foi elevado de 1.0.8 para 1.0.9 porque seu novo fundo depende do mecanismo
+de atualização dinâmica por versão; fonte, pacote e expectativa de teste foram alinhados.
 
 ApexGT `npm run check` PASS; catálogo completo `npm run check` PASS, com46 cenários
 de foco AC. `git diff --check` PASS. Mac Mini não iniciou o build porque o digest de
