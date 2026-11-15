@@ -19,8 +19,9 @@ existentes não receberiam o novo fundo porque a atualização dinâmica compara
 Build Android/JVM não foi executado: a fila autorizada recusou o commit antes da
 submissão com `build_controls_not_approved`, digest
 `ab752f6557e1eccfb87aa85674d44764986682c7b89f20d103df3e63d18f621f`. Não houve
-fallback local, push, publicação ou ação no veículo. Próximo passo: revisar/allowlist
-do digest, executar Debug no Mac Mini e só então publicar a branch/PR.
+fallback local, APK, release ou ação no veículo. A branch foi publicada e o PR #7 foi
+aberto como draft. Próximo passo: revisar/allowlist do digest, executar Debug no Mac
+Mini e só então retirar o draft e considerar merge.
 
 ## CURRENT — 74153 bridge READY; clean-map stream still absent after Surface grant
 

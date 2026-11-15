@@ -11,8 +11,8 @@ de atualização dinâmica por versão; fonte, pacote e expectativa de teste for
 
 ApexGT `npm run check` PASS; catálogo completo `npm run check` PASS, com46 cenários
 de foco AC. `git diff --check` PASS. Mac Mini não iniciou o build porque o digest de
-controle ainda não está allowlisted; nenhum fallback local, push, APK, publicação ou
-veículo.
+controle ainda não está allowlisted; branch publicada e PR #7 aberto como draft.
+Nenhum fallback local, APK, release, merge ou ação no veículo.
 
 ## 2026-11-02 — adoção limitada do vibe-coding-toolkit
 
