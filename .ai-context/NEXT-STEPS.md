@@ -1,3 +1,13 @@
+## CURRENT — validar e publicar a integração Netseek v10
+
+Revisar e allowlist o digest de build
+`ab752f6557e1eccfb87aa85674d44764986682c7b89f20d103df3e63d18f621f`. Submeter o
+HEAD final da branch `integration/netseek-v10-20261115` ao Debug autorizado do Mac
+Mini, que executa JVM completo e `assembleDebug`. Se passar, conferir artefato e
+checksums, enviar a branch ao GitHub e abrir PR contra
+`diag/carplay-preflight-fieldcheck`. Não gerar release, instalar APK ou testar no
+veículo antes dessa validação.
+
 ## CURRENT — test `.153` with the experiment armed before CarPlay connects
 
 In an owner-controlled session, start the five-minute Impulse experiment before

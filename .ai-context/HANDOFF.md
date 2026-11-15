@@ -1,3 +1,25 @@
+## CURRENT — GitHub atualizado e Netseek v10 integrado em branch dedicada
+
+Branch `integration/netseek-v10-20261115` parte do merge mais novo do GitHub do
+proprietário (`1934f646`, PR #6). O merge integral da v10 foi descartado porque
+reintroduzia histórico v9 já integrado e gerava 16 conflitos. Foram aplicados somente
+os seis commits novos de `upstream/feature/new-screen-enhancements-v10`: mapa AA no
+cluster por padrão; Default/ApexGT solicitando o mapa; novo fundo Minimalist; sessão
+AA mantida durante navegação; ApexGT 1.0.17 com retângulos Ampla/Janela e card TBT;
+diálogo do Impulse Launcher limitado a 80% da tela.
+
+Conflitos ficaram restritos a artefatos de temas e metadados. Default e ApexGT foram
+recompilados pelas fontes. `minBridgeVersion=1.0.2` foi preservado. Dois checks locais
+que ainda esperavam ApexGT 1.0.16 foram corrigidos no commit `2773533c`. `npm run
+check` do ApexGT e de `cluster-widgets` passam, incluindo 20 casos de runtime, 6 de
+projeção, 4 TBT e 46 cenários globais de foco AC. `git diff --check` passa.
+
+Build Android/JVM não foi executado: a fila autorizada recusou o commit antes da
+submissão com `build_controls_not_approved`, digest
+`ab752f6557e1eccfb87aa85674d44764986682c7b89f20d103df3e63d18f621f`. Não houve
+fallback local, push, publicação ou ação no veículo. Próximo passo: revisar/allowlist
+do digest, executar Debug no Mac Mini e só então publicar a branch/PR.
+
 ## CURRENT — 74153 bridge READY; clean-map stream still absent after Surface grant
 
 Public/installed `.153` (`versionCode 74153`) completed automatic bridge preparation

@@ -1,3 +1,17 @@
+## 2026-11-15 — integração seletiva do Netseek v10
+
+Base sincronizada com o merge `1934f646` do GitHub do proprietário. Em vez de mesclar
+todo o histórico v10/v9 divergente, foram cherry-picked os seis commits novos após o
+último sync: defaults e pedido do mapa AA, fundo Minimalist, recuperação/hold da
+sessão AA, ApexGT 1.0.17 com TBT e modos de projeção, e limite de altura do diálogo do
+launcher. Artefatos Default/ApexGT foram reconstruídos pelas fontes e bridge1.0.2 foi
+preservada. Corrigidas duas expectativas stale de versão 1.0.16 nos checks ApexGT.
+
+ApexGT `npm run check` PASS; catálogo completo `npm run check` PASS, com46 cenários
+de foco AC. `git diff --check` PASS. Mac Mini não iniciou o build porque o digest de
+controle ainda não está allowlisted; nenhum fallback local, push, APK, publicação ou
+veículo.
+
 ## 2026-11-02 — adoção limitada do vibe-coding-toolkit
 
 Aplicado somente o subconjunto compatível com o Haval Impulse: documentos canônicos
