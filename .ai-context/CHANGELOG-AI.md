@@ -1,3 +1,11 @@
+## 2026-11-15 — preparação da 160 com entrega real dos temas
+
+Confirmado que a 159 já inclui o PR #167 e o fix HUD do PR #168. O problema estava
+na distribuição: APK e catálogo público mantinham versões antigas, impedindo update.
+Portado o fix/testes do #168 para a fonte CarPlay atual e alinhados os pacotes em
+Default 1.4.49, Minimalist 1.0.9 e ApexGT 1.0.18. Apex e catálogo completo passam;
+build assinado e publicação OTA permanecem pendentes.
+
 ## 2026-11-15 — integração seletiva do Netseek v10
 
 Base sincronizada com o merge `1934f646` do GitHub do proprietário. Em vez de mesclar

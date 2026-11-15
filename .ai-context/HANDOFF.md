@@ -1,3 +1,18 @@
+## CURRENT — 74160 corrige entrega dos temas e preserva o radar/HUD da 159
+
+O canal OTA atual é 74159, não 74153. A 158 já incorporou o PR upstream #167 e
+a 159 acrescentou o PR #168. A investigação encontrou o defeito de entrega: o APK
+159 ainda declara Default 1.4.48 e a branch pública `themes-preview` ainda oferece
+Default 1.4.48, Minimalist 1.0.8 e ApexGT 1.0.16. Assim, o comparador de versões não
+oferece os pacotes novos. ApexGT 1.0.16 também não contém o card TBT/radar novo.
+
+Branch `release/impulse-74160-themes-radar`: portou o fix funcional e os dois testes
+do PR #168; alinhou Default 1.4.49, Minimalist 1.0.9 e ApexGT 1.0.18; regenerou os
+três pacotes e o Default embarcado. Checks ApexGT e catálogo completo passam, incluindo
+4 casos TBT/radar, paridade APK/OTA e 46 cenários de foco AC. Build Release 74160,
+publicação dos três temas e avanço de `app-latest` ainda pendem. Publicar o manifesto
+OTA por último e nunca substituir a 159 antes de verificar APK/certificado/download.
+
 ## CURRENT — GitHub atualizado e Netseek v10 integrado em branch dedicada
 
 Branch `integration/netseek-v10-20261115` parte do merge mais novo do GitHub do

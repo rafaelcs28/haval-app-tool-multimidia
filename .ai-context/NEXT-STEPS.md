@@ -1,3 +1,12 @@
+## CURRENT — construir e publicar 74160
+
+Executar Release 74160 no Mac Mini autorizado. Verificar versionCode/name, SHA-256,
+certificado de produção e conteúdo dos três manifests no APK. Publicar primeiro os
+pacotes compilados Default 1.4.49, Minimalist 1.0.9 e ApexGT 1.0.18 em
+`themes-preview`, conferindo bytes públicos. Depois publicar prerelease 74160 e seu
+APK. Atualizar `app-latest/app-preview.json` somente após download público completo.
+Não instalar nem operar o carro nesta etapa.
+
 ## CURRENT — validar e publicar a integração Netseek v10
 
 Revisar e allowlist o digest de build
