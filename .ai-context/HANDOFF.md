@@ -1,3 +1,25 @@
+## CURRENT — 74161 publicada: cortina automática por horário mais confiável
+
+Branch `fix/curtain-schedule-reliability`, fonte
+`35bd8b2a0d88c9a4c4e03f1d9340210e58a9a44a`, parte da OTA 74160. Corrige quatro
+falhas do agendamento da cortina: o boot só elimina a espera adicional de 20 segundos
+quando `driving_ready` já estava ativo ao armar; READY tardio preserva a estabilização;
+temperatura indisponível ou acima do limite libera nova avaliação dentro da janela; e
+a janela de fechamento bloqueia a abertura durante toda a sobreposição. A verificação
+com até oito tentativas de atuação da 160 foi preservada.
+
+TDD comprovado: o commit de testes `1d7123dc` falhou na compilação pela ausência das
+duas políticas; o commit `35bd8b2a` passou JVM Debug e `assembleDebug`. Release 74161
+foi compilada no SSD externo do Mac Mini pelo job
+`haval-impulse-133-35bd8b2a0d88c9a4-20261118T184854Z-5153`: 83 tarefas, R8, lint,
+native, assinatura e assemble PASS em 5m10s. Certificado esperado
+`5efec0f94d84d90e769635a81d51e2f25953d5d5b3cea950a115705d3b5e83e0`.
+
+OTA `1.0.0.74.161-preview` publicada. APK público: 104474415 bytes, SHA-256
+`d0e216f0b5d1b9164d38432cebf6216544f2b0affc070f73a64de4f79598e816`. Download
+anônimo integral e manifesto fixo `app-latest/app-preview.json` foram validados após
+a publicação. Teste físico da abertura/fechamento no veículo permanece pendente.
+
 ## CURRENT — 74160 corrige entrega dos temas e preserva o radar/HUD da 159
 
 O canal OTA atual é 74159, não 74153. A 158 já incorporou o PR upstream #167 e

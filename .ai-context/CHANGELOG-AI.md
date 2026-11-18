@@ -1,3 +1,17 @@
+## 2026-11-18 — 74161 corrige agendamento automático da cortina
+
+Aplicada correção própria sobre a 160 em vez do merge direto do PR upstream #173.
+No boot, a antecipação só ocorre quando READY já estava ativo ao armar; READY detectado
+depois ainda recebe 20 segundos de estabilização. Falhas temporárias de temperatura
+não consomem mais toda a janela. Fechamento mantém prioridade durante sobreposição de
+horários. A atuação verificada e os oito retries existentes foram preservados.
+
+TDD RED no commit `1d7123dc`; Debug/JVM GREEN no commit `35bd8b2a`. Release 74161
+assinada no SSD externo do Mac Mini: 83 tarefas PASS em 5m10s. Publicados APK,
+checksums e metadados; certificado, download público integral, SHA-256
+`d0e216f0b5d1b9164d38432cebf6216544f2b0affc070f73a64de4f79598e816`, tamanho
+104474415 e manifesto OTA foram verificados. Validação física no veículo pendente.
+
 ## 2026-11-15 — preparação da 160 com entrega real dos temas
 
 Confirmado que a 159 já inclui o PR #167 e o fix HUD do PR #168. O problema estava
