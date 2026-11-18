@@ -383,12 +383,12 @@ public class ServiceManager {
     // comando (visto em 20/08 20:10 e 21/08 06:28 — set_100 com levelBefore=0 e a cortina fechada).
     // Espera driving_ready + settle antes de mandar. Tudo é event-driven/timer: nenhum polling,
     // nada roda durante a janela de boot.
-    private static final long CURTAIN_SETTLE_AFTER_READY_MS = 20000L;
+    private static final long CURTAIN_SETTLE_AFTER_READY_MS = SunroofCurtainStartupPolicy.SETTLE_AFTER_READY_MS;
     // Cobre o caso "app subiu com o carro já ligado": a transição de driving_ready não vem mais,
     // então uma única leitura ao vivo (bem depois do boot) resolve. O cache não serve: é defasado.
-    private static final long CURTAIN_READY_CHECK_DELAY_MS = 30000L;
+    private static final long CURTAIN_READY_CHECK_DELAY_MS = SunroofCurtainStartupPolicy.READY_CHECK_DELAY_MS;
     // Rede de segurança: se nem evento nem leitura confirmarem, tenta assim mesmo.
-    private static final long CURTAIN_ARM_FALLBACK_MS = 120000L;
+    private static final long CURTAIN_ARM_FALLBACK_MS = SunroofCurtainStartupPolicy.ARM_FALLBACK_MS;
     private static final long RADIO_RESTORE_RETRY_MS = 4000L;
     // 8 tentativas x 4s ≈ 28s: o tether (hotspot) pode demorar a subir no boot deste OEM.
     // O loop para assim que o rádio liga, então tentativas extras são de graça p/ o BT (rápido).
@@ -2782,7 +2782,7 @@ public class ServiceManager {
                     // Carro pronto: é aqui que a cortina pode ser comandada com o módulo do teto acordado.
                     // Os dois convivem: o trigger consome (uma vez só) o armamento do boot; a partir
                     // daí ele é no-op e quem atua nas partidas seguintes é o "a cada ignição".
-                    triggerStartupCurtainAutomation("driving_ready_event");
+                    triggerStartupCurtainAutomation(SunroofCurtainStartupPolicy.Trigger.DRIVING_READY_EVENT, false);
                     evaluateCurtainOnIgnition();
                 }
             } else if (key.equals(CarConstants.CAR_HVAC_POWER_MODE.getValue()) && sharedPreferences.getBoolean(SharedPreferencesKeys.ENABLE_SEAT_VENTILATION_ON_AC_ON.getKey(), false)) {
@@ -3340,33 +3340,41 @@ public class ServiceManager {
     private void armStartupCurtainAutomation() {
         if (backgroundHandler == null) return;
         curtainAutomationArmed.set(true);
+        String readyAtArmState = getUpdatedData(CarConstants.CAR_BASIC_DRIVING_READY_STATE.getValue());
+        boolean readyAlreadyOnAtArm = isVehicleReadyStateOn(readyAtArmState);
         traceCurtain("sunroof_curtain_armed", "settleMs", CURTAIN_SETTLE_AFTER_READY_MS,
-                "readyCheckMs", CURTAIN_READY_CHECK_DELAY_MS, "fallbackMs", CURTAIN_ARM_FALLBACK_MS);
+                "readyCheckMs", CURTAIN_READY_CHECK_DELAY_MS, "fallbackMs", CURTAIN_ARM_FALLBACK_MS,
+                "readyAlreadyOnAtArm", readyAlreadyOnAtArm);
 
         // Carro já ligado quando o app subiu: a transição não vem, então confere ao vivo mais tarde.
         backgroundHandler.postDelayed(() -> {
             if (!curtainAutomationArmed.get()) return;
             String readyState = getUpdatedData(CarConstants.CAR_BASIC_DRIVING_READY_STATE.getValue());
             if (isVehicleReadyStateOn(readyState)) {
-                triggerStartupCurtainAutomation("driving_ready_poll");
+                triggerStartupCurtainAutomation(SunroofCurtainStartupPolicy.Trigger.DRIVING_READY_POLL,
+                        readyAlreadyOnAtArm);
             } else {
                 traceCurtain("sunroof_curtain_wait", "readyState", readyState);
             }
         }, CURTAIN_READY_CHECK_DELAY_MS);
 
-        backgroundHandler.postDelayed(() -> triggerStartupCurtainAutomation("fallback_timeout"), CURTAIN_ARM_FALLBACK_MS);
+        backgroundHandler.postDelayed(() -> triggerStartupCurtainAutomation(
+                SunroofCurtainStartupPolicy.Trigger.FALLBACK_TIMEOUT, false), CURTAIN_ARM_FALLBACK_MS);
     }
 
     /**
      * Consome o armamento (uma vez só) e, após o settle, faz a primeira avaliação da agenda de
      * abrir/fechar (evaluateCurtainSchedule), que então se reagenda sozinha.
      */
-    private void triggerStartupCurtainAutomation(String trigger) {
+    private void triggerStartupCurtainAutomation(SunroofCurtainStartupPolicy.Trigger trigger,
+                                                 boolean readyAlreadyOnAtArm) {
         if (!curtainAutomationArmed.compareAndSet(true, false)) return;
         hasRunStartupCurtainAutomation = true;
-        traceCurtain("sunroof_curtain_trigger", "trigger", trigger, "settleMs", CURTAIN_SETTLE_AFTER_READY_MS);
+        long settleMs = SunroofCurtainStartupPolicy.settleMsFor(trigger, readyAlreadyOnAtArm);
+        traceCurtain("sunroof_curtain_trigger", "trigger", trigger.traceName, "settleMs", settleMs,
+                "readyAlreadyOnAtArm", readyAlreadyOnAtArm);
         backgroundHandler.removeCallbacks(curtainScheduleRunnable);
-        backgroundHandler.postDelayed(curtainScheduleRunnable, CURTAIN_SETTLE_AFTER_READY_MS);
+        backgroundHandler.postDelayed(curtainScheduleRunnable, settleMs);
     }
 
     private void autoOpenSunroofCurtain(int attempt) {
@@ -3398,6 +3406,7 @@ public class ServiceManager {
 
         // Horário fora da janela é definitivo: não adianta esperar leitura de temperatura.
         if (!isTimeInRange) {
+            curtainOpenActedThisWindow = false;
             Log.w(TAG, "Current time " + currentHour + ":" + currentMinute + " not in range (" + startHour + ":" + startMinute + " - " + endHour + ":" + endMinute + "), not opening curtain");
             traceCurtain("sunroof_curtain_skip", "reason", "time_out_of_range", "now", currentHour + ":" + currentMinute, "window", window);
             return;
@@ -3415,6 +3424,7 @@ public class ServiceManager {
                 if (willRetry) {
                     backgroundHandler.postDelayed(() -> autoOpenSunroofCurtain(attempt + 1), CURTAIN_TEMP_RETRY_MS);
                 } else {
+                    curtainOpenActedThisWindow = false;
                     Log.w(TAG, "Outside temp still unavailable after " + CURTAIN_TEMP_MAX_ATTEMPTS + " attempts, not opening curtain");
                     traceCurtain("sunroof_curtain_skip", "reason", "temp_unavailable", "attempts", CURTAIN_TEMP_MAX_ATTEMPTS);
                 }
@@ -3432,6 +3442,7 @@ public class ServiceManager {
             // Delay slightly to ensure services are fully ready or just triggering command
             backgroundHandler.postDelayed(() -> actuateCurtainVerified(true, 0), 2000);
         } else {
+            curtainOpenActedThisWindow = false;
             Log.w(TAG, "Outside temp " + outsideTemp + " > max configured " + maxTemp + ", not opening curtain");
             traceCurtain("sunroof_curtain_skip", "reason", "temp_above_max", "outsideTemp", outsideTemp, "maxTemp", maxTemp);
         }
@@ -3515,14 +3526,13 @@ public class ServiceManager {
         if (!inOpen) curtainOpenActedThisWindow = false;
         if (!inClose) curtainCloseActedThisWindow = false;
 
-        // Fechar tem precedência se (config equivocada) as janelas casarem — nunca abrir+fechar juntos.
-        if (inClose && !curtainCloseActedThisWindow) {
+        SunroofCurtainSchedulePolicy.Action action = SunroofCurtainSchedulePolicy.actionFor(
+                inOpen, curtainOpenActedThisWindow, inClose, curtainCloseActedThisWindow);
+        if (action == SunroofCurtainSchedulePolicy.Action.CLOSE) {
             curtainCloseActedThisWindow = true;
             traceCurtain("curtain_schedule_act", "trigger", trigger, "action", "close", "nowMin", t);
             autoCloseSunroofCurtain();
-            return;
-        }
-        if (inOpen && !curtainOpenActedThisWindow) {
+        } else if (action == SunroofCurtainSchedulePolicy.Action.OPEN) {
             curtainOpenActedThisWindow = true;
             traceCurtain("curtain_schedule_act", "trigger", trigger, "action", "open", "nowMin", t);
             autoOpenSunroofCurtain(0);
