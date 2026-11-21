@@ -13,7 +13,18 @@ Novatek, só leitura: `3037` modo (1 = vídeo), `2016` segundos do arquivo em gr
 (cresce enquanto grava), `3017` bytes livres no cartão, `3015` lista com `NAME`, `FPATH`
 (`A:\CARDV\Movie\…TS`), `SIZE`, `TIME` (fim do arquivo) e `ATTR` (bit 0 = travado). Vídeos
 `.TS` de 1 min (~139 MB) em `http://192.168.1.254/CARDV/Movie/<nome>.TS`, com `Range` (206)
-mesmo gravando. Pausa na recarga, retomada e relógio ficam desligados nesse perfil.
+mesmo gravando. Escrita Novatek: só `2001&par=0|1` (parar/gravar), usada pelas regras de pausa;
+o efeito é conferido amostrando `2016` duas vezes (~1,2 s): o contador anda enquanto grava.
+Retomada a cada 5 min e relógio continuam só na HiSilicon.
+
+## Regras de pausa (`DashcamRecordingPolicy`)
+
+- **Pausar durante recarga**: recarga ativa e velocidade ≤ 0,5 km/h.
+- **Gravar só com o carro pronto**: `car.basic.driving_ready_state` diferente de 1 pausa, em
+  qualquer marcha (ligado sem freio, recarga). Igual a 1 retoma.
+
+Qualquer regra que peça pausa vence; telemetria desconhecida segura (HOLD). Só a pausa marcada
+pelo Impulse (`pausedByApp`) é retomada; uma parada manual encontrada é preservada.
 
 Aba **Dashcam** no menu lateral, entre Recursos e Reportar problema. Usa a mesma dashcam
 HiSilicon da pausa durante recarga (`docs/architecture/dashcam-charging-pause.md`), em

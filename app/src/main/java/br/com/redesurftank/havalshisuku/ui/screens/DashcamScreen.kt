@@ -403,7 +403,7 @@ private fun stateLabel(state: DashcamGalleryRepository.StateSnapshot?): Pair<Str
     StateKind.RECORDING -> "Gravando" to RecordingGreen
     StateKind.EMERGENCY -> "Gravação de emergência" to ImpTokens.Danger
     StateKind.PAUSED -> "Pausada" to ImpTokens.Attention
-    StateKind.PAUSED_BY_CHARGING -> "Pausada durante a recarga" to ImpTokens.Attention
+    StateKind.PAUSED_BY_CHARGING -> "Pausada pela automação (recarga ou carro fora do READY)" to ImpTokens.Attention
     StateKind.PAUSED_BY_GALLERY -> "Pausada pela galeria" to ImpTokens.Attention
     StateKind.OTHER_MODE -> "Modo da câmera: ${state?.workMode ?: "desconhecido"}" to ImpTokens.Attention
     StateKind.UNKNOWN -> "Estado desconhecido" to ImpTokens.ThumbOff
@@ -636,9 +636,9 @@ private fun AutomationCard() {
             )
             AutomationSwitch(
                 modifier = Modifier.weight(1f),
-                title = "Aviso de falha de gravação",
-                hint = "Avisa uma vez quando a câmera é encontrada sem gravar.",
-                key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
+                title = "Gravar só com o carro pronto (READY)",
+                hint = "Pausa fora do READY, em qualquer marcha: ligado sem freio, recarga. Retoma no READY.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY,
                 prefs = prefs
             )
         }
@@ -658,6 +658,17 @@ private fun AutomationCard() {
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC,
                 prefs = prefs
             )
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Aviso de falha de gravação",
+                hint = "Avisa uma vez quando a câmera é encontrada sem gravar.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
+                prefs = prefs
+            )
+            Spacer(Modifier.weight(1f))
         }
     }
 }

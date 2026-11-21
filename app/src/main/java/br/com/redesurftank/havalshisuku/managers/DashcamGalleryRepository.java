@@ -183,8 +183,8 @@ public final class DashcamGalleryRepository {
     }
 
     /**
-     * Novatek: 3037 = mode (1 = movie), 2016 = seconds of the file being written (grows while it
-     * records), 3017 = free bytes. Read-only; nothing here changes the camera.
+     * Novatek: 3037 = mode (1 = movie), 2016 sampled twice (the counter moves while it records),
+     * 3017 = free bytes. Read-only; nothing here changes the camera.
      */
     private StateSnapshot readNovatekState(long now, boolean unconfirmed) {
         if (!lock()) {
@@ -192,12 +192,12 @@ public final class DashcamGalleryRepository {
                     DashcamProfile.NOVATEK, null);
         }
         DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> mode;
-        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> seconds = null;
+        DashcamHisiliconClient.Result<Boolean> recording = null;
         DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> free = null;
         try {
             mode = novatek.query(DashcamNovatekProtocol.CMD_MODE);
             if (mode.isSuccess()) {
-                seconds = novatek.query(DashcamNovatekProtocol.CMD_RECORDING_SECONDS);
+                recording = novatek.isRecording();
                 free = novatek.query(DashcamNovatekProtocol.CMD_FREE_SPACE);
             }
         } finally {
@@ -216,8 +216,14 @@ public final class DashcamGalleryRepository {
         } else if (modeValue != DashcamNovatekProtocol.MODE_MOVIE) {
             kind = StateKind.OTHER_MODE;
         } else {
-            Long secs = seconds != null && seconds.isSuccess() ? seconds.getValue().getLongValue() : null;
-            kind = secs == null ? StateKind.UNKNOWN : (secs > 0 ? StateKind.RECORDING : StateKind.PAUSED);
+            if (recording == null || !recording.isSuccess()) {
+                kind = StateKind.UNKNOWN;
+            } else if (recording.getValue()) {
+                kind = StateKind.RECORDING;
+            } else {
+                kind = statePreferences.getBoolean(KEY_PAUSED_BY_CHARGING, false)
+                        ? StateKind.PAUSED_BY_CHARGING : StateKind.PAUSED;
+            }
         }
         return new StateSnapshot(kind, modeValue == null ? null : "modo " + modeValue, null, now, unconfirmed,
                 DashcamProfile.NOVATEK, freeBytes);

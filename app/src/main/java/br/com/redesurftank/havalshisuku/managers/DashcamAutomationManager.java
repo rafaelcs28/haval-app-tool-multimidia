@@ -248,12 +248,17 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         return ok;
     }
 
+    /** True when a pause rule (charging and stopped, or not READY) currently asks for a pause. */
     private boolean chargingWantsPause() {
-        boolean enabled = pref(SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING);
-        if (!enabled) return false;
-        String charging = serviceManager.getUpdatedData(CarConstants.CAR_EV_INFO_CHARGING_STATE.getValue());
-        String speed = serviceManager.getUpdatedData(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue());
-        return DashcamChargingPausePolicy.decide(true, charging, speed)
+        boolean charging = pref(SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING);
+        boolean ready = pref(SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY);
+        if (!charging && !ready) return false;
+        return DashcamRecordingPolicy.decide(
+                charging,
+                serviceManager.getUpdatedData(CarConstants.CAR_EV_INFO_CHARGING_STATE.getValue()),
+                serviceManager.getUpdatedData(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue()),
+                ready,
+                serviceManager.getUpdatedData(CarConstants.CAR_BASIC_DRIVING_READY_STATE.getValue()))
                 == DashcamChargingPausePolicy.Action.PAUSE;
     }
 

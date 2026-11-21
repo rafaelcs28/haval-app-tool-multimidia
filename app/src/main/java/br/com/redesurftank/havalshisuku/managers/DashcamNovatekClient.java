@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Read-only client for the Novatek CarDV profile ({@link DashcamNovatekProtocol}). Same transport
  * rules as the HiSilicon client: socket bound to the Android Wi-Fi network (never VPN), fixed host,
- * HTTP/1.0, bounded answers, no redirects. No command here changes the camera.
+ * HTTP/1.0, bounded answers, no redirects. Only {@link #setRecording} changes the camera.
  */
 final class DashcamNovatekClient {
     private static final int PORT = 80;
@@ -30,24 +30,62 @@ final class DashcamNovatekClient {
         this.context = context.getApplicationContext();
     }
 
+    private static final long SAMPLE_GAP_MS = 1200L;
+
     DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> query(int cmd) {
-        DashcamHisiliconClient.Result<String> body = get(cmd, MAX_REPLY_BYTES, TIMEOUT_MS);
+        return query(String.valueOf(cmd));
+    }
+
+    private DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> query(String cmdAndParams) {
+        DashcamHisiliconClient.Result<String> body = get(cmdAndParams, MAX_REPLY_BYTES, TIMEOUT_MS);
         if (!body.isSuccess()) return DashcamHisiliconClient.Result.failure(body.getError());
         DashcamNovatekProtocol.Reply reply = DashcamNovatekProtocol.parseReply(body.getValue());
         if (reply == null) return DashcamHisiliconClient.Result.failure("malformed_reply");
         return DashcamHisiliconClient.Result.success(reply);
     }
 
+    /** Two {@code 2016} samples ~1 s apart; true while the counter moves. */
+    DashcamHisiliconClient.Result<Boolean> isRecording() {
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> first =
+                query(DashcamNovatekProtocol.CMD_RECORDING_SECONDS);
+        if (!first.isSuccess()) return DashcamHisiliconClient.Result.failure(first.getError());
+        try {
+            Thread.sleep(SAMPLE_GAP_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return DashcamHisiliconClient.Result.failure("interrupted");
+        }
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> second =
+                query(DashcamNovatekProtocol.CMD_RECORDING_SECONDS);
+        if (!second.isSuccess()) return DashcamHisiliconClient.Result.failure(second.getError());
+        Boolean recording = DashcamNovatekProtocol.recordingFromSamples(
+                first.getValue().getLongValue(), second.getValue().getLongValue());
+        return recording == null
+                ? DashcamHisiliconClient.Result.failure("unknown_recording_state")
+                : DashcamHisiliconClient.Result.success(recording);
+    }
+
+    /** {@code 2001&par=1|0}; Status 0 is accepted. Callers verify with {@link #isRecording}. */
+    DashcamHisiliconClient.Result<Boolean> setRecording(boolean recording) {
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> reply =
+                query(DashcamNovatekProtocol.CMD_RECORD + "&par=" + (recording ? 1 : 0));
+        if (!reply.isSuccess()) return DashcamHisiliconClient.Result.failure(reply.getError());
+        if (reply.getValue().getStatus() != 0) {
+            return DashcamHisiliconClient.Result.failure("status_" + reply.getValue().getStatus());
+        }
+        return DashcamHisiliconClient.Result.success(Boolean.TRUE);
+    }
+
     DashcamHisiliconClient.Result<List<DashcamNovatekProtocol.Entry>> fileList() {
         DashcamHisiliconClient.Result<String> body =
-                get(DashcamNovatekProtocol.CMD_FILE_LIST, MAX_LIST_BYTES, LIST_TIMEOUT_MS);
+                get(String.valueOf(DashcamNovatekProtocol.CMD_FILE_LIST), MAX_LIST_BYTES, LIST_TIMEOUT_MS);
         if (!body.isSuccess()) return DashcamHisiliconClient.Result.failure(body.getError());
         List<DashcamNovatekProtocol.Entry> entries = DashcamNovatekProtocol.parseFileList(body.getValue());
         if (entries == null) return DashcamHisiliconClient.Result.failure("malformed_file_list");
         return DashcamHisiliconClient.Result.success(entries);
     }
 
-    private DashcamHisiliconClient.Result<String> get(int cmd, int maxBytes, int readTimeoutMs) {
+    private DashcamHisiliconClient.Result<String> get(String cmd, int maxBytes, int readTimeoutMs) {
         Network wifi = DashcamHisiliconClient.findCameraNetwork(context);
         if (wifi == null) return DashcamHisiliconClient.Result.failure("wifi_unavailable");
         try (Socket socket = wifi.getSocketFactory().createSocket()) {

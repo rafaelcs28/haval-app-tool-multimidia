@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
  * Read-only parser for the Novatek CarDV profile observed in the car (Wi-Fi "CARDV-xxxx", HTTP
  * {@code /?custom=1&cmd=N} at 192.168.1.254, XML answers). Observed 2026-11-21: the file list
  * ({@code 3015}) and ranged downloads work while the camera records, so the gallery never pauses
- * this profile. Write commands are deliberately absent until validated in the car.
+ * this profile. The only write is {@link #CMD_RECORD}; callers verify its effect by sampling
+ * {@link #CMD_RECORDING_SECONDS} twice ({@link #recordingFromSamples}).
  */
 public final class DashcamNovatekProtocol {
     public static final String HOST = "192.168.1.254";
@@ -21,6 +22,8 @@ public final class DashcamNovatekProtocol {
     public static final int CMD_FREE_SPACE = 3017;
     public static final int CMD_MODE = 3037;
     public static final int CMD_RECORDING_SECONDS = 2016;
+    /** Movie record on/off ({@code par=1} start, {@code par=0} stop). Standard Novatek CarDV. */
+    public static final int CMD_RECORD = 2001;
     /** 3037 value for movie (recording) mode. */
     public static final int MODE_MOVIE = 1;
 
@@ -118,6 +121,16 @@ public final class DashcamNovatekProtocol {
                 || "EMR".equalsIgnoreCase(dir) || "Event".equalsIgnoreCase(dir) || "RO".equalsIgnoreCase(dir);
         return new Entry(dir, name, httpPath, bytes, start, end, emergency, time == null ? null : time.trim(),
                 attributes);
+    }
+
+    /**
+     * Recording state from two {@code 2016} samples taken ~1 s apart: the counter of the file being
+     * written moves while it records (it also drops back when a new file starts). Equal samples,
+     * zero or not, mean stopped. Null when a sample is missing.
+     */
+    public static Boolean recordingFromSamples(Long first, Long second) {
+        if (first == null || second == null || first < 0 || second < 0) return null;
+        return !first.equals(second);
     }
 
     public static boolean isValidHttpPath(String path) {

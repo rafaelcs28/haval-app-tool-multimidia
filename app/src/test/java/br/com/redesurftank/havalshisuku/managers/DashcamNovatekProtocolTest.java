@@ -98,4 +98,13 @@ public class DashcamNovatekProtocolTest {
         assertTrue(DashcamProfile.isNovatekSubnet(InetAddress.getByAddress(new byte[] {(byte) 192, (byte) 168, 1, 33})));
         assertFalse(DashcamProfile.isNovatekSubnet(InetAddress.getByAddress(new byte[] {(byte) 192, (byte) 168, 0, 115})));
     }
+
+    @Test
+    public void recordingStateFromTwoCounterSamples() {
+        assertEquals(Boolean.TRUE, DashcamNovatekProtocol.recordingFromSamples(6L, 7L));
+        assertEquals("new file restarts the counter", Boolean.TRUE, DashcamNovatekProtocol.recordingFromSamples(59L, 0L));
+        assertEquals(Boolean.FALSE, DashcamNovatekProtocol.recordingFromSamples(0L, 0L));
+        assertEquals("frozen counter is stopped", Boolean.FALSE, DashcamNovatekProtocol.recordingFromSamples(19L, 19L));
+        assertNull(DashcamNovatekProtocol.recordingFromSamples(null, 3L));
+    }
 }
