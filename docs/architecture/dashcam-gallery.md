@@ -1,0 +1,73 @@
+# Dashcam: galeria, reprodução, estado e automação
+
+Aba **Dashcam** no menu lateral, entre Recursos e Reportar problema. Usa a mesma dashcam
+HiSilicon da pausa durante recarga (`docs/architecture/dashcam-charging-pause.md`), em
+`192.168.0.1:80`, sempre por um socket vinculado à rede Wi‑Fi Android (nunca VPN).
+
+## Estado
+
+`getworkstate.cgi?` é lido a cada 15 s enquanto a aba está aberta e pelo botão
+**Consultar estado**, sem alterar a câmera. A tela distingue: Wi‑Fi não conectado, sem
+resposta, gravando, emergência, pausada, pausada durante a recarga, pausada pela galeria e
+outro modo. **Conectar à dashcam** só abre as configurações de Wi‑Fi; o app não associa redes.
+
+O espaço livre do cartão aparece como indisponível: o relatório de protocolo não traz um
+endpoint validado para ele.
+
+## Galeria
+
+O firmware testado responde `SvrFuncResult="-2222"` à listagem enquanto grava. Por isso:
+
+1. **Atualizar galeria** primeiro tenta sem pausar. Se a câmera estiver gravando, nada é
+   enviado e a tela pede confirmação para uma pausa curta.
+2. Confirmada, a marca `pausedByGallery` é gravada (preferência protegida do dispositivo,
+   fora de backup) **antes** do `stop`. Depois do `stop`, exige `running=false`.
+3. Lista `norm` e `emr` em páginas de 50 (`-start/-end` inclusivos), com limite de 6 s,
+   80 páginas por diretório e detecção de página repetida. Resultado incompleto é marcado
+   como parcial.
+4. Num bloco `finally`, retoma e só confirma após `running=true`; aí remove a marca.
+5. Se a retomada não for confirmada, a tela mostra **Retomada não confirmada**, bloqueia
+   nova pausa e oferece **Verificar e retomar**. O serviço também retoma essa pausa no
+   próximo ciclo (ou a entrega à pausa da recarga, se a recarga pedir pausa naquele momento).
+
+Pausa manual ou da recarga existente é preservada: lista sem enviar `stop`/`start`.
+Gravação de emergência nunca é pausada.
+
+Todas as sequências (recarga, galeria, automação) usam o mesmo `CAMERA_LOCK`, então pausa e
+retomada de uma não se intercalam com outra.
+
+Os caminhos aceitos seguem `sd//(norm|emr)/<nome>.MP4`; o resto é descartado e contado. A
+última lista fica em `files/dashcam_catalog.json` (fora de backup) e é exibida enquanto a
+câmera grava. A data vem do nome do arquivo (hora local da câmera). O fim de cada arquivo é
+estimado pela cadência mediana entre arquivos (3 min sem cadência) e a tela informa isso.
+Faixas juntam arquivos com intervalo de até 1,5× a duração estimada e não cruzam a meia-noite.
+
+## Reprodução
+
+Player Media3/ExoPlayer com `DashcamVideoDataSource`: `HttpURLConnection` aberto pela rede
+Wi‑Fi da câmera, `Range` para avançar e voltar, sem redirecionamentos e somente para caminhos
+validados do catálogo. Não pausa a câmera: o relatório mostra download com gravação ativa.
+A reprodução só roda com velocidade conhecida ≤ 3 km/h; velocidade desconhecida ou acima
+bloqueia e pausa o vídeo.
+
+## Automação (todas desligadas por padrão)
+
+| Opção | Comportamento |
+|---|---|
+| Verificar e retomar a cada 5 minutos | Se a câmera estiver parada, envia `start` e confirma `running=true`. Respeita emergência, a pausa da recarga e o momento em que a recarga pede pausa. **Retoma também pausas manuais.** |
+| Sincronizar o relógio da dashcam | `setsystime.cgi?&-time=yyyyMMddHHmmss` em hora local, ao encontrar a câmera e depois a cada 6 h. A hora vem de NTP (amostra guardada contra `elapsedRealtime`, pois o Wi‑Fi da câmera não tem internet) ou de um GPS com menos de 2 min. O relógio do Android sozinho não é usado. |
+| Aviso de falha de gravação | Toast e notificação uma vez por episódio quando a câmera é encontrada sem gravar e não foi possível (ou não está ativado) retomar. Câmera fora de alcance não gera aviso. |
+
+As opções seguem a convenção `ENABLE_`, então o Modo Concessionária as desliga junto.
+
+## Logs
+
+`cluster-diagnostics/cluster-events-AAAAMMDD.log`, eventos `dashcam_gallery` e
+`dashcam_automation`: só fase, contagens e código de erro, sem corpo HTTP nem nomes de arquivo.
+
+## Limites conhecidos
+
+- Perfil validado em uma unidade; outros firmwares e endereços ficam fora.
+- Reprodução no app, sequência de pausa da galeria, NTP e watchdog ainda exigem teste físico.
+- O codec dos vídeos não foi confirmado; se o decodificador da central não suportar, o player
+  mostra o erro.

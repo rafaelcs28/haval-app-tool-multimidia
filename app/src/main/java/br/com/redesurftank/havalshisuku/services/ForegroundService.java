@@ -39,6 +39,7 @@ import br.com.redesurftank.havalshisuku.broadcastReceivers.DispatchAllDatasRecei
 import br.com.redesurftank.havalshisuku.broadcastReceivers.RestartReceiver;
 import br.com.redesurftank.havalshisuku.managers.AndroidAutoPatchManager;
 import br.com.redesurftank.havalshisuku.managers.CarPlayPatchManager;
+import br.com.redesurftank.havalshisuku.managers.DashcamAutomationManager;
 import br.com.redesurftank.havalshisuku.managers.DashcamChargingPauseManager;
 import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher;
 import br.com.redesurftank.havalshisuku.managers.ServiceManager;
@@ -93,6 +94,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     private volatile boolean isServiceRunning = false;
     private volatile int shizukuBinderTimeoutCount = 0;
     private DashcamChargingPauseManager dashcamChargingPauseManager;
+    private DashcamAutomationManager dashcamAutomationManager;
 
     private final Runnable timeoutRunnable = () -> {
         if (!isShizukuInitialized) {
@@ -765,6 +767,12 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                             getApplicationContext(), ServiceManager.getInstance());
         }
         dashcamChargingPauseManager.start();
+        if (dashcamAutomationManager == null) {
+            dashcamAutomationManager =
+                    new DashcamAutomationManager(
+                            getApplicationContext(), ServiceManager.getInstance());
+        }
+        dashcamAutomationManager.start();
         startCarPlaySystemUiIconWatchdogSafely("post-service-init");
         try {
             DisplayAppLauncher.INSTANCE.startAndroidAutoSteeringMediaFocusKeepAlive();
@@ -960,6 +968,10 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
         if (dashcamChargingPauseManager != null) {
             dashcamChargingPauseManager.stop();
             dashcamChargingPauseManager = null;
+        }
+        if (dashcamAutomationManager != null) {
+            dashcamAutomationManager.stop();
+            dashcamAutomationManager = null;
         }
         ServiceManager.getInstance().stopManagedBackgroundGuards(getApplicationContext());
         // Drop our cluster callback before the process goes away. The car's

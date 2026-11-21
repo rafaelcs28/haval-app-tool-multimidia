@@ -86,6 +86,18 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamPauseWhileCharging",
             "Pausar gravação da dashcam enquanto o veículo estiver carregando e parado"
     ),
+    ENABLE_DASHCAM_WATCHDOG_RESUME(
+            "enableDashcamWatchdogResume",
+            "Verificar a dashcam a cada 5 minutos e retomar a gravação se estiver parada"
+    ),
+    ENABLE_DASHCAM_CLOCK_SYNC(
+            "enableDashcamClockSync",
+            "Ajustar o relógio da dashcam com a hora de rede (NTP) ou do GPS"
+    ),
+    ENABLE_DASHCAM_FAILURE_WARNING(
+            "enableDashcamFailureWarning",
+            "Avisar quando a dashcam não estiver gravando"
+    ),
     // ===== Debloat: desativa apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
     // Reversível (pm install-existing) e reaplicado no boot por ServiceManager.ensureDebloatedSystemApps().
     DISABLE_NATIVE_NAVIGATION("disableNativeNavigation", "Desativar navegador GPS nativo (Neusoft)"),

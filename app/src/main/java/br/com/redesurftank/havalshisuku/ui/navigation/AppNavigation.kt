@@ -132,6 +132,7 @@ fun MainScreen(modifier: Modifier = Modifier, initialScreen: String? = null) {
                         "Valores Atuais" -> CurrentValuesTab()
                         "Instalar Apps" -> InstallAppsTab()
                         "Recursos" -> FeaturesHubScreen()
+                        "Dashcam" -> DashcamTab()
                         "Reportar problema" -> ProblemReportTab()
                         "Informações" -> InformacoesTab()
                         "Frida Hooks" -> FridaHooksTab()

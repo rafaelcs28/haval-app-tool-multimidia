@@ -198,6 +198,9 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.coil.compose)
     implementation(libs.material.icons.extended)
+    // Dashcam gallery player: streams camera clips over the camera Wi-Fi (DashcamVideoDataSource).
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
     // TLS 1.3 for the radar data downloads only (RadarUpdater): Android 9 stops at TLS 1.2 and
     // overpass-api.de refuses it (checked 2026-10-17). Not installed as the global provider.
     implementation("org.conscrypt:conscrypt-android:2.5.2")

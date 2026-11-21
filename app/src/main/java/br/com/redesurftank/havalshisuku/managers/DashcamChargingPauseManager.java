@@ -126,18 +126,29 @@ public final class DashcamChargingPauseManager
                 SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.getKey(), false);
         DashcamChargingPausePolicy.Action action =
                 DashcamChargingPausePolicy.decide(enabled, chargingRaw, speedRaw);
+        if (action == DashcamChargingPausePolicy.Action.HOLD) {
+            scheduleRetry();
+            return;
+        }
         boolean completed;
-        switch (action) {
-            case PAUSE:
-                completed = pauseIfNeeded();
-                break;
-            case RESUME:
-                completed = resumeIfOwned();
-                break;
-            case HOLD:
-            default:
-                completed = false;
-                break;
+        // Same lock as the gallery catalog and the automation: a pause/resume sequence never
+        // interleaves with another camera writer in this process.
+        DashcamHisiliconClient.CAMERA_LOCK.lock();
+        try {
+            switch (action) {
+                case PAUSE:
+                    completed = pauseIfNeeded();
+                    break;
+                case RESUME:
+                    completed = resumeIfOwned();
+                    break;
+                case HOLD:
+                default:
+                    completed = false;
+                    break;
+            }
+        } finally {
+            DashcamHisiliconClient.CAMERA_LOCK.unlock();
         }
         if (!completed) scheduleRetry();
     }

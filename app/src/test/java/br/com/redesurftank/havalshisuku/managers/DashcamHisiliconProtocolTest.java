@@ -7,6 +7,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import org.junit.Test;
 
 public class DashcamHisiliconProtocolTest {
@@ -72,5 +73,50 @@ public class DashcamHisiliconProtocolTest {
         assertNotNull(redirect);
         assertEquals(302, redirect.getStatusCode());
         assertFalse(redirect.isOk());
+    }
+
+    @Test
+    public void parsesObservedCatalogPage() {
+        DashcamHisiliconProtocol.FileListPage page = DashcamHisiliconProtocol.parseFileListPage(
+                "sd//norm/2026_01_15_100600_00.MP4;sd//norm/2026_01_15_100300_00.MP4;"
+                        + "sd//norm/2026_01_15_100000_00.MP4;\n",
+                "norm");
+
+        assertNotNull(page);
+        assertEquals(Arrays.asList(
+                "sd//norm/2026_01_15_100600_00.MP4",
+                "sd//norm/2026_01_15_100300_00.MP4",
+                "sd//norm/2026_01_15_100000_00.MP4"), page.getPaths());
+        assertEquals(0, page.getRejected());
+    }
+
+    @Test
+    public void catalogPageRejectsTraversalOtherDirsAndMarkers() {
+        DashcamHisiliconProtocol.FileListPage page = DashcamHisiliconProtocol.parseFileListPage(
+                "sd//norm/../etc/passwd;sd//emr/2026_01_15_100000_00.MP4;sd//norm/A.MP4;", "norm");
+
+        assertNotNull(page);
+        assertEquals(Arrays.asList("sd//norm/A.MP4"), page.getPaths());
+        assertEquals(2, page.getRejected());
+        assertNull(DashcamHisiliconProtocol.parseFileListPage("SvrFuncResult=\"-2222\"", "norm"));
+        assertNull(DashcamHisiliconProtocol.parseFileListPage("<html>redirect</html>", "norm"));
+        assertTrue(DashcamHisiliconProtocol.parseFileListPage("  \n", "norm").getPaths().isEmpty());
+    }
+
+    @Test
+    public void parsesFunctionResultAndCapability() {
+        assertEquals(Integer.valueOf(-2222),
+                DashcamHisiliconProtocol.parseFunctionResult("SvrFuncResult=\"-2222\"\n"));
+        assertNull(DashcamHisiliconProtocol.parseFunctionResult("Success"));
+        assertEquals(Arrays.asList("emr", "norm", "photo"),
+                DashcamHisiliconProtocol.parseCapability("var capability=\"emr,norm,photo,\";"));
+    }
+
+    @Test
+    public void httpPathKeepsObservedDoubleSlash() {
+        assertEquals("/sd//norm/2026_01_15_100600_00.MP4",
+                DashcamHisiliconProtocol.httpPathFor("sd//norm/2026_01_15_100600_00.MP4"));
+        assertFalse(DashcamHisiliconProtocol.isValidCatalogPath("sd//norm/x.MP4?x=1"));
+        assertFalse(DashcamHisiliconProtocol.isValidCatalogPath("/sd//norm/A.MP4"));
     }
 }

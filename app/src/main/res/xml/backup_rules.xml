@@ -7,6 +7,7 @@
 -->
 <full-backup-content>
     <exclude domain="device_sharedpref" path="dashcam_state.xml"/>
+    <exclude domain="file" path="dashcam_catalog.json"/>
     <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>

@@ -1,6 +1,9 @@
 package br.com.redesurftank.havalshisuku.managers;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,6 +14,15 @@ public final class DashcamHisiliconProtocol {
     private static final Pattern WORK_MODE = assignment("workmode");
     private static final Pattern RUNNING = assignment("running");
     private static final Pattern EMERGENCY = assignment("emrrecord");
+    private static final Pattern FUNCTION_RESULT =
+            Pattern.compile("^\\s*SvrFuncResult\\s*=\\s*\"(-?[0-9]{1,9})\"\\s*;?\\s*$");
+    private static final Pattern CAPABILITY = assignment("capability");
+    /** Catalog entries observed as {@code sd//norm/2026_01_15_100600_00.MP4}. */
+    private static final Pattern CATALOG_PATH =
+            Pattern.compile("^sd//(norm|emr)/([0-9A-Za-z_]{1,64})\\.(MP4|mp4)$");
+    /** Result code the tested firmware returns for catalog calls while it records. */
+    public static final int RESULT_BUSY_RECORDING = -2222;
+    private static final int MAX_CATALOG_ENTRIES_PER_PAGE = 500;
 
     private DashcamHisiliconProtocol() {}
 
@@ -25,6 +37,71 @@ public final class DashcamHisiliconProtocol {
         String emergency = find(EMERGENCY, body);
         if (workMode == null && running == null && emergency == null) return null;
         return new WorkState(workMode, parseBoolean(running), parseBoolean(emergency));
+    }
+
+    /** Returns the numeric {@code SvrFuncResult} when the whole body is that marker, else null. */
+    public static Integer parseFunctionResult(String body) {
+        if (body == null) return null;
+        Matcher matcher = FUNCTION_RESULT.matcher(body.trim());
+        if (!matcher.matches()) return null;
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    /** Directory names announced by {@code getdircapability.cgi}, or null when absent. */
+    public static List<String> parseCapability(String body) {
+        if (body == null) return null;
+        String raw = find(CAPABILITY, body);
+        if (raw == null) return null;
+        List<String> dirs = new ArrayList<>();
+        for (String part : raw.split(",")) {
+            String dir = part.trim();
+            if (!dir.isEmpty() && dir.matches("[a-z]{1,16}") && !dirs.contains(dir)) dirs.add(dir);
+        }
+        return Collections.unmodifiableList(dirs);
+    }
+
+    /**
+     * Parses one {@code getdirfilelist.cgi} page: paths separated by semicolons. Returns null for a
+     * function-result marker, HTML or any body that is not a plain path list. Entries outside the
+     * expected directory/name shape are dropped and counted, never turned into URLs.
+     */
+    public static FileListPage parseFileListPage(String body, String expectedDir) {
+        if (body == null || expectedDir == null) return null;
+        String trimmed = body.trim();
+        if (trimmed.isEmpty()) return new FileListPage(Collections.<String>emptyList(), 0);
+        if (parseFunctionResult(trimmed) != null) return null;
+        if (trimmed.indexOf('<') >= 0 || trimmed.indexOf('"') >= 0 || trimmed.indexOf('=') >= 0) {
+            return null;
+        }
+        List<String> paths = new ArrayList<>();
+        int rejected = 0;
+        for (String part : trimmed.split(";")) {
+            String entry = part.trim();
+            if (entry.isEmpty()) continue;
+            if (paths.size() + rejected >= MAX_CATALOG_ENTRIES_PER_PAGE) return null;
+            Matcher matcher = CATALOG_PATH.matcher(entry);
+            if (matcher.matches() && expectedDir.equals(matcher.group(1)) && !paths.contains(entry)) {
+                paths.add(entry);
+            } else {
+                rejected++;
+            }
+        }
+        return new FileListPage(Collections.unmodifiableList(paths), rejected);
+    }
+
+    /** True when {@code path} is a catalog path this client is allowed to request over HTTP. */
+    public static boolean isValidCatalogPath(String path) {
+        return path != null && CATALOG_PATH.matcher(path).matches();
+    }
+
+    /** HTTP path for a validated catalog entry; keeps the observed double slash. */
+    public static String httpPathFor(String catalogPath) {
+        if (!isValidCatalogPath(catalogPath)) throw new IllegalArgumentException("invalid path");
+        return "/" + catalogPath;
     }
 
     public static boolean isSuccessfulCommandBody(String body) {
@@ -90,6 +167,24 @@ public final class DashcamHisiliconProtocol {
             return isTrustedNormalState()
                     && Boolean.TRUE.equals(running)
                     && Boolean.FALSE.equals(emergencyRecording);
+        }
+    }
+
+    public static final class FileListPage {
+        private final List<String> paths;
+        private final int rejected;
+
+        FileListPage(List<String> paths, int rejected) {
+            this.paths = paths;
+            this.rejected = rejected;
+        }
+
+        public List<String> getPaths() {
+            return paths;
+        }
+
+        public int getRejected() {
+            return rejected;
         }
     }
 

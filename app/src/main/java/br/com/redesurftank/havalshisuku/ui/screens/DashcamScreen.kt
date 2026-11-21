@@ -1,0 +1,778 @@
+package br.com.redesurftank.havalshisuku.ui.screens
+
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.view.ViewGroup
+import android.widget.Toast
+import androidx.annotation.OptIn
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.edit
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.PlayerView
+import br.com.redesurftank.App
+import br.com.redesurftank.havalshisuku.managers.DashcamCatalog
+import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository
+import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.CatalogStatus
+import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.StateKind
+import br.com.redesurftank.havalshisuku.managers.DashcamVideoDataSource
+import br.com.redesurftank.havalshisuku.managers.ServiceManager
+import br.com.redesurftank.havalshisuku.models.CarConstants
+import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
+import br.com.redesurftank.havalshisuku.ui.components.ImpTokens
+import br.com.redesurftank.havalshisuku.ui.components.impButtonColors
+import br.com.redesurftank.havalshisuku.ui.theme.ImpulseTextSizes
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+private val PtBr = Locale("pt", "BR")
+private val HourMinute = DateTimeFormatter.ofPattern("HH:mm")
+private val DayMonth = DateTimeFormatter.ofPattern("d 'de' MMMM", PtBr)
+private val MonthYear = DateTimeFormatter.ofPattern("MMMM 'de' yyyy", PtBr)
+private val CardShape = RoundedCornerShape(16.dp)
+private val RowShape = RoundedCornerShape(10.dp)
+private val RecordingGreen = Color(0xFF34D399)
+private val CardColor = Color(0xFF15171D)
+private val CardBorder = Color(0xFF262A33)
+private const val STATE_POLL_MS = 15_000L
+private const val MAX_PLAYBACK_KMH = 3.0
+
+@Composable
+fun DashcamTab() {
+    val context = LocalContext.current
+    val repository = remember { DashcamGalleryRepository.getInstance(context) }
+
+    var state by remember { mutableStateOf<DashcamGalleryRepository.StateSnapshot?>(null) }
+    var catalog by remember { mutableStateOf(DashcamCatalog.fromPaths(emptyList())) }
+    var catalogFetchedAt by remember { mutableStateOf(0L) }
+    var catalogPartial by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var askPause by remember { mutableStateOf(false) }
+    var month by remember { mutableStateOf(YearMonth.now()) }
+    var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedSegment by remember { mutableStateOf(0) }
+    var playing by remember { mutableStateOf<DashcamCatalog.Clip?>(null) }
+
+    fun applyCatalog(result: DashcamGalleryRepository.CatalogResult) {
+        catalog = result.catalog
+        catalogFetchedAt = result.catalogFetchedAtMs
+        catalogPartial = result.catalogPartial
+        val day = selectedDay?.takeIf { result.catalog.hasRecordingsOn(it) } ?: result.catalog.latestDay
+        if (day != selectedDay) {
+            selectedDay = day
+            selectedSegment = 0
+            if (day != null) month = YearMonth.from(day)
+        }
+    }
+
+    fun refreshState() {
+        repository.queryState { state = it }
+    }
+
+    fun handleCatalog(result: DashcamGalleryRepository.CatalogResult) {
+        busy = false
+        applyCatalog(result)
+        message = catalogMessage(result)
+        if (result.status == CatalogStatus.NEEDS_PAUSE) askPause = true
+        refreshState()
+    }
+
+    fun refreshCatalog(allowPause: Boolean) {
+        if (busy) return
+        busy = true
+        message = if (allowPause) "Pausando, lendo a lista e retomando…" else "Lendo a lista de vídeos…"
+        repository.refreshCatalog(allowPause) { handleCatalog(it) }
+    }
+
+    LaunchedEffect(Unit) {
+        repository.loadCached { applyCatalog(it) }
+        while (true) {
+            refreshState()
+            delay(STATE_POLL_MS)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Dashcam",
+                color = ImpTokens.TextPrimary,
+                fontSize = ImpulseTextSizes.Title,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            if (catalogFetchedAt > 0) {
+                Text(
+                    "Lista de ${formatFetched(catalogFetchedAt)}" + if (catalogPartial) " · parcial" else "",
+                    color = ImpTokens.TextMuted,
+                    fontSize = ImpulseTextSizes.BodyCompact
+                )
+            }
+        }
+
+        StateCard(
+            state = state,
+            onConnect = { openWifiSettings(context) },
+            onQuery = { refreshState() },
+            onRecover = {
+                busy = true
+                repository.resumeUnconfirmedPause {
+                    busy = false
+                    state = it
+                    message = if (it.resumeUnconfirmed) "Retomada ainda não confirmada." else "Gravação retomada."
+                }
+            },
+            busy = busy
+        )
+
+        message?.let { Notice(it) }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            CalendarCard(
+                modifier = Modifier.weight(1f),
+                catalog = catalog,
+                month = month,
+                selectedDay = selectedDay,
+                busy = busy,
+                refreshEnabled = state?.resumeUnconfirmed != true,
+                onMonth = { month = it },
+                onToday = {
+                    month = YearMonth.now()
+                    selectedDay = LocalDate.now()
+                    selectedSegment = 0
+                },
+                onDay = {
+                    selectedDay = it
+                    selectedSegment = 0
+                },
+                onRefresh = { refreshCatalog(false) }
+            )
+            DayCard(
+                modifier = Modifier.weight(1f),
+                catalog = catalog,
+                day = selectedDay,
+                selectedSegment = selectedSegment,
+                onSegment = { selectedSegment = it },
+                onClip = { playing = it }
+            )
+        }
+
+        AutomationCard()
+        Spacer(Modifier.height(8.dp))
+    }
+
+    if (askPause) {
+        AlertDialog(
+            onDismissRequest = { askPause = false },
+            title = { Text("Pausar a gravação por alguns segundos?") },
+            text = {
+                Text(
+                    "Esta dashcam só entrega a lista de vídeos com a gravação pausada. " +
+                        "O Impulse pausa, lê a lista e retoma a gravação em seguida (cerca de 2 segundos). " +
+                        "Se a retomada não for confirmada, a tela avisa."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        askPause = false
+                        refreshCatalog(true)
+                    },
+                    colors = impButtonColors()
+                ) { Text("Pausar e atualizar") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    askPause = false
+                    message = "Lista não atualizada. Mostrando a última lista guardada."
+                }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    playing?.let { clip -> PlayerDialog(clip = clip, onClose = { playing = null }) }
+}
+
+private fun catalogMessage(result: DashcamGalleryRepository.CatalogResult): String? {
+    val resume = when (result.resumeConfirmed) {
+        false -> " Retomada não confirmada: confira a câmera."
+        else -> ""
+    }
+    return when (result.status) {
+        CatalogStatus.OK -> if (result.pausedForCatalog) "Lista atualizada. Gravação retomada." else "Lista atualizada."
+        CatalogStatus.PARTIAL -> "Lista parcial (${errorText(result.error)})." + resume
+        CatalogStatus.NEEDS_PAUSE -> null
+        CatalogStatus.BUSY -> "A dashcam está ocupada com outra operação. Tente de novo."
+        CatalogStatus.FAILED -> "Não foi possível ler a lista: ${errorText(result.error)}." + resume
+    }
+}
+
+private fun errorText(error: String?): String = when {
+    error == null -> "motivo desconhecido"
+    error == "wifi_unavailable" -> "Wi-Fi da dashcam não conectado"
+    error == "emergency_recording" -> "gravação de emergência em andamento"
+    error == "resume_unconfirmed" -> "uma pausa anterior ainda não teve a retomada confirmada"
+    error.contains("time_budget") -> "tempo limite da leitura"
+    error.contains("busy_recording") -> "a câmera recusou a lista enquanto grava"
+    error.contains("transport_") -> "sem resposta da câmera"
+    error.contains("untrusted_status") -> "modelo ou modo da câmera não reconhecido"
+    else -> error
+}
+
+private fun formatFetched(ms: Long): String {
+    val time = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault())
+    return time.format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
+}
+
+private fun openWifiSettings(context: Context) {
+    try {
+        context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "Abra o Wi-Fi da central e conecte à rede da dashcam.", Toast.LENGTH_LONG).show()
+    }
+}
+
+@Composable
+private fun SectionCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(
+        modifier = modifier
+            .clip(CardShape)
+            .background(CardColor)
+            .border(1.dp, CardBorder, CardShape)
+            .padding(20.dp)
+    ) { content() }
+}
+
+@Composable
+private fun Notice(text: String) {
+    Text(
+        text,
+        color = ImpTokens.TextSecondary,
+        fontSize = ImpulseTextSizes.BodyCompact,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RowShape)
+            .background(ImpTokens.Container)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    )
+}
+
+@Composable
+private fun StateCard(
+    state: DashcamGalleryRepository.StateSnapshot?,
+    onConnect: () -> Unit,
+    onQuery: () -> Unit,
+    onRecover: () -> Unit,
+    busy: Boolean
+) {
+    val (label, color) = stateLabel(state)
+    SectionCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Último estado observado", color = ImpTokens.TextSecondary, fontSize = ImpulseTextSizes.BodyCompact)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(12.dp).clip(CircleShape).background(color))
+                    Spacer(Modifier.width(10.dp))
+                    Text(label, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(6.dp))
+                val observed = state?.let { " · consultado às " + formatFetched(it.observedAtMs).substringAfter(' ') } ?: ""
+                Text(
+                    "Cartão de memória: espaço livre indisponível neste modelo$observed",
+                    color = ImpTokens.TextMuted,
+                    fontSize = ImpulseTextSizes.BodyCompact
+                )
+            }
+            Button(onClick = onConnect, colors = impButtonColors()) { Text("Conectar à dashcam") }
+            Spacer(Modifier.width(12.dp))
+            OutlinedButton(onClick = onQuery, enabled = !busy) { Text("Consultar estado", color = ImpTokens.TextPrimary) }
+        }
+        if (state?.resumeUnconfirmed == true) {
+            Spacer(Modifier.height(14.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RowShape)
+                    .background(ImpTokens.Attention.copy(alpha = 0.12f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    "Retomada não confirmada. A galeria pausou a gravação e não conseguiu confirmar a volta.",
+                    color = ImpTokens.Attention,
+                    fontSize = ImpulseTextSizes.BodyCompact,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = onRecover, enabled = !busy, colors = impButtonColors(ImpTokens.Attention)) {
+                    Text("Verificar e retomar")
+                }
+            }
+        }
+    }
+}
+
+private fun stateLabel(state: DashcamGalleryRepository.StateSnapshot?): Pair<String, Color> = when (state?.kind) {
+    null -> "Consultando…" to ImpTokens.ThumbOff
+    StateKind.WIFI_OFF -> "Wi-Fi da dashcam não conectado" to ImpTokens.ThumbOff
+    StateKind.UNREACHABLE -> "Dashcam sem resposta" to ImpTokens.Attention
+    StateKind.RECORDING -> "Gravando" to RecordingGreen
+    StateKind.EMERGENCY -> "Gravação de emergência" to ImpTokens.Danger
+    StateKind.PAUSED -> "Pausada" to ImpTokens.Attention
+    StateKind.PAUSED_BY_CHARGING -> "Pausada durante a recarga" to ImpTokens.Attention
+    StateKind.PAUSED_BY_GALLERY -> "Pausada pela galeria" to ImpTokens.Attention
+    StateKind.OTHER_MODE -> "Modo da câmera: ${state?.workMode ?: "desconhecido"}" to ImpTokens.Attention
+    StateKind.UNKNOWN -> "Estado desconhecido" to ImpTokens.ThumbOff
+}
+
+@Composable
+private fun CalendarCard(
+    modifier: Modifier,
+    catalog: DashcamCatalog,
+    month: YearMonth,
+    selectedDay: LocalDate?,
+    busy: Boolean,
+    refreshEnabled: Boolean,
+    onMonth: (YearMonth) -> Unit,
+    onToday: () -> Unit,
+    onDay: (LocalDate) -> Unit,
+    onRefresh: () -> Unit
+) {
+    val today = LocalDate.now()
+    SectionCard(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Dias com gravações",
+                color = ImpTokens.TextPrimary,
+                fontSize = ImpulseTextSizes.Label,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(onClick = onRefresh, enabled = !busy && refreshEnabled) {
+                Text(if (busy) "Atualizando…" else "Atualizar galeria", color = ImpTokens.TextPrimary)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { onMonth(month.minusMonths(1)) }) { Text("‹", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section) }
+            Text(
+                month.format(MonthYear).replaceFirstChar { it.titlecase(PtBr) },
+                color = ImpTokens.TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = ImpulseTextSizes.BodyCompact,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = { onMonth(month.plusMonths(1)) }) { Text("›", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section) }
+            TextButton(onClick = onToday) { Text("Hoje", color = ImpTokens.Accent, fontWeight = FontWeight.Bold) }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            listOf("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb").forEach {
+                Text(
+                    it,
+                    color = ImpTokens.TextMuted,
+                    fontSize = ImpulseTextSizes.BodyCompact,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).padding(vertical = 6.dp)
+                )
+            }
+        }
+        // Sunday-first grid: java.time DayOfWeek is Monday=1..Sunday=7.
+        val leading = month.atDay(1).dayOfWeek.value % 7
+        val cells = leading + month.lengthOfMonth()
+        val weeks = (cells + 6) / 7
+        for (week in 0 until weeks) {
+            Row(Modifier.fillMaxWidth()) {
+                for (column in 0 until 7) {
+                    val dayNumber = week * 7 + column - leading + 1
+                    Box(Modifier.weight(1f).padding(3.dp), contentAlignment = Alignment.Center) {
+                        if (dayNumber in 1..month.lengthOfMonth()) {
+                            val date = month.atDay(dayNumber)
+                            DayCell(
+                                date = date,
+                                hasRecordings = catalog.hasRecordingsOn(date),
+                                selected = date == selectedDay,
+                                isToday = date == today,
+                                onClick = { onDay(date) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).border(1.5.dp, ImpTokens.Accent, CircleShape))
+            Text("  Hoje", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+            Spacer(Modifier.width(20.dp))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(ImpTokens.Accent))
+            Text("  Com gravações", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        }
+        if (catalog.undated.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${catalog.undated.size} arquivo(s) com data desconhecida no nome.",
+                color = ImpTokens.TextMuted,
+                fontSize = ImpulseTextSizes.BodyCompact
+            )
+        }
+    }
+}
+
+@Composable
+private fun DayCell(date: LocalDate, hasRecordings: Boolean, selected: Boolean, isToday: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(shape)
+            .background(if (hasRecordings) ImpTokens.IndexActiveTint else Color.Transparent)
+            .then(
+                when {
+                    selected -> Modifier.border(2.dp, ImpTokens.Accent, shape)
+                    isToday -> Modifier.border(1.dp, ImpTokens.Accent.copy(alpha = 0.6f), shape)
+                    else -> Modifier
+                }
+            )
+            .clickable(enabled = hasRecordings, onClick = onClick)
+            .padding(vertical = 6.dp)
+    ) {
+        Text(
+            date.dayOfMonth.toString(),
+            color = if (hasRecordings) ImpTokens.TextPrimary else ImpTokens.TextMuted,
+            fontWeight = if (hasRecordings) FontWeight.Bold else FontWeight.Normal,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
+        Box(
+            Modifier
+                .padding(top = 3.dp)
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(if (hasRecordings) ImpTokens.Accent else Color.Transparent)
+        )
+    }
+}
+
+@Composable
+private fun DayCard(
+    modifier: Modifier,
+    catalog: DashcamCatalog,
+    day: LocalDate?,
+    selectedSegment: Int,
+    onSegment: (Int) -> Unit,
+    onClip: (DashcamCatalog.Clip) -> Unit
+) {
+    SectionCard(modifier) {
+        if (day == null) {
+            Text("Galeria", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Nenhuma lista guardada. Conecte a central ao Wi-Fi da dashcam e toque em Atualizar galeria.",
+                color = ImpTokens.TextSecondary,
+                fontSize = ImpulseTextSizes.BodyCompact
+            )
+            return@SectionCard
+        }
+        Text(day.format(DayMonth), color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        val segments = catalog.getSegments(day)
+        if (segments.isEmpty()) {
+            Text("Sem gravações neste dia na última lista.", color = ImpTokens.TextSecondary, fontSize = ImpulseTextSizes.BodyCompact)
+            return@SectionCard
+        }
+        val current = segments.getOrElse(selectedSegment) { segments.first() }
+        segments.forEachIndexed { index, segment ->
+            ListRow(
+                title = "${segment.start.format(HourMinute)}–${segment.estimatedEnd.format(HourMinute)}",
+                subtitle = "${segment.clips.size} arquivo${if (segment.clips.size == 1) "" else "s"}" +
+                    if (segment.hasEmergency()) " · inclui emergência" else "",
+                selected = segment === current,
+                onClick = { onSegment(index) }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        HorizontalDivider(color = CardBorder, modifier = Modifier.padding(vertical = 8.dp))
+        Text("Arquivos da faixa selecionada", color = ImpTokens.TextPrimary, fontWeight = FontWeight.Bold, fontSize = ImpulseTextSizes.BodyCompact)
+        Spacer(Modifier.height(10.dp))
+        current.clips.forEach { clip ->
+            val recording = clip.recording
+            ListRow(
+                title = "${recording.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}" +
+                    if (recording.isEmergency) "  · emergência" else "",
+                subtitle = recording.name,
+                selected = false,
+                onClick = { onClip(clip) }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Text("Os horários de fim das gravações são estimados.", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+    }
+}
+
+@Composable
+private fun ListRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RowShape)
+            .background(if (selected) ImpTokens.IndexActiveTint else Color.Transparent)
+            .border(1.dp, if (selected) ImpTokens.Accent.copy(alpha = 0.5f) else CardBorder, RowShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        }
+        Text("›", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section)
+    }
+}
+
+@Composable
+private fun AutomationCard() {
+    val prefs = remember {
+        App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+    }
+    SectionCard(Modifier.fillMaxWidth()) {
+        Text("Automação", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Verificar e retomar a gravação a cada 5 minutos",
+                hint = "Retoma também pausas manuais. Não interfere na pausa da recarga nem na emergência.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_WATCHDOG_RESUME,
+                prefs = prefs
+            )
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Sincronizar o relógio da dashcam",
+                hint = "Usa a hora de rede (NTP) ou um GPS recente. Não corrige gravações antigas.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC,
+                prefs = prefs
+            )
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Aviso de falha de gravação",
+                hint = "Avisa uma vez quando a câmera é encontrada sem gravar.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
+                prefs = prefs
+            )
+        }
+    }
+}
+
+@Composable
+private fun AutomationSwitch(
+    modifier: Modifier,
+    title: String,
+    hint: String,
+    key: SharedPreferencesKeys,
+    prefs: android.content.SharedPreferences
+) {
+    var checked by remember { mutableStateOf(prefs.getBoolean(key.key, false)) }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact)
+            Text(hint, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                prefs.edit { putBoolean(key.key, it) }
+            },
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = ImpTokens.Accent,
+                checkedThumbColor = ImpTokens.OnAccent,
+                uncheckedTrackColor = ImpTokens.TrackOff,
+                uncheckedThumbColor = ImpTokens.ThumbOff
+            )
+        )
+    }
+}
+
+/** Current speed in km/h from the vehicle service, or null when unknown. */
+private fun currentSpeedKmh(): Double? = try {
+    ServiceManager.getInstance()
+        .getUpdatedData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
+        ?.trim()
+        ?.toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it >= 0.0 }
+} catch (e: RuntimeException) {
+    null
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlayerDialog(clip: DashcamCatalog.Clip, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val recording = clip.recording
+    var error by remember(recording.path) { mutableStateOf<String?>(null) }
+    var blockReason by remember { mutableStateOf<String?>("Verificando a velocidade…") }
+    val exoPlayer = remember(recording.path) {
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(DashcamVideoDataSource.factory(context)))
+            .build()
+    }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(e: PlaybackException) {
+                error = "Não foi possível reproduzir (${e.errorCodeName}). Confira o Wi-Fi da dashcam."
+            }
+        }
+        exoPlayer.addListener(listener)
+        exoPlayer.setMediaItem(MediaItem.fromUri(DashcamVideoDataSource.uriFor(recording.path)))
+        exoPlayer.prepare()
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    // Video only with the car stopped (known speed ≤ 3 km/h); moving pauses playback.
+    LaunchedEffect(exoPlayer) {
+        while (true) {
+            // getUpdatedData is a binder call: never on the main thread.
+            val speed = withContext(Dispatchers.IO) { currentSpeedKmh() }
+            val reason = when {
+                speed == null -> "Velocidade do veículo indisponível. Por segurança, a reprodução fica bloqueada."
+                speed > MAX_PLAYBACK_KMH -> "Reprodução disponível somente com o veículo parado."
+                else -> null
+            }
+            if (reason != blockReason) {
+                blockReason = reason
+                exoPlayer.playWhenReady = reason == null
+            }
+            delay(1_000)
+        }
+    }
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.86f)
+                .clip(CardShape)
+                .background(Color.Black)
+                .border(BorderStroke(1.dp, CardBorder), CardShape)
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${recording.start.format(DayMonth)} · ${recording.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}",
+                        color = ImpTokens.TextPrimary,
+                        fontSize = ImpulseTextSizes.Label,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(recording.name, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+                }
+                Button(onClick = onClose, colors = impButtonColors()) { Text("Fechar") }
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            player = exoPlayer
+                        }
+                    },
+                    update = { it.player = exoPlayer },
+                    modifier = Modifier.fillMaxSize()
+                )
+                blockReason?.let { reason ->
+                    Box(
+                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            reason,
+                            color = ImpTokens.TextPrimary,
+                            fontSize = ImpulseTextSizes.Body,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, color = ImpTokens.Danger, fontSize = ImpulseTextSizes.BodyCompact)
+            }
+        }
+    }
+}
