@@ -29,11 +29,10 @@ public final class DashcamCatalog {
     private final Duration clip;
     private final TreeMap<LocalDate, List<Segment>> segmentsByDay;
 
-    private DashcamCatalog(List<String> paths) {
+    private DashcamCatalog(List<Recording> all) {
         List<Recording> dated = new ArrayList<>();
         List<Recording> unknown = new ArrayList<>();
-        for (String path : paths) {
-            Recording recording = Recording.fromPath(path);
+        for (Recording recording : all) {
             if (recording == null) continue;
             if (recording.getStart() == null) unknown.add(recording);
             else dated.add(recording);
@@ -45,8 +44,28 @@ public final class DashcamCatalog {
         this.segmentsByDay = buildSegments(dated, clip);
     }
 
+    /** HiSilicon catalog paths ({@code sd//norm/…MP4}). */
     public static DashcamCatalog fromPaths(List<String> paths) {
-        return new DashcamCatalog(paths == null ? Collections.<String>emptyList() : paths);
+        List<Recording> recordings = new ArrayList<>();
+        if (paths != null) for (String path : paths) recordings.add(Recording.fromPath(path));
+        return new DashcamCatalog(recordings);
+    }
+
+    /** Novatek {@code 3015} entries; their end time is the camera's own, not an estimate. */
+    public static DashcamCatalog fromNovatek(List<DashcamNovatekProtocol.Entry> entries) {
+        List<Recording> recordings = new ArrayList<>();
+        if (entries != null) for (DashcamNovatekProtocol.Entry entry : entries) {
+            recordings.add(Recording.fromNovatek(entry));
+        }
+        return new DashcamCatalog(recordings);
+    }
+
+    /** True when some shown end time is an estimate (the UI then says so). */
+    public boolean hasEstimatedEnds() {
+        for (List<Segment> segments : segmentsByDay.values()) {
+            for (Segment segment : segments) if (segment.isEndEstimated()) return true;
+        }
+        return false;
     }
 
     public List<Recording> getRecordings() {
@@ -124,12 +143,16 @@ public final class DashcamCatalog {
         List<Clip> clips = new ArrayList<>();
         for (int i = 0; i < files.size(); i++) {
             Recording recording = files.get(i);
+            if (recording.getEnd() != null) {
+                clips.add(new Clip(recording, recording.getEnd(), false));
+                continue;
+            }
             LocalDateTime estimatedEnd = recording.getStart().plus(clip);
             if (i + 1 < files.size()) {
                 LocalDateTime next = files.get(i + 1).getStart();
                 if (next.isBefore(estimatedEnd) && next.isAfter(recording.getStart())) estimatedEnd = next;
             }
-            clips.add(new Clip(recording, estimatedEnd));
+            clips.add(new Clip(recording, estimatedEnd, true));
         }
         LocalDate day = files.get(0).getStart().toLocalDate();
         Segment segment = new Segment(
@@ -157,15 +180,24 @@ public final class DashcamCatalog {
 
     public static final class Recording {
         private final String path;
+        private final String host;
+        private final String httpPath;
         private final String dir;
         private final String name;
         private final LocalDateTime start;
+        private final LocalDateTime end;
+        private final boolean emergency;
 
-        private Recording(String path, String dir, String name, LocalDateTime start) {
+        private Recording(String path, String host, String httpPath, String dir, String name,
+                LocalDateTime start, LocalDateTime end, boolean emergency) {
             this.path = path;
+            this.host = host;
+            this.httpPath = httpPath;
             this.dir = dir;
             this.name = name;
             this.start = start;
+            this.end = end;
+            this.emergency = emergency;
         }
 
         static Recording fromPath(String path) {
@@ -173,11 +205,29 @@ public final class DashcamCatalog {
             int slash = path.lastIndexOf('/');
             String dir = path.substring("sd//".length(), slash);
             String name = path.substring(slash + 1);
-            return new Recording(path, dir, name, parseStart(name));
+            return new Recording(path, DashcamHisiliconClient.HOST, DashcamHisiliconProtocol.httpPathFor(path),
+                    dir, name, parseStart(name), null, "emr".equals(dir));
         }
 
+        static Recording fromNovatek(DashcamNovatekProtocol.Entry entry) {
+            if (entry == null) return null;
+            return new Recording(entry.httpPath, DashcamNovatekProtocol.HOST, entry.httpPath, entry.dir,
+                    entry.name, entry.start, entry.end, entry.emergency);
+        }
+
+        /** Unique key of the file in its catalog. */
         public String getPath() {
             return path;
+        }
+
+        /** Camera host the file is served from. */
+        public String getHost() {
+            return host;
+        }
+
+        /** HTTP path on {@link #getHost()}; already validated for its profile. */
+        public String getHttpPath() {
+            return httpPath;
         }
 
         public String getDir() {
@@ -193,18 +243,30 @@ public final class DashcamCatalog {
             return start;
         }
 
+        /** End time reported by the camera, or null when only an estimate exists. */
+        public LocalDateTime getEnd() {
+            return end;
+        }
+
         public boolean isEmergency() {
-            return "emr".equals(dir);
+            return emergency;
         }
     }
 
     public static final class Clip {
         private final Recording recording;
         private final LocalDateTime estimatedEnd;
+        private final boolean endEstimated;
 
-        Clip(Recording recording, LocalDateTime estimatedEnd) {
+        Clip(Recording recording, LocalDateTime estimatedEnd, boolean endEstimated) {
             this.recording = recording;
             this.estimatedEnd = estimatedEnd;
+            this.endEstimated = endEstimated;
+        }
+
+        /** False when the end came from the camera. */
+        public boolean isEndEstimated() {
+            return endEstimated;
         }
 
         public Recording getRecording() {
@@ -237,6 +299,11 @@ public final class DashcamCatalog {
 
         public List<Clip> getClips() {
             return clips;
+        }
+
+        public boolean isEndEstimated() {
+            for (Clip clip : clips) if (clip.isEndEstimated()) return true;
+            return false;
         }
 
         public boolean hasEmergency() {

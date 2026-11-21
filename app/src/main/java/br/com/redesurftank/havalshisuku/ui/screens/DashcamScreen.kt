@@ -289,6 +289,11 @@ private fun formatFetched(ms: Long): String {
     return time.format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
 }
 
+private fun formatBytes(bytes: Long): String {
+    val gb = bytes / 1_000_000_000.0
+    return if (gb >= 1) String.format(PtBr, "%.1f GB", gb) else String.format(PtBr, "%d MB", bytes / 1_000_000)
+}
+
 private fun openWifiSettings(context: Context) {
     try {
         context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -344,7 +349,8 @@ private fun StateCard(
                 Spacer(Modifier.height(6.dp))
                 val observed = state?.let { " · consultado às " + formatFetched(it.observedAtMs).substringAfter(' ') } ?: ""
                 Text(
-                    "Cartão de memória: espaço livre indisponível neste modelo$observed",
+                    "Cartão de memória: " + (state?.freeBytes?.let { formatBytes(it) + " livres" }
+                        ?: "espaço livre indisponível neste modelo") + observed,
                     color = ImpTokens.TextMuted,
                     fontSize = ImpulseTextSizes.BodyCompact
                 )
@@ -573,7 +579,9 @@ private fun DayCard(
             )
             Spacer(Modifier.height(8.dp))
         }
-        Text("Os horários de fim das gravações são estimados.", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        if (catalog.hasEstimatedEnds()) {
+            Text("Os horários de fim das gravações são estimados.", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        }
     }
 }
 
@@ -703,7 +711,7 @@ private fun PlayerDialog(clip: DashcamCatalog.Clip, onClose: () -> Unit) {
             }
         }
         exoPlayer.addListener(listener)
-        exoPlayer.setMediaItem(MediaItem.fromUri(DashcamVideoDataSource.uriFor(recording.path)))
+        exoPlayer.setMediaItem(MediaItem.fromUri(DashcamVideoDataSource.uriFor(recording)))
         exoPlayer.prepare()
         onDispose {
             exoPlayer.removeListener(listener)

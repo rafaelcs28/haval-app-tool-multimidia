@@ -58,14 +58,25 @@ public final class DashcamGalleryRepository {
         public final long observedAtMs;
         /** A gallery pause whose resume was never confirmed: block new pauses, offer recovery. */
         public final boolean resumeUnconfirmed;
+        /** Camera protocol on the current Wi-Fi. */
+        public final DashcamProfile profile;
+        /** Free bytes on the memory card when the camera reports it (Novatek 3017), else null. */
+        public final Long freeBytes;
 
         StateSnapshot(StateKind kind, String workMode, String error, long observedAtMs,
                 boolean resumeUnconfirmed) {
+            this(kind, workMode, error, observedAtMs, resumeUnconfirmed, DashcamProfile.HISILICON, null);
+        }
+
+        StateSnapshot(StateKind kind, String workMode, String error, long observedAtMs,
+                boolean resumeUnconfirmed, DashcamProfile profile, Long freeBytes) {
             this.kind = kind;
             this.workMode = workMode;
             this.error = error;
             this.observedAtMs = observedAtMs;
             this.resumeUnconfirmed = resumeUnconfirmed;
+            this.profile = profile;
+            this.freeBytes = freeBytes;
         }
     }
 
@@ -106,6 +117,7 @@ public final class DashcamGalleryRepository {
 
     private final Context context;
     private final DashcamHisiliconClient client;
+    private final DashcamNovatekClient novatek;
     private final SharedPreferences statePreferences;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "DashcamGallery");
@@ -117,6 +129,7 @@ public final class DashcamGalleryRepository {
     private DashcamGalleryRepository(Context context) {
         this.context = context.getApplicationContext();
         this.client = new DashcamHisiliconClient(this.context);
+        this.novatek = new DashcamNovatekClient(this.context);
         this.statePreferences = App.getDeviceProtectedContext()
                 .getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
     }
@@ -150,6 +163,7 @@ public final class DashcamGalleryRepository {
         if (!client.hasWifiNetwork()) {
             return new StateSnapshot(StateKind.WIFI_OFF, null, "wifi_unavailable", now, unconfirmed);
         }
+        if (DashcamProfile.detect(context) == DashcamProfile.NOVATEK) return readNovatekState(now, unconfirmed);
         DashcamHisiliconClient.Result<DashcamHisiliconProtocol.WorkState> result;
         if (!lock()) {
             return new StateSnapshot(StateKind.UNKNOWN, null, "camera_busy", now, unconfirmed);
@@ -166,6 +180,47 @@ public final class DashcamGalleryRepository {
         }
         DashcamHisiliconProtocol.WorkState state = result.getValue();
         return new StateSnapshot(classify(state), state.getWorkMode(), null, now, unconfirmed);
+    }
+
+    /**
+     * Novatek: 3037 = mode (1 = movie), 2016 = seconds of the file being written (grows while it
+     * records), 3017 = free bytes. Read-only; nothing here changes the camera.
+     */
+    private StateSnapshot readNovatekState(long now, boolean unconfirmed) {
+        if (!lock()) {
+            return new StateSnapshot(StateKind.UNKNOWN, null, "camera_busy", now, unconfirmed,
+                    DashcamProfile.NOVATEK, null);
+        }
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> mode;
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> seconds = null;
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> free = null;
+        try {
+            mode = novatek.query(DashcamNovatekProtocol.CMD_MODE);
+            if (mode.isSuccess()) {
+                seconds = novatek.query(DashcamNovatekProtocol.CMD_RECORDING_SECONDS);
+                free = novatek.query(DashcamNovatekProtocol.CMD_FREE_SPACE);
+            }
+        } finally {
+            DashcamHisiliconClient.CAMERA_LOCK.unlock();
+        }
+        if (!mode.isSuccess()) {
+            StateKind kind = mode.getError().startsWith("transport_") ? StateKind.UNREACHABLE : StateKind.UNKNOWN;
+            return new StateSnapshot(kind, null, mode.getError(), now, unconfirmed, DashcamProfile.NOVATEK, null);
+        }
+        Long freeBytes = free != null && free.isSuccess() && free.getValue().getStatus() == 0
+                ? free.getValue().getLongValue() : null;
+        Long modeValue = mode.getValue().getLongValue();
+        StateKind kind;
+        if (modeValue == null || mode.getValue().getStatus() != 0) {
+            kind = StateKind.UNKNOWN;
+        } else if (modeValue != DashcamNovatekProtocol.MODE_MOVIE) {
+            kind = StateKind.OTHER_MODE;
+        } else {
+            Long secs = seconds != null && seconds.isSuccess() ? seconds.getValue().getLongValue() : null;
+            kind = secs == null ? StateKind.UNKNOWN : (secs > 0 ? StateKind.RECORDING : StateKind.PAUSED);
+        }
+        return new StateSnapshot(kind, modeValue == null ? null : "modo " + modeValue, null, now, unconfirmed,
+                DashcamProfile.NOVATEK, freeBytes);
     }
 
     StateKind classify(DashcamHisiliconProtocol.WorkState state) {
@@ -206,6 +261,7 @@ public final class DashcamGalleryRepository {
         if (!client.hasWifiNetwork()) {
             return fromCache(cached, CatalogStatus.FAILED, "wifi_unavailable", false, null);
         }
+        if (DashcamProfile.detect(context) == DashcamProfile.NOVATEK) return refreshNovatek(cached);
         if (!lock()) return fromCache(cached, CatalogStatus.BUSY, "camera_busy", false, null);
         DashcamCatalogSession.Outcome outcome;
         try {
@@ -236,6 +292,27 @@ public final class DashcamGalleryRepository {
                         DashcamCatalog.fromPaths(outcome.paths), now, partial, outcome.error,
                         outcome.pausedForCatalog, outcome.resumeConfirmed);
         }
+    }
+
+    /** Novatek lists while recording (observed 2026-11-21): no pause, no confirmation. */
+    private CatalogResult refreshNovatek(Cached cached) {
+        if (!lock()) return fromCache(cached, CatalogStatus.BUSY, "camera_busy", false, null);
+        DashcamHisiliconClient.Result<List<DashcamNovatekProtocol.Entry>> list;
+        try {
+            list = novatek.fileList();
+        } finally {
+            DashcamHisiliconClient.CAMERA_LOCK.unlock();
+        }
+        if (!list.isSuccess()) {
+            log("catalog", "profile=novatek status=FAILED error=" + list.getError());
+            return fromCache(cached, CatalogStatus.FAILED, list.getError(), false, null);
+        }
+        List<DashcamNovatekProtocol.Entry> entries = list.getValue();
+        long now = System.currentTimeMillis();
+        writeNovatekCache(entries, now);
+        log("catalog", "profile=novatek status=OK files=" + entries.size());
+        return new CatalogResult(CatalogStatus.OK, DashcamCatalog.fromNovatek(entries), now, false, null,
+                false, null);
     }
 
     /** Retries the resume of a gallery pause that was not confirmed. */
@@ -304,12 +381,28 @@ public final class DashcamGalleryRepository {
 
     private Cached readCache() {
         File file = cacheFile();
-        if (!file.isFile() || file.length() > 2L * 1024 * 1024) {
+        if (!file.isFile() || file.length() > 8L * 1024 * 1024) {
             return new Cached(DashcamCatalog.fromPaths(Collections.<String>emptyList()), 0L, false);
         }
         try {
             String text = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(text);
+            if ("novatek".equals(json.optString("profile"))) {
+                JSONArray items = json.optJSONArray("entries");
+                List<DashcamNovatekProtocol.Entry> entries = new ArrayList<>();
+                if (items != null) {
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.optJSONObject(i);
+                        if (item == null) continue;
+                        DashcamNovatekProtocol.Entry entry = DashcamNovatekProtocol.entry(
+                                item.optString("dir", null), item.optString("name", null),
+                                item.optString("size", null), item.optString("time", null),
+                                item.optString("attr", null));
+                        if (entry != null) entries.add(entry);
+                    }
+                }
+                return new Cached(DashcamCatalog.fromNovatek(entries), json.optLong("fetchedAtMs", 0L), false);
+            }
             JSONArray array = json.optJSONArray("paths");
             List<String> paths = new ArrayList<>();
             if (array != null) {
@@ -326,22 +419,48 @@ public final class DashcamGalleryRepository {
         }
     }
 
+    private void writeNovatekCache(List<DashcamNovatekProtocol.Entry> entries, long fetchedAtMs) {
+        try {
+            JSONArray items = new JSONArray();
+            for (DashcamNovatekProtocol.Entry entry : entries) {
+                JSONObject item = new JSONObject();
+                item.put("dir", entry.dir);
+                item.put("name", entry.name);
+                item.put("size", String.valueOf(entry.size));
+                if (entry.timeText != null) item.put("time", entry.timeText);
+                item.put("attr", String.valueOf(entry.attributes));
+                items.put(item);
+            }
+            JSONObject json = new JSONObject();
+            json.put("profile", "novatek");
+            json.put("fetchedAtMs", fetchedAtMs);
+            json.put("entries", items);
+            writeCacheJson(json);
+        } catch (Exception e) {
+            Log.w(TAG, "catalog cache write failed", e);
+        }
+    }
+
     private void writeCache(List<String> paths, long fetchedAtMs, boolean partial) {
-        File target = cacheFile();
-        File temp = new File(target.getParentFile(), CACHE_FILE + ".tmp");
         try {
             JSONObject json = new JSONObject();
             json.put("fetchedAtMs", fetchedAtMs);
             json.put("partial", partial);
             json.put("paths", new JSONArray(paths));
-            try (FileOutputStream output = new FileOutputStream(temp)) {
-                output.write(json.toString().getBytes(StandardCharsets.UTF_8));
-                output.getFD().sync();
-            }
-            if (!temp.renameTo(target)) Log.w(TAG, "catalog cache rename failed");
+            writeCacheJson(json);
         } catch (Exception e) {
             Log.w(TAG, "catalog cache write failed", e);
         }
+    }
+
+    private void writeCacheJson(JSONObject json) throws Exception {
+        File target = cacheFile();
+        File temp = new File(target.getParentFile(), CACHE_FILE + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temp)) {
+            output.write(json.toString().getBytes(StandardCharsets.UTF_8));
+            output.getFD().sync();
+        }
+        if (!temp.renameTo(target)) Log.w(TAG, "catalog cache rename failed");
     }
 
     private <T> void deliver(Callback<T> callback, T result) {

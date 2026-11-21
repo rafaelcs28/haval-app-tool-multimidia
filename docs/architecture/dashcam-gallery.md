@@ -1,5 +1,20 @@
 # Dashcam: galeria, reprodução, estado e automação
 
+## Perfis de câmera
+
+O perfil vem da sub-rede do Wi-Fi conectado (`DashcamProfile`):
+
+| Perfil | Wi-Fi observado | Endereço | Protocolo | Lista | Escrita |
+|---|---|---|---|---|---|
+| HiSilicon | — | `192.168.0.1` | `/cgi-bin/hisnet/*.cgi` | só pausada | pausa/retomada/relógio validados |
+| Novatek | `CARDV-3605` (carro, 2026-11-21) | `192.168.1.254` | `/?custom=1&cmd=N` (XML) | `3015` **gravando** | nenhuma até validar no carro |
+
+Novatek, só leitura: `3037` modo (1 = vídeo), `2016` segundos do arquivo em gravação
+(cresce enquanto grava), `3017` bytes livres no cartão, `3015` lista com `NAME`, `FPATH`
+(`A:\CARDV\Movie\…TS`), `SIZE`, `TIME` (fim do arquivo) e `ATTR` (bit 0 = travado). Vídeos
+`.TS` de 1 min (~139 MB) em `http://192.168.1.254/CARDV/Movie/<nome>.TS`, com `Range` (206)
+mesmo gravando. Pausa na recarga, retomada e relógio ficam desligados nesse perfil.
+
 Aba **Dashcam** no menu lateral, entre Recursos e Reportar problema. Usa a mesma dashcam
 HiSilicon da pausa durante recarga (`docs/architecture/dashcam-charging-pause.md`), em
 `192.168.0.1:80`, sempre por um socket vinculado à rede Wi‑Fi Android (nunca VPN).

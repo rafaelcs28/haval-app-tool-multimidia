@@ -137,6 +137,9 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         // NTP needs an internet network, which is usually not the camera Wi-Fi: sample first.
         if (clockEnabled) timeSource.refreshIfDue();
         if (!client.hasWifiNetwork()) return;
+        // Resume, clock and the HiSilicon state parser are HiSilicon-only for now; a Novatek camera
+        // only gets the gallery (read-only) until its write commands are validated.
+        if (DashcamProfile.detect(context) == DashcamProfile.NOVATEK) return;
 
         if (!lock()) {
             log("check", "camera_busy");

@@ -22,8 +22,9 @@ import java.util.regex.Pattern;
 
 /**
  * Streams one catalog video from the camera over the camera Wi-Fi (never VPN, never the default
- * route), with HTTP Range for seeking. Only {@code http://192.168.0.1/sd//<dir>/<name>.MP4} paths
- * that pass {@link DashcamHisiliconProtocol#isValidCatalogPath} are opened; redirects are refused.
+ * route), with HTTP Range for seeking. Only validated catalog paths on the two camera hosts are
+ * opened (HiSilicon {@code 192.168.0.1/sd//<dir>/<name>.MP4}, Novatek
+ * {@code 192.168.1.254/CARDV/<dir>/<name>.TS}); redirects are refused.
  * Reads do not take the camera lock: the report shows downloads work while the camera records.
  */
 @OptIn(markerClass = UnstableApi.class)
@@ -44,10 +45,21 @@ public final class DashcamVideoDataSource extends BaseDataSource {
         this.context = context.getApplicationContext();
     }
 
-    /** URI the player receives for a catalog path such as {@code sd//norm/X.MP4}. */
-    public static Uri uriFor(String catalogPath) {
-        return Uri.parse("http://" + DashcamHisiliconClient.HOST
-                + DashcamHisiliconProtocol.httpPathFor(catalogPath));
+    /** URI the player receives for a catalog recording (HiSilicon or Novatek). */
+    public static Uri uriFor(DashcamCatalog.Recording recording) {
+        return Uri.parse("http://" + recording.getHost() + recording.getHttpPath());
+    }
+
+    /** Only the two camera hosts, each with its own validated path shape. */
+    static boolean isAllowed(String host, String encodedPath) {
+        if (encodedPath == null || !encodedPath.startsWith("/")) return false;
+        if (DashcamHisiliconClient.HOST.equals(host)) {
+            return DashcamHisiliconProtocol.isValidCatalogPath(encodedPath.substring(1));
+        }
+        if (DashcamNovatekProtocol.HOST.equals(host)) {
+            return DashcamNovatekProtocol.isValidHttpPath(encodedPath);
+        }
+        return false;
     }
 
     public static DataSource.Factory factory(Context context) {
@@ -60,20 +72,18 @@ public final class DashcamVideoDataSource extends BaseDataSource {
         this.dataSpec = dataSpec;
         Uri uri = dataSpec.uri;
         String encodedPath = uri.getEncodedPath();
+        String host = uri.getHost();
         if (!"http".equals(uri.getScheme())
-                || !DashcamHisiliconClient.HOST.equals(uri.getHost())
                 || (uri.getPort() != -1 && uri.getPort() != DashcamHisiliconClient.PORT)
                 || uri.getEncodedQuery() != null
-                || encodedPath == null
-                || !encodedPath.startsWith("/")
-                || !DashcamHisiliconProtocol.isValidCatalogPath(encodedPath.substring(1))) {
+                || !isAllowed(host, encodedPath)) {
             throw new IOException("dashcam_invalid_uri");
         }
         Network network = DashcamHisiliconClient.findCameraNetwork(context);
         if (network == null) throw new IOException("dashcam_wifi_unavailable");
 
         transferInitializing(dataSpec);
-        URL url = new URL("http", DashcamHisiliconClient.HOST, DashcamHisiliconClient.PORT, encodedPath);
+        URL url = new URL("http", host, DashcamHisiliconClient.PORT, encodedPath);
         HttpURLConnection http = (HttpURLConnection) network.openConnection(url);
         connection = http;
         http.setInstanceFollowRedirects(false);

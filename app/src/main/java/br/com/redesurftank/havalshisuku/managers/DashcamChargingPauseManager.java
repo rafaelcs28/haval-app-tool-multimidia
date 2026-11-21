@@ -22,6 +22,7 @@ public final class DashcamChargingPauseManager
     private static final String CHARGING_KEY = CarConstants.CAR_EV_INFO_CHARGING_STATE.getValue();
 
     private final ServiceManager serviceManager;
+    private final Context context;
     private final SharedPreferences preferences;
     private final SharedPreferences statePreferences;
     private final DashcamHisiliconClient client;
@@ -32,6 +33,7 @@ public final class DashcamChargingPauseManager
     private boolean started;
     private String speedRaw;
     private String chargingRaw;
+    private boolean novatekSkipLogged;
 
     private final Runnable evaluation = this::evaluate;
     private final Runnable retry;
@@ -44,6 +46,7 @@ public final class DashcamChargingPauseManager
 
     public DashcamChargingPauseManager(Context context, ServiceManager serviceManager) {
         this.serviceManager = serviceManager;
+        this.context = context.getApplicationContext();
         this.retry = this::refreshAndEvaluate;
         this.preferences =
                 App.getDeviceProtectedContext()
@@ -127,6 +130,15 @@ public final class DashcamChargingPauseManager
         DashcamChargingPausePolicy.Action action =
                 DashcamChargingPausePolicy.decide(enabled, chargingRaw, speedRaw);
         if (action == DashcamChargingPausePolicy.Action.HOLD) {
+            scheduleRetry();
+            return;
+        }
+        // Only the HiSilicon profile has validated stop/start. On a Novatek camera nothing is sent
+        // until its write commands are validated in the car.
+        if (action == DashcamChargingPausePolicy.Action.PAUSE
+                && DashcamProfile.detect(context) == DashcamProfile.NOVATEK) {
+            if (!novatekSkipLogged) log("pause_skipped", "novatek_writes_not_validated");
+            novatekSkipLogged = true;
             scheduleRetry();
             return;
         }
