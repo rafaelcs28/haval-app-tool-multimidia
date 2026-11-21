@@ -90,6 +90,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamRecordOnlyWhenReady",
             "Gravar somente com o carro pronto (READY), em qualquer marcha"
     ),
+    ENABLE_DASHCAM_PLAYBACK_WHILE_MOVING(
+            "enableDashcamPlaybackWhileMoving",
+            "Permitir vídeo da dashcam com o carro em movimento (para o passageiro)"
+    ),
     ENABLE_DASHCAM_WATCHDOG_RESUME(
             "enableDashcamWatchdogResume",
             "Verificar a dashcam a cada 5 minutos e retomar a gravação se estiver parada"

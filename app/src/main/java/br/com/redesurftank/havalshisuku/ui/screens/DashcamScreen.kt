@@ -7,7 +7,9 @@ import android.provider.Settings
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.annotation.OptIn
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,12 +42,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +69,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.managers.DashcamCatalog
+import br.com.redesurftank.havalshisuku.managers.DashcamClipStore
+import br.com.redesurftank.havalshisuku.managers.DashcamShareServer
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository
 import br.com.redesurftank.havalshisuku.managers.DashcamProfile
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.CatalogStatus
@@ -75,6 +82,10 @@ import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys
 import br.com.redesurftank.havalshisuku.ui.components.ImpTokens
 import br.com.redesurftank.havalshisuku.ui.components.impButtonColors
 import br.com.redesurftank.havalshisuku.ui.theme.ImpulseTextSizes
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -96,6 +107,26 @@ private val CardBorder = Color(0xFF262A33)
 private const val STATE_POLL_MS = 15_000L
 private const val MAX_PLAYBACK_KMH = 3.0
 
+/** What the player shows: a clip on the camera or a copy saved on the head unit. */
+private data class PlayerSource(
+    val uri: Uri,
+    val title: String,
+    val subtitle: String,
+    val recording: DashcamCatalog.Recording?
+)
+
+private fun cameraSource(clip: DashcamCatalog.Clip): PlayerSource {
+    val r = clip.recording
+    return PlayerSource(
+        DashcamVideoDataSource.uriFor(r),
+        "${r.start.format(DayMonth)} · ${r.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}",
+        r.name,
+        r
+    )
+}
+
+private fun localSource(file: File) = PlayerSource(Uri.fromFile(file), "Salvo no carro", file.name, null)
+
 @Composable
 fun DashcamTab() {
     val context = LocalContext.current
@@ -111,8 +142,36 @@ fun DashcamTab() {
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var selectedSegment by remember { mutableStateOf(0) }
-    var playing by remember { mutableStateOf<DashcamCatalog.Clip?>(null) }
+    var playing by remember { mutableStateOf<PlayerSource?>(null) }
     var autoRefreshed by remember { mutableStateOf(false) }
+    val store = remember { DashcamClipStore.getInstance(context) }
+    var savedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    val saveStatus = remember { mutableStateMapOf<String, String>() }
+    var sharing by remember { mutableStateOf<File?>(null) }
+
+    fun reloadSaved() {
+        savedFiles = store.list()
+    }
+
+    fun saveClips(recordings: List<DashcamCatalog.Recording>) {
+        val pending = recordings.filter { saveStatus[it.name]?.startsWith("salvando") != true }
+        if (pending.isEmpty()) return
+        pending.forEach { saveStatus[it.name] = "na fila" }
+        store.save(pending, object : DashcamClipStore.Listener {
+            override fun onProgress(name: String, progress: Float) {
+                saveStatus[name] = if (progress >= 0) "salvando ${(progress * 100).toInt()}%" else "salvando…"
+            }
+
+            override fun onDone(name: String, file: File) {
+                saveStatus[name] = "salvo no carro"
+                reloadSaved()
+            }
+
+            override fun onFailed(name: String, error: String) {
+                saveStatus[name] = "falhou: " + saveErrorText(error)
+            }
+        })
+    }
 
     fun applyCatalog(result: DashcamGalleryRepository.CatalogResult) {
         catalog = result.catalog
@@ -157,6 +216,7 @@ fun DashcamTab() {
     }
 
     LaunchedEffect(Unit) {
+        savedFiles = withContext(Dispatchers.IO) { store.list() }
         repository.loadCached { applyCatalog(it) }
         while (true) {
             refreshState()
@@ -231,9 +291,22 @@ fun DashcamTab() {
                 day = selectedDay,
                 selectedSegment = selectedSegment,
                 onSegment = { selectedSegment = it },
-                onClip = { playing = it }
+                onClip = { playing = cameraSource(it) },
+                saveStatus = saveStatus,
+                onSaveSegment = { clips -> saveClips(clips.map { it.recording }) }
             )
         }
+
+        SavedCard(
+            files = savedFiles,
+            onPlay = { playing = localSource(it) },
+            onShare = { sharing = it },
+            onDelete = {
+                store.delete(it)
+                saveStatus.remove(it.name)
+                reloadSaved()
+            }
+        )
 
         AutomationCard()
         Spacer(Modifier.height(8.dp))
@@ -268,7 +341,24 @@ fun DashcamTab() {
         )
     }
 
-    playing?.let { clip -> PlayerDialog(clip = clip, onClose = { playing = null }) }
+    playing?.let { source ->
+        PlayerDialog(
+            source = source,
+            saveStatus = source.recording?.let { saveStatus[it.name] },
+            onSave = source.recording?.let { r -> { saveClips(listOf(r)) } },
+            onClose = { playing = null }
+        )
+    }
+    sharing?.let { file -> ShareDialog(file = file, onClose = { sharing = null }) }
+}
+
+private fun saveErrorText(error: String): String = when {
+    error == "no_space" -> "sem espaço na central"
+    error == "wifi_unavailable" -> "Wi-Fi da dashcam não conectado"
+    error == "cancelled" -> "cancelado"
+    error == "truncated" -> "arquivo incompleto"
+    error.startsWith("transport_") -> "conexão com a câmera caiu"
+    else -> error
 }
 
 private fun catalogMessage(result: DashcamGalleryRepository.CatalogResult): String? {
@@ -547,7 +637,9 @@ private fun DayCard(
     day: LocalDate?,
     selectedSegment: Int,
     onSegment: (Int) -> Unit,
-    onClip: (DashcamCatalog.Clip) -> Unit
+    onClip: (DashcamCatalog.Clip) -> Unit,
+    saveStatus: Map<String, String>,
+    onSaveSegment: (List<DashcamCatalog.Clip>) -> Unit
 ) {
     SectionCard(modifier) {
         if (day == null) {
@@ -579,14 +671,25 @@ private fun DayCard(
             Spacer(Modifier.height(8.dp))
         }
         HorizontalDivider(color = CardBorder, modifier = Modifier.padding(vertical = 8.dp))
-        Text("Arquivos da faixa selecionada", color = ImpTokens.TextPrimary, fontWeight = FontWeight.Bold, fontSize = ImpulseTextSizes.BodyCompact)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Arquivos da faixa selecionada",
+                color = ImpTokens.TextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = ImpulseTextSizes.BodyCompact,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(onClick = { onSaveSegment(current.clips) }) {
+                Text("Salvar faixa no carro", color = ImpTokens.TextPrimary)
+            }
+        }
         Spacer(Modifier.height(10.dp))
         current.clips.forEach { clip ->
             val recording = clip.recording
             ListRow(
                 title = "${recording.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}" +
                     if (recording.isEmergency) "  · emergência" else "",
-                subtitle = recording.name,
+                subtitle = recording.name + (saveStatus[recording.name]?.let { " · $it" } ?: ""),
                 selected = false,
                 onClick = { onClip(clip) }
             )
@@ -668,7 +771,14 @@ private fun AutomationCard() {
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
                 prefs = prefs
             )
-            Spacer(Modifier.weight(1f))
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Permitir vídeo com o carro em movimento",
+                hint = "Para o passageiro assistir. Desligado, o vídeo só toca com o carro parado.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_PLAYBACK_WHILE_MOVING,
+                prefs = prefs,
+                default = true
+            )
         }
     }
 }
@@ -679,9 +789,10 @@ private fun AutomationSwitch(
     title: String,
     hint: String,
     key: SharedPreferencesKeys,
-    prefs: android.content.SharedPreferences
+    prefs: android.content.SharedPreferences,
+    default: Boolean = false
 ) {
-    var checked by remember { mutableStateOf(prefs.getBoolean(key.key, false)) }
+    var checked by remember { mutableStateOf(prefs.getBoolean(key.key, default)) }
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact)
@@ -717,41 +828,56 @@ private fun currentSpeedKmh(): Double? = try {
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun PlayerDialog(clip: DashcamCatalog.Clip, onClose: () -> Unit) {
+private fun PlayerDialog(
+    source: PlayerSource,
+    saveStatus: String?,
+    onSave: (() -> Unit)?,
+    onClose: () -> Unit
+) {
     val context = LocalContext.current
-    val recording = clip.recording
-    var error by remember(recording.path) { mutableStateOf<String?>(null) }
-    var blockReason by remember { mutableStateOf<String?>("Verificando a velocidade…") }
-    val exoPlayer = remember(recording.path) {
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DashcamVideoDataSource.factory(context)))
-            .build()
+    val prefs = remember {
+        App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+    }
+    var error by remember(source.uri) { mutableStateOf<String?>(null) }
+    var blockReason by remember { mutableStateOf<String?>(null) }
+    val exoPlayer = remember(source.uri) {
+        val builder = ExoPlayer.Builder(context)
+        // Camera clips stream over the camera Wi-Fi; saved copies play from local storage.
+        if (source.recording != null) {
+            builder.setMediaSourceFactory(DefaultMediaSourceFactory(DashcamVideoDataSource.factory(context)))
+        }
+        builder.build()
     }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
-                error = "Não foi possível reproduzir (${e.errorCodeName}). Confira o Wi-Fi da dashcam."
+                error = "Não foi possível reproduzir (${e.errorCodeName})." +
+                    if (source.recording != null) " Confira o Wi-Fi da dashcam." else ""
             }
         }
         exoPlayer.addListener(listener)
-        exoPlayer.setMediaItem(MediaItem.fromUri(DashcamVideoDataSource.uriFor(recording)))
+        exoPlayer.setMediaItem(MediaItem.fromUri(source.uri))
         exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
         onDispose {
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
 
-    // Video only with the car stopped (known speed ≤ 3 km/h); moving pauses playback.
+    // Moving-car lock only when "Permitir vídeo com o carro em movimento" is off.
     LaunchedEffect(exoPlayer) {
         while (true) {
-            // getUpdatedData is a binder call: never on the main thread.
-            val speed = withContext(Dispatchers.IO) { currentSpeedKmh() }
-            val reason = when {
-                speed == null -> "Velocidade do veículo indisponível. Por segurança, a reprodução fica bloqueada."
-                speed > MAX_PLAYBACK_KMH -> "Reprodução disponível somente com o veículo parado."
-                else -> null
+            val allowMoving = prefs.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_PLAYBACK_WHILE_MOVING.key, true)
+            val reason = if (allowMoving) null else {
+                // getUpdatedData is a binder call: never on the main thread.
+                val speed = withContext(Dispatchers.IO) { currentSpeedKmh() }
+                when {
+                    speed == null -> "Velocidade do veículo indisponível. Por segurança, a reprodução fica bloqueada."
+                    speed > MAX_PLAYBACK_KMH -> "Reprodução disponível somente com o veículo parado."
+                    else -> null
+                }
             }
             if (reason != blockReason) {
                 blockReason = reason
@@ -772,13 +898,18 @@ private fun PlayerDialog(clip: DashcamCatalog.Clip, onClose: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
+                    Text(source.title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
                     Text(
-                        "${recording.start.format(DayMonth)} · ${recording.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}",
-                        color = ImpTokens.TextPrimary,
-                        fontSize = ImpulseTextSizes.Label,
-                        fontWeight = FontWeight.Bold
+                        source.subtitle + (saveStatus?.let { " · $it" } ?: ""),
+                        color = ImpTokens.TextMuted,
+                        fontSize = ImpulseTextSizes.BodyCompact
                     )
-                    Text(recording.name, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+                }
+                if (onSave != null) {
+                    OutlinedButton(onClick = onSave, enabled = saveStatus?.startsWith("salvando") != true) {
+                        Text("Salvar no carro", color = ImpTokens.TextPrimary)
+                    }
+                    Spacer(Modifier.width(10.dp))
                 }
                 Button(onClick = onClose, colors = impButtonColors()) { Text("Fechar") }
             }
@@ -814,6 +945,119 @@ private fun PlayerDialog(clip: DashcamCatalog.Clip, onClose: () -> Unit) {
             error?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(it, color = ImpTokens.Danger, fontSize = ImpulseTextSizes.BodyCompact)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedCard(
+    files: List<File>,
+    onPlay: (File) -> Unit,
+    onShare: (File) -> Unit,
+    onDelete: (File) -> Unit
+) {
+    SectionCard(Modifier.fillMaxWidth()) {
+        Text("Salvos no carro", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        if (files.isEmpty()) {
+            Text(
+                "Nenhum vídeo salvo. Abra um arquivo da galeria e toque em Salvar no carro, ou salve a faixa inteira.",
+                color = ImpTokens.TextSecondary,
+                fontSize = ImpulseTextSizes.BodyCompact
+            )
+            return@SectionCard
+        }
+        Text(
+            "Para enviar ao celular, conecte a central ao Wi-Fi de casa ou ao hotspot do celular.",
+            color = ImpTokens.TextMuted,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
+        Spacer(Modifier.height(10.dp))
+        files.forEach { file ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RowShape)
+                    .border(1.dp, CardBorder, RowShape)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(file.name, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
+                    Text(formatBytes(file.length()), color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+                }
+                OutlinedButton(onClick = { onPlay(file) }) { Text("Assistir", color = ImpTokens.TextPrimary) }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { onShare(file) }, colors = impButtonColors()) { Text("Enviar ao celular") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { onDelete(file) }) { Text("Apagar", color = ImpTokens.Danger) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun ShareDialog(file: File, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var link by remember(file) { mutableStateOf<DashcamShareServer.Link?>(null) }
+    LaunchedEffect(file) {
+        link = withContext(Dispatchers.IO) { DashcamShareServer.start(context, file) }
+    }
+    DisposableEffect(file) {
+        onDispose { DashcamShareServer.stop() }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Enviar ao celular") },
+        text = {
+            val current = link
+            when {
+                current == null -> Text("Preparando o link…")
+                current.error != null -> Text(
+                    when (current.error) {
+                        "on_camera_wifi" -> "A central está no Wi-Fi da dashcam. Conecte-a ao Wi-Fi de casa ou ao hotspot do celular e tente de novo."
+                        "wifi_unavailable" -> "A central não está em nenhum Wi-Fi. Conecte-a ao Wi-Fi de casa ou ao hotspot do celular."
+                        else -> "Não foi possível abrir o link (${current.error})."
+                    }
+                )
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "No celular, na mesma rede Wi-Fi da central, leia o QR code com a câmera. O download começa no navegador.",
+                        fontSize = ImpulseTextSizes.BodyCompact
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    QrCode(current.url, 260.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text(current.url, fontSize = ImpulseTextSizes.BodyCompact, textAlign = TextAlign.Center)
+                    Text(
+                        "${file.name} · ${formatBytes(file.length())} · link válido até " +
+                            formatFetched(current.expiresAtMs).substringAfter(' '),
+                        fontSize = ImpulseTextSizes.BodyCompact
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onClose, colors = impButtonColors()) { Text("Fechar") }
+        }
+    )
+}
+
+/** QR code drawn locally with ZXing: the link (with its access token) never leaves the device. */
+@Composable
+private fun QrCode(text: String, size: androidx.compose.ui.unit.Dp) {
+    val matrix = remember(text) {
+        QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, mapOf(EncodeHintType.MARGIN to 2))
+    }
+    Canvas(Modifier.size(size).background(Color.White)) {
+        val cell = this.size.width / matrix.width
+        for (y in 0 until matrix.height) {
+            for (x in 0 until matrix.width) {
+                if (matrix.get(x, y)) {
+                    drawRect(Color.Black, topLeft = Offset(x * cell, y * cell), size = Size(cell + 0.5f, cell + 0.5f))
+                }
             }
         }
     }
