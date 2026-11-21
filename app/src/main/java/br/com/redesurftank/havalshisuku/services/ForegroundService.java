@@ -39,6 +39,7 @@ import br.com.redesurftank.havalshisuku.broadcastReceivers.DispatchAllDatasRecei
 import br.com.redesurftank.havalshisuku.broadcastReceivers.RestartReceiver;
 import br.com.redesurftank.havalshisuku.managers.AndroidAutoPatchManager;
 import br.com.redesurftank.havalshisuku.managers.CarPlayPatchManager;
+import br.com.redesurftank.havalshisuku.managers.DashcamChargingPauseManager;
 import br.com.redesurftank.havalshisuku.managers.DisplayAppLauncher;
 import br.com.redesurftank.havalshisuku.managers.ServiceManager;
 import br.com.redesurftank.havalshisuku.managers.StealthModeManager;
@@ -91,6 +92,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
     private volatile boolean isShizukuInitialized = false;
     private volatile boolean isServiceRunning = false;
     private volatile int shizukuBinderTimeoutCount = 0;
+    private DashcamChargingPauseManager dashcamChargingPauseManager;
 
     private final Runnable timeoutRunnable = () -> {
         if (!isShizukuInitialized) {
@@ -757,6 +759,12 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             restart();
             return;
         }
+        if (dashcamChargingPauseManager == null) {
+            dashcamChargingPauseManager =
+                    new DashcamChargingPauseManager(
+                            getApplicationContext(), ServiceManager.getInstance());
+        }
+        dashcamChargingPauseManager.start();
         startCarPlaySystemUiIconWatchdogSafely("post-service-init");
         try {
             DisplayAppLauncher.INSTANCE.startAndroidAutoSteeringMediaFocusKeepAlive();
@@ -949,6 +957,10 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
 
     @Override
     public void onDestroy() {
+        if (dashcamChargingPauseManager != null) {
+            dashcamChargingPauseManager.stop();
+            dashcamChargingPauseManager = null;
+        }
         ServiceManager.getInstance().stopManagedBackgroundGuards(getApplicationContext());
         // Drop our cluster callback before the process goes away. The car's
         // ClusterService otherwise keeps dispatching to a dead binder and throws

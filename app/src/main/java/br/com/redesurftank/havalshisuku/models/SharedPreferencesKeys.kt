@@ -82,6 +82,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "disableAvmCarStopped",
             "Desativar camera AVM quando o carro está parado"
     ),
+    ENABLE_DASHCAM_PAUSE_WHILE_CHARGING(
+            "enableDashcamPauseWhileCharging",
+            "Pausar gravação da dashcam enquanto o veículo estiver carregando e parado"
+    ),
     // ===== Debloat: desativa apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
     // Reversível (pm install-existing) e reaplicado no boot por ServiceManager.ensureDebloatedSystemApps().
     DISABLE_NATIVE_NAVIGATION("disableNativeNavigation", "Desativar navegador GPS nativo (Neusoft)"),
