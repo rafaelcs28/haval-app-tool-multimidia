@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
@@ -60,17 +61,25 @@ fun FeaturesHubScreen() {
         "ambient_light" -> AmbientLightSettingsScreen(onBackToFeatures = { selectedFeature = null })
         "radar" -> RadarSettingsScreen(onBackToFeatures = { selectedFeature = null })
         "carplay_capture" -> CarPlayCaptureScreen(onBackToFeatures = { selectedFeature = null })
+        "storage" -> StorageCleanupScreen(onBackToFeatures = { selectedFeature = null })
         else -> FeaturesHome(
             onOpenScore = { selectedFeature = "score" },
             onOpenAmbientLight = { selectedFeature = "ambient_light" },
             onOpenRadar = { selectedFeature = "radar" },
-            onOpenCarPlayCapture = { selectedFeature = "carplay_capture" }
+            onOpenCarPlayCapture = { selectedFeature = "carplay_capture" },
+            onOpenStorage = { selectedFeature = "storage" }
         )
     }
 }
 
 @Composable
-private fun FeaturesHome(onOpenScore: () -> Unit, onOpenAmbientLight: () -> Unit, onOpenRadar: () -> Unit, onOpenCarPlayCapture: () -> Unit) {
+private fun FeaturesHome(
+    onOpenScore: () -> Unit,
+    onOpenAmbientLight: () -> Unit,
+    onOpenRadar: () -> Unit,
+    onOpenCarPlayCapture: () -> Unit,
+    onOpenStorage: () -> Unit
+) {
     val prefs =
         App.getDeviceProtectedContext()
             .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
@@ -88,6 +97,16 @@ private fun FeaturesHome(onOpenScore: () -> Unit, onOpenAmbientLight: () -> Unit
         Text("Recursos", color = AppColors.TextPrimary, fontFamily = Michroma, fontSize = ImpulseTextSizes.Title, letterSpacing = 0.5.sp)
 
         RadarFeatureCard(onConfigure = onOpenRadar)
+
+        FeatureCard(
+            title = "Limpar armazenamento",
+            description = "Arquivos grandes da central do maior para o menor: APKs antigos, vídeos salvos e logs. Você escolhe o que apagar.",
+            status = "Manutenção",
+            icon = Icons.Default.Storage,
+            enabled = true,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onOpenStorage
+        )
 
         FeatureCard(
             title = "Teste CarPlay · captura + HUD",
