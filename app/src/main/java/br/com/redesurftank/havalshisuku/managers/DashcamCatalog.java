@@ -187,9 +187,10 @@ public final class DashcamCatalog {
         private final LocalDateTime start;
         private final LocalDateTime end;
         private final boolean emergency;
+        private final long size;
 
         private Recording(String path, String host, String httpPath, String dir, String name,
-                LocalDateTime start, LocalDateTime end, boolean emergency) {
+                LocalDateTime start, LocalDateTime end, boolean emergency, long size) {
             this.path = path;
             this.host = host;
             this.httpPath = httpPath;
@@ -198,6 +199,7 @@ public final class DashcamCatalog {
             this.start = start;
             this.end = end;
             this.emergency = emergency;
+            this.size = size;
         }
 
         static Recording fromPath(String path) {
@@ -206,13 +208,13 @@ public final class DashcamCatalog {
             String dir = path.substring("sd//".length(), slash);
             String name = path.substring(slash + 1);
             return new Recording(path, DashcamHisiliconClient.HOST, DashcamHisiliconProtocol.httpPathFor(path),
-                    dir, name, parseStart(name), null, "emr".equals(dir));
+                    dir, name, parseStart(name), null, "emr".equals(dir), -1L);
         }
 
         static Recording fromNovatek(DashcamNovatekProtocol.Entry entry) {
             if (entry == null) return null;
             return new Recording(entry.httpPath, DashcamNovatekProtocol.HOST, entry.httpPath, entry.dir,
-                    entry.name, entry.start, entry.end, entry.emergency);
+                    entry.name, entry.start, entry.end, entry.emergency, entry.size);
         }
 
         /** Unique key of the file in its catalog. */
@@ -250,6 +252,11 @@ public final class DashcamCatalog {
 
         public boolean isEmergency() {
             return emergency;
+        }
+
+        /** Bytes reported by the camera, or -1 when unknown (HiSilicon list has no size). */
+        public long getSize() {
+            return size;
         }
     }
 

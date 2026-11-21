@@ -30,7 +30,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
@@ -106,6 +109,23 @@ private val CardColor = Color(0xFF15171D)
 private val CardBorder = Color(0xFF262A33)
 private const val STATE_POLL_MS = 15_000L
 private const val MAX_PLAYBACK_KMH = 3.0
+/** Measured in the car (2026-11-21): 27.3 MB in 33 s over the camera Wi-Fi. */
+private const val CAMERA_DOWNLOAD_BYTES_PER_SEC = 820_000.0
+
+/** "~3 min" for a download of [bytes] over the camera Wi-Fi; empty when the size is unknown. */
+private fun downloadEstimate(bytes: Long): String {
+    if (bytes <= 0) return ""
+    val seconds = bytes / CAMERA_DOWNLOAD_BYTES_PER_SEC
+    return if (seconds < 60) "~${seconds.toInt().coerceAtLeast(1)} s" else "~${Math.ceil(seconds / 60).toInt()} min"
+}
+
+private fun clipsBytes(clips: List<DashcamCatalog.Clip>): Long =
+    if (clips.any { it.recording.size <= 0 }) -1L else clips.sumOf { it.recording.size }
+
+private fun withEstimate(label: String, bytes: Long): String {
+    val estimate = downloadEstimate(bytes)
+    return if (estimate.isEmpty()) label else "$label ($estimate)"
+}
 
 /** What the player shows: a clip on the camera or a copy saved on the head unit. */
 private data class PlayerSource(
@@ -661,37 +681,49 @@ private fun DayCard(
         }
         val current = segments.getOrElse(selectedSegment) { segments.first() }
         segments.forEachIndexed { index, segment ->
+            val bytes = clipsBytes(segment.clips)
             ListRow(
                 title = "${segment.start.format(HourMinute)}–${segment.estimatedEnd.format(HourMinute)}",
                 subtitle = "${segment.clips.size} arquivo${if (segment.clips.size == 1) "" else "s"}" +
+                    (if (bytes > 0) " · ${formatBytes(bytes)}" else "") +
                     if (segment.hasEmergency()) " · inclui emergência" else "",
                 selected = segment === current,
-                onClick = { onSegment(index) }
+                onClick = { onSegment(index) },
+                menu = listOf(
+                    "Mostrar arquivos" to { onSegment(index) },
+                    withEstimate("Salvar faixa inteira no carro", bytes) to { onSaveSegment(segment.clips) }
+                )
             )
             Spacer(Modifier.height(8.dp))
         }
         HorizontalDivider(color = CardBorder, modifier = Modifier.padding(vertical = 8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Arquivos da faixa selecionada",
-                color = ImpTokens.TextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = ImpulseTextSizes.BodyCompact,
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedButton(onClick = { onSaveSegment(current.clips) }) {
-                Text("Salvar faixa no carro", color = ImpTokens.TextPrimary)
-            }
-        }
+        Text("Arquivos da faixa selecionada", color = ImpTokens.TextPrimary, fontWeight = FontWeight.Bold, fontSize = ImpulseTextSizes.BodyCompact)
+        Text(
+            "Toque para assistir. Toque longo para salvar no carro.",
+            color = ImpTokens.TextMuted,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
         Spacer(Modifier.height(10.dp))
-        current.clips.forEach { clip ->
+        current.clips.forEachIndexed { index, clip ->
             val recording = clip.recording
+            val rest = current.clips.drop(index)
             ListRow(
                 title = "${recording.start.format(HourMinute)}–${clip.estimatedEnd.format(HourMinute)}" +
                     if (recording.isEmergency) "  · emergência" else "",
-                subtitle = recording.name + (saveStatus[recording.name]?.let { " · $it" } ?: ""),
+                subtitle = recording.name +
+                    (if (recording.size > 0) " · ${formatBytes(recording.size)}" else "") +
+                    (saveStatus[recording.name]?.let { " · $it" } ?: ""),
                 selected = false,
-                onClick = { onClip(clip) }
+                onClick = { onClip(clip) },
+                menu = buildList {
+                    add("Assistir" to { onClip(clip) })
+                    add(withEstimate("Salvar este arquivo no carro", recording.size) to { onSaveSegment(listOf(clip)) })
+                    if (rest.size > 1) {
+                        add(withEstimate("Salvar daqui até o fim da faixa (${rest.size} arquivos)", clipsBytes(rest)) to {
+                            onSaveSegment(rest)
+                        })
+                    }
+                }
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -701,23 +733,48 @@ private fun DayCard(
     }
 }
 
+/** Short tap = [onClick]; long press opens [menu] (label → action) when it is not empty. */
+@kotlin.OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ListRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RowShape)
-            .background(if (selected) ImpTokens.IndexActiveTint else Color.Transparent)
-            .border(1.dp, if (selected) ImpTokens.Accent.copy(alpha = 0.5f) else CardBorder, RowShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
-            Text(subtitle, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+private fun ListRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    menu: List<Pair<String, () -> Unit>> = emptyList()
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RowShape)
+                .background(if (selected) ImpTokens.IndexActiveTint else Color.Transparent)
+                .border(1.dp, if (selected) ImpTokens.Accent.copy(alpha = 0.5f) else CardBorder, RowShape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = if (menu.isEmpty()) null else ({ menuOpen = true })
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
+                Text(subtitle, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+            }
+            Text("›", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section)
         }
-        Text("›", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Section)
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            menu.forEach { (label, action) ->
+                DropdownMenuItem(
+                    text = { Text(label, fontSize = ImpulseTextSizes.BodyCompact) },
+                    onClick = {
+                        menuOpen = false
+                        action()
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -962,7 +1019,7 @@ private fun SavedCard(
         Spacer(Modifier.height(6.dp))
         if (files.isEmpty()) {
             Text(
-                "Nenhum vídeo salvo. Abra um arquivo da galeria e toque em Salvar no carro, ou salve a faixa inteira.",
+                "Nenhum vídeo salvo. Na galeria, toque longo num arquivo ou numa faixa para salvar no carro.",
                 color = ImpTokens.TextSecondary,
                 fontSize = ImpulseTextSizes.BodyCompact
             )
