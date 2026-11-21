@@ -168,6 +168,7 @@ fun DashcamTab() {
     var savedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     val saveStatus = remember { mutableStateMapOf<String, String>() }
     var sharing by remember { mutableStateOf<File?>(null) }
+    var showSaved by remember { mutableStateOf(false) }
 
     fun reloadSaved() {
         savedFiles = store.list()
@@ -184,6 +185,7 @@ fun DashcamTab() {
 
             override fun onDone(name: String, file: File) {
                 saveStatus[name] = "salvo no carro"
+                message = "$name salvo no carro. Veja em \"Salvos no carro\", no topo da tela."
                 reloadSaved()
             }
 
@@ -268,6 +270,30 @@ fun DashcamTab() {
             }
         }
 
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ViewTab("Câmera", selected = !showSaved) { showSaved = false }
+            ViewTab("Salvos no carro (${savedFiles.size})", selected = showSaved) {
+                reloadSaved()
+                showSaved = true
+            }
+        }
+
+        if (showSaved) {
+            SavedCard(
+                files = savedFiles,
+                freeBytes = store.directory().usableSpace,
+                onPlay = { playing = localSource(it) },
+                onShare = { sharing = it },
+                onDelete = {
+                    store.delete(it)
+                    saveStatus.remove(it.name)
+                    reloadSaved()
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+            return@Column
+        }
+
         StateCard(
             state = state,
             onConnect = { openWifiSettings(context) },
@@ -316,17 +342,6 @@ fun DashcamTab() {
                 onSaveSegment = { clips -> saveClips(clips.map { it.recording }) }
             )
         }
-
-        SavedCard(
-            files = savedFiles,
-            onPlay = { playing = localSource(it) },
-            onShare = { sharing = it },
-            onDelete = {
-                store.delete(it)
-                saveStatus.remove(it.name)
-                reloadSaved()
-            }
-        )
 
         AutomationCard()
         Spacer(Modifier.height(8.dp))
@@ -1008,14 +1023,30 @@ private fun PlayerDialog(
 }
 
 @Composable
+private fun ViewTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(onClick = onClick, colors = impButtonColors()) { Text(label) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(label, color = ImpTokens.TextPrimary) }
+    }
+}
+
+@Composable
 private fun SavedCard(
     files: List<File>,
+    freeBytes: Long,
     onPlay: (File) -> Unit,
     onShare: (File) -> Unit,
     onDelete: (File) -> Unit
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Text("Salvos no carro", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Text(
+            "${files.size} vídeo${if (files.size == 1) "" else "s"} · ${formatBytes(files.sumOf { it.length() })} usados · " +
+                "${formatBytes(freeBytes)} livres na central",
+            color = ImpTokens.TextMuted,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
         Spacer(Modifier.height(6.dp))
         if (files.isEmpty()) {
             Text(
@@ -1026,7 +1057,7 @@ private fun SavedCard(
             return@SectionCard
         }
         Text(
-            "Para enviar ao celular, conecte a central ao Wi-Fi de casa ou ao hotspot do celular.",
+            "\"Enviar ao celular\" mostra um QR code: conecte a central ao Wi-Fi de casa ou ao hotspot do celular e leia com a câmera do celular. Apague o que já enviou para liberar espaço na central.",
             color = ImpTokens.TextMuted,
             fontSize = ImpulseTextSizes.BodyCompact
         )

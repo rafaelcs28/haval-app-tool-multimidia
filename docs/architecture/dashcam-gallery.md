@@ -107,8 +107,8 @@ As opções seguem a convenção `ENABLE_`, então o Modo Concessionária as des
   velocidade, para o passageiro. Desligado, volta a exigir velocidade conhecida ≤ 3 km/h.
 - **Salvar no carro** (no player ou "Salvar faixa no carro"): `DashcamClipStore` baixa pela
   rede da câmera, um arquivo por vez, para `Android/data/<app>/files/Dashcam/`, gravando em
-  `.part` e renomeando só quando o tamanho bate com o `Content-Length`. Mantém 300 MB livres.
-- **Salvos no carro**: assistir (arquivo local), enviar ao celular ou apagar.
+  `.part` e renomeando só quando o tamanho bate com o `Content-Length`. Mantém 1 GB livre (abaixo de ~500 MB o Android recusa instalar apps).
+- **Salvos no carro**: segunda visão no topo da aba (Câmera | Salvos no carro), com espaço usado e livre; assistir, enviar ao celular (QR) ou apagar.
 - **Enviar ao celular**: `DashcamShareServer` serve **um** arquivo no IP Wi-Fi da central por
   15 min, em `/<token de 128 bits>/<nome>`, com `Range`. Recusa a rede da câmera. O QR code é
   gerado no aparelho (ZXing), então o link com o token não sai do carro.
