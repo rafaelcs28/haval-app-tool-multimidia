@@ -1,3 +1,14 @@
+## CURRENT — 74162 pausa opcional da dashcam durante recarga
+
+Branch `feature/dashcam-pause-while-charging`, fonte `64dd015d`, publicada e instalada
+como OTA 74162. A opção desativada por padrão pausa somente a dashcam HiSilicon em
+recarga ativa e velocidade até 0,5 km/h. Preserva pausa manual e gravação de emergência;
+retoma somente pausa própria. Build Release no SSD externo do Mac Mini, JVM/native/R8/
+lint/assinatura PASS. APK público, manifesto OTA, SHA e tamanho validados. Central
+confirmou 74162 sem reboot. Teste físico da pausa/retomada permanece pendente.
+
+Handoff completo: `docs/handoff/HANDOFF-DASHCAM-PAUSA-RECARGA-74162.md`.
+
 ## CURRENT — 74161 publicada: cortina automática por horário mais confiável
 
 Branch `fix/curtain-schedule-reliability`, fonte

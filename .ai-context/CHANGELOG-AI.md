@@ -1,3 +1,12 @@
+## 2026-11-21 — 74162 pausa opcional da dashcam durante recarga
+
+Adicionada opção desativada por padrão para pausar a dashcam HiSilicon quando a
+recarga está ativa e o veículo está parado. Implementação valida estado antes/depois,
+preserva pausa manual, nunca pausa emergência, retoma somente pausa própria e tenta
+novamente após falhas. Estado de propriedade não entra em backup. TDD RED comprovado;
+Debug e Release final no SSD externo do Mac Mini passaram JVM, native, R8, lint e
+assinatura. OTA 74162 publicada, validada e instalada sem reboot. Teste físico pendente.
+
 ## 2026-11-18 — 74161 corrige agendamento automático da cortina
 
 Aplicada correção própria sobre a 160 em vez do merge direto do PR upstream #173.
