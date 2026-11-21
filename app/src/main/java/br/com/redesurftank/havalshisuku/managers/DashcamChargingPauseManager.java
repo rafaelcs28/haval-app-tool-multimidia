@@ -34,14 +34,17 @@ public final class DashcamChargingPauseManager
     private String chargingRaw;
 
     private final Runnable evaluation = this::evaluate;
-    private final Runnable retry = () -> {
+    private final Runnable retry;
+
+    private void refreshAndEvaluate() {
         speedRaw = serviceManager.getUpdatedData(SPEED_KEY);
         chargingRaw = serviceManager.getUpdatedData(CHARGING_KEY);
         evaluate();
-    };
+    }
 
     public DashcamChargingPauseManager(Context context, ServiceManager serviceManager) {
         this.serviceManager = serviceManager;
+        this.retry = this::refreshAndEvaluate;
         this.preferences =
                 App.getDeviceProtectedContext()
                         .getSharedPreferences("haval_prefs", Context.MODE_PRIVATE);
