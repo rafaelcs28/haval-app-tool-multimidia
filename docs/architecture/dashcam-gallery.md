@@ -112,3 +112,11 @@ As opções seguem a convenção `ENABLE_`, então o Modo Concessionária as des
 - **Enviar ao celular**: `DashcamShareServer` serve **um** arquivo no IP Wi-Fi da central por
   15 min, em `/<token de 128 bits>/<nome>`, com `Range`. Recusa a rede da câmera. O QR code é
   gerado no aparelho (ZXing), então o link com o token não sai do carro.
+
+## Conversão para MP4
+
+Os vídeos Novatek são `.TS` (MPEG-TS), que a galeria do celular não importa. Ao terminar de
+salvar um `.TS`, `DashcamClipStore` faz um remux só da faixa de vídeo para `.mp4`
+(`MediaExtractor` → `MediaMuxer`, sem recodificar; começa no primeiro quadro-chave). O áudio é
+descartado: o dono não grava áudio. Se o remux falhar, o `.TS` é mantido. O espaço exigido
+dobra durante a conversão. O "Enviar ao celular" entrega o `.mp4` (`video/mp4`).

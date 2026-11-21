@@ -1,6 +1,10 @@
 package br.com.redesurftank.havalshisuku.managers;
 
 import android.content.Context;
+import android.media.MediaCodec;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.net.Network;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,6 +15,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,6 +31,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Downloads run one at a time over the camera Wi-Fi (same validated host/path rules as the
  * player), land in {@code <name>.part} and are renamed only after the byte count matches the
  * camera's Content-Length. A margin of free space is kept on the head unit.
+ *
+ * <p>Novatek clips are MPEG-TS, which phone galleries do not import. A saved {@code .TS} is
+ * remuxed to {@code .mp4} (video track only, no re-encode, so no quality loss and a few seconds);
+ * the user does not record audio. If the remux fails the {@code .TS} is kept.
  */
 public final class DashcamClipStore {
     private static final String TAG = "DashcamClipStore";
@@ -48,6 +57,9 @@ public final class DashcamClipStore {
 
         void onFailed(String name, String error);
     }
+
+    /** Progress value meaning "converting to MP4" (download finished). */
+    public static final float PROGRESS_CONVERTING = -2f;
 
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -93,7 +105,13 @@ public final class DashcamClipStore {
     }
 
     public boolean isSaved(DashcamCatalog.Recording recording) {
-        return new File(directory(), recording.getName()).isFile();
+        return new File(directory(), recording.getName()).isFile()
+                || new File(directory(), mp4Name(recording.getName())).isFile();
+    }
+
+    static String mp4Name(String name) {
+        int dot = name.lastIndexOf('.');
+        return (dot > 0 ? name.substring(0, dot) : name) + ".mp4";
     }
 
     public boolean delete(File file) {
@@ -153,7 +171,9 @@ public final class DashcamClipStore {
                 post(() -> listener.onDone(name, target));
                 return;
             }
-            long needed = (length > 0 ? length : 200L * 1024 * 1024) + FREE_SPACE_MARGIN;
+            // A .TS needs room for itself and its MP4 copy until the remux finishes.
+            long base = length > 0 ? length : 200L * 1024 * 1024;
+            long needed = (isTs(name) ? base * 2 : base) + FREE_SPACE_MARGIN;
             if (dir.getUsableSpace() < needed) {
                 fail(listener, name, part, "no_space");
                 return;
@@ -193,11 +213,109 @@ public final class DashcamClipStore {
                 return;
             }
             Log.i(TAG, "saved " + name + " bytes=" + written);
-            post(() -> listener.onDone(name, target));
+            if (isTs(name)) {
+                post(() -> listener.onProgress(name, PROGRESS_CONVERTING));
+                File mp4 = convertToMp4(target);
+                File result = mp4 != null ? mp4 : target;
+                post(() -> listener.onDone(name, result));
+            } else {
+                post(() -> listener.onDone(name, target));
+            }
         } catch (Exception e) {
             fail(listener, name, part, "transport_" + e.getClass().getSimpleName());
         } finally {
             if (http != null) http.disconnect();
+        }
+    }
+
+    private static boolean isTs(String name) {
+        return name.toLowerCase(java.util.Locale.ROOT).endsWith(".ts");
+    }
+
+    /** Remuxes [ts] to an .mp4 next to it; deletes the .TS on success. Null when it fails. */
+    private File convertToMp4(File ts) {
+        File mp4 = new File(ts.getParentFile(), mp4Name(ts.getName()));
+        File part = new File(ts.getParentFile(), mp4.getName() + ".part");
+        long start = System.currentTimeMillis();
+        boolean ok = remuxVideoOnly(ts, part);
+        if (ok && part.length() > 0 && (!mp4.exists() || mp4.delete()) && part.renameTo(mp4)) {
+            if (!ts.delete()) Log.w(TAG, "cannot delete " + ts);
+            Log.i(TAG, "mp4 " + mp4.getName() + " bytes=" + mp4.length()
+                    + " ms=" + (System.currentTimeMillis() - start));
+            return mp4;
+        }
+        if (part.exists() && !part.delete()) Log.w(TAG, "cannot delete " + part);
+        Log.w(TAG, "mp4 conversion failed, keeping " + ts.getName());
+        return null;
+    }
+
+    /** Copies the first video track of [input] into an MP4 container without re-encoding. */
+    static boolean remuxVideoOnly(File input, File output) {
+        MediaExtractor extractor = new MediaExtractor();
+        MediaMuxer muxer = null;
+        boolean started = false;
+        try {
+            extractor.setDataSource(input.getAbsolutePath());
+            int videoTrack = -1;
+            MediaFormat format = null;
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                MediaFormat candidate = extractor.getTrackFormat(i);
+                String mime = candidate.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("video/")) {
+                    videoTrack = i;
+                    format = candidate;
+                    break;
+                }
+            }
+            if (videoTrack < 0) return false;
+            extractor.selectTrack(videoTrack);
+            muxer = new MediaMuxer(output.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            int outTrack = muxer.addTrack(format);
+            muxer.start();
+            started = true;
+            int capacity = format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)
+                    ? Math.max(format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE), 1024 * 1024)
+                    : 8 * 1024 * 1024;
+            ByteBuffer buffer = ByteBuffer.allocate(capacity);
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            long firstPts = -1;
+            boolean sawKeyFrame = false;
+            int samples = 0;
+            while (true) {
+                buffer.clear();
+                int size = extractor.readSampleData(buffer, 0);
+                if (size < 0) break;
+                boolean key = (extractor.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0;
+                long pts = extractor.getSampleTime();
+                // Start at the first key frame so the MP4 does not open on broken frames.
+                if (!sawKeyFrame && !key) {
+                    extractor.advance();
+                    continue;
+                }
+                sawKeyFrame = true;
+                if (firstPts < 0) firstPts = pts;
+                info.offset = 0;
+                info.size = size;
+                info.presentationTimeUs = Math.max(0, pts - firstPts);
+                info.flags = key ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0;
+                muxer.writeSampleData(outTrack, buffer, info);
+                samples++;
+                extractor.advance();
+            }
+            return samples > 0;
+        } catch (Exception e) {
+            Log.w(TAG, "remux failed", e);
+            return false;
+        } finally {
+            try {
+                if (muxer != null) {
+                    if (started) muxer.stop();
+                    muxer.release();
+                }
+            } catch (RuntimeException e) {
+                Log.w(TAG, "muxer close failed", e);
+            }
+            extractor.release();
         }
     }
 

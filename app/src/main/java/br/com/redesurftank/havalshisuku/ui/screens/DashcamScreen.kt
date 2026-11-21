@@ -180,12 +180,16 @@ fun DashcamTab() {
         pending.forEach { saveStatus[it.name] = "na fila" }
         store.save(pending, object : DashcamClipStore.Listener {
             override fun onProgress(name: String, progress: Float) {
-                saveStatus[name] = if (progress >= 0) "salvando ${(progress * 100).toInt()}%" else "salvando…"
+                saveStatus[name] = when {
+                    progress == DashcamClipStore.PROGRESS_CONVERTING -> "salvando · convertendo para MP4…"
+                    progress >= 0 -> "salvando ${(progress * 100).toInt()}%"
+                    else -> "salvando…"
+                }
             }
 
             override fun onDone(name: String, file: File) {
                 saveStatus[name] = "salvo no carro"
-                message = "$name salvo no carro. Veja em \"Salvos no carro\", no topo da tela."
+                message = "${file.name} salvo no carro. Veja em \"Salvos no carro\", no topo da tela."
                 reloadSaved()
             }
 
