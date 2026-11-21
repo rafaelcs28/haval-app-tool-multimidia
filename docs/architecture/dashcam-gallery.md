@@ -52,6 +52,9 @@ bloqueia e pausa o vídeo.
 
 ## Automação (todas desligadas por padrão)
 
+A opção **Pausar dashcam durante recarga** (74162) saiu de Configurações → Recursos e fica
+nesta seção, com a mesma chave de preferência: quem já tinha ligado continua ligado.
+
 | Opção | Comportamento |
 |---|---|
 | Verificar e retomar a cada 5 minutos | Se a câmera estiver parada, envia `start` e confirma `running=true`. Respeita emergência, a pausa da recarga e o momento em que a recarga pede pausa. **Retoma também pausas manuais.** |

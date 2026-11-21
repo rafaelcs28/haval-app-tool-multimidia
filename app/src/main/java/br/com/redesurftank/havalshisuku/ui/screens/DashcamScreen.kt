@@ -608,6 +608,23 @@ private fun AutomationCard() {
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             AutomationSwitch(
                 modifier = Modifier.weight(1f),
+                title = "Pausar dashcam durante recarga",
+                hint = "Pausa só com o veículo carregando e parado; retoma ao fim da recarga ou ao andar.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING,
+                prefs = prefs
+            )
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Aviso de falha de gravação",
+                hint = "Avisa uma vez quando a câmera é encontrada sem gravar.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
+                prefs = prefs
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
                 title = "Verificar e retomar a gravação a cada 5 minutos",
                 hint = "Retoma também pausas manuais. Não interfere na pausa da recarga nem na emergência.",
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_WATCHDOG_RESUME,
@@ -618,13 +635,6 @@ private fun AutomationCard() {
                 title = "Sincronizar o relógio da dashcam",
                 hint = "Usa a hora de rede (NTP) ou um GPS recente. Não corrige gravações antigas.",
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC,
-                prefs = prefs
-            )
-            AutomationSwitch(
-                modifier = Modifier.weight(1f),
-                title = "Aviso de falha de gravação",
-                hint = "Avisa uma vez quando a câmera é encontrada sem gravar.",
-                key = SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING,
                 prefs = prefs
             )
         }

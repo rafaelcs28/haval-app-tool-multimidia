@@ -338,14 +338,6 @@ fun BasicSettingsTab() {
                         prefs.getBoolean(SharedPreferencesKeys.DISABLE_AVM_CAR_STOPPED.key, false)
                 )
         }
-        var pauseDashcamWhileCharging by remember {
-                mutableStateOf(
-                        prefs.getBoolean(
-                                SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.key,
-                                false
-                        )
-                )
-        }
         var closeWindowOnPowerOff by remember {
                 mutableStateOf(
                         prefs.getBoolean(SharedPreferencesKeys.CLOSE_WINDOW_ON_POWER_OFF.key, false)
@@ -2909,24 +2901,6 @@ fun BasicSettingsTab() {
                                                 putBoolean(
                                                         SharedPreferencesKeys
                                                                 .DISABLE_AVM_CAR_STOPPED
-                                                                .key,
-                                                        it
-                                                )
-                                        }
-                                }
-                        ),
-                        SettingItem(
-                                title = "Pausar dashcam durante recarga",
-                                group = SettingsGroups.FEATURES,
-                                description =
-                                        "Pausa somente com o veículo carregando e parado. Requer a central conectada ao Wi-Fi da dashcam HiSilicon.",
-                                checked = pauseDashcamWhileCharging,
-                                onCheckedChange = {
-                                        pauseDashcamWhileCharging = it
-                                        prefs.edit {
-                                                putBoolean(
-                                                        SharedPreferencesKeys
-                                                                .ENABLE_DASHCAM_PAUSE_WHILE_CHARGING
                                                                 .key,
                                                         it
                                                 )
