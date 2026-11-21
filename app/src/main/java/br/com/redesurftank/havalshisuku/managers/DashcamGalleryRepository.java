@@ -468,6 +468,8 @@ public final class DashcamGalleryRepository {
     }
 
     private static void log(String phase, String detail) {
+        // Sempre no logcat: o log persistente só grava com a captura de diagnóstico ligada.
+        Log.i(TAG, "phase=" + phase + " " + detail);
         ClusterPersistentEventLogger.logText("dashcam_gallery", "phase=" + phase + " " + detail);
     }
 }

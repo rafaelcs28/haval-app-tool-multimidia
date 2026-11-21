@@ -295,6 +295,8 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     }
 
     private static void log(String phase, String detail) {
+        // Sempre no logcat: o log persistente só grava com a captura de diagnóstico ligada.
+        Log.i(TAG, "phase=" + phase + " " + detail);
         ClusterPersistentEventLogger.logText("dashcam_automation", "phase=" + phase + " " + detail);
     }
 }

@@ -65,6 +65,7 @@ import androidx.media3.ui.PlayerView
 import br.com.redesurftank.App
 import br.com.redesurftank.havalshisuku.managers.DashcamCatalog
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository
+import br.com.redesurftank.havalshisuku.managers.DashcamProfile
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.CatalogStatus
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.StateKind
 import br.com.redesurftank.havalshisuku.managers.DashcamVideoDataSource
@@ -111,6 +112,7 @@ fun DashcamTab() {
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var selectedSegment by remember { mutableStateOf(0) }
     var playing by remember { mutableStateOf<DashcamCatalog.Clip?>(null) }
+    var autoRefreshed by remember { mutableStateOf(false) }
 
     fun applyCatalog(result: DashcamGalleryRepository.CatalogResult) {
         catalog = result.catalog
@@ -141,6 +143,17 @@ fun DashcamTab() {
         busy = true
         message = if (allowPause) "Pausando, lendo a lista e retomando…" else "Lendo a lista de vídeos…"
         repository.refreshCatalog(allowPause) { handleCatalog(it) }
+    }
+
+    // A Novatek entrega a lista gravando, sem pausa: carrega sozinha ao abrir a aba, uma vez.
+    // A HiSilicon continua exigindo o toque e a confirmação da pausa.
+    LaunchedEffect(state?.profile, state?.kind) {
+        val current = state ?: return@LaunchedEffect
+        if (!autoRefreshed && current.profile == DashcamProfile.NOVATEK
+            && current.kind != StateKind.UNREACHABLE && current.kind != StateKind.WIFI_OFF) {
+            autoRefreshed = true
+            refreshCatalog(false)
+        }
     }
 
     LaunchedEffect(Unit) {

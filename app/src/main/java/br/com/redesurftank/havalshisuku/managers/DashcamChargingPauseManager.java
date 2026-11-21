@@ -240,6 +240,7 @@ public final class DashcamChargingPauseManager
     }
 
     private void log(String phase, String detail) {
+        Log.i(TAG, "phase=" + phase + " detail=" + detail);
         ClusterPersistentEventLogger.logText(
                 "dashcam_charging_pause",
                 "phase=" + phase + " detail=" + detail);
