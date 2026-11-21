@@ -31,6 +31,7 @@ Themes are **self-contained** Web apps under contract `v1.0`. The host does not 
 - `…/managers/ServiceManager.java`
 - `…/managers/ProjectorManager.java`
 - `…/managers/ThemeManager.kt`
+- `…/managers/DashcamChargingPauseManager.java`
 - `…/projectors/InstrumentProjector2.kt`
 - `…/bridge/ThemeBridgeImpl.kt`
 
