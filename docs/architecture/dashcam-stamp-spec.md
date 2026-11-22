@@ -5,7 +5,7 @@ Todas as medidas são para um quadro de **1920×1080**. Coordenadas absolutas (x
 
 ## 0. Convenções
 
-- **Escala:** `s = min(W/1920, H/1080)` e, por cima, o tamanho do carimbo `SIZE = 0,6` (pedido do dono: cápsulas sobre o capô), com pivôs nos cantos inferiores (L em (0,1080), R em (1920,1080)) e EVENTO em (1920,0). Multiplique por `s` todas as medidas (posições, tamanhos, raios, traços, fontes, letter-spacing).
+- **Escala:** `s = min(W/1920, H/1080)` e, por cima, `SIZE = 0,6`. As cápsulas encostam nos cantos inferiores (sem margem), com cantos retos nas bordas do quadro e arredondados só para dentro, fundo 94% opaco: a L cobre o carimbo "4K / data" que a câmera grava no canto inferior esquerdo. EVENTO escala a partir de (1920,0). Multiplique por `s` todas as medidas (posições, tamanhos, raios, traços, fontes, letter-spacing).
   A cápsula esquerda fica ancorada no canto inferior esquerdo e a direita no canto inferior direito:
   `xL = 36·s`, `xR = W − 36·s − 800·s`, `yTop = H − 36·s − 268·s`. Todas as coordenadas internas abaixo são relativas a essas origens.
   - 2560×1440 → s = 1,3333 (cápsula L 853×357 px em (48, 1035); fonte da velocidade 186,7 px)

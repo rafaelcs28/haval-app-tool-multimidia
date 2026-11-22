@@ -89,22 +89,28 @@ public final class DashcamStampPainter {
         c.save();
         c.scale(s, s);
         c.translate(0, dy);
-        // Owner asked for a smaller stamp: at 60 % both capsules sit on the bonnet, clear of the road.
+        // Owner: smaller stamp (60 %), docked flush in the bottom corners and nearly opaque, so the
+        // left capsule hides the camera's own "4K / date" burn-in in the bottom-left corner.
         c.save();
-        c.scale(SIZE, SIZE, 0, 1080);
-        capsule(c, 36, 776, 640, 268);
+        c.translate(0, 1080);
+        c.scale(SIZE, SIZE);
+        c.translate(-36, -1044);
+        capsule(c, 36, 776, 640, 268, LEFT_RADII);
         if (f.event) {
             stroke.setStrokeWidth(3);
             stroke.setColor(0xE6FF4A4A);
-            c.drawRoundRect(new RectF(37.5f, 777.5f, 674.5f, 1042.5f), 29, 29, stroke);
+            Path outline = new Path();
+            outline.addRoundRect(new RectF(37.5f, 777.5f, 674.5f, 1042.5f), LEFT_RADII, Path.Direction.CW);
+            c.drawPath(outline, stroke);
         }
         drawLeft(c, f);
         drawAlerts(c, f);
         c.restore();
         c.save();
-        c.translate(dxR, 0);
-        c.scale(SIZE, SIZE, 1920, 1080);
-        capsule(c, 1084, 776, 800, 268);
+        c.translate(dxR + 1920, 1080);
+        c.scale(SIZE, SIZE);
+        c.translate(-1884, -1044);
+        capsule(c, 1084, 776, 800, 268, RIGHT_RADII);
         drawMap(c, f, map, fixes);
         drawRight(c, f, address, extras);
         c.restore();
@@ -440,14 +446,22 @@ public final class DashcamStampPainter {
 
     // ---- primitives ----
 
-    private void capsule(Canvas c, float x, float y, float w, float h) {
-        RectF r = new RectF(x, y, x + w, y + h);
-        fill.setShader(new LinearGradient(0, y, 0, y + h, 0xCC1A1D24, 0xCC090B0E, Shader.TileMode.CLAMP));
-        c.drawRoundRect(r, 30, 30, fill);
+    /** Rounded only on the corner that faces the picture; square where it meets the frame edges. */
+    private static final float[] LEFT_RADII = {0, 0, 30, 30, 0, 0, 0, 0};
+    private static final float[] RIGHT_RADII = {30, 30, 0, 0, 0, 0, 0, 0};
+
+    private void capsule(Canvas c, float x, float y, float w, float h, float[] radii) {
+        Path body = new Path();
+        body.addRoundRect(new RectF(x, y, x + w, y + h), radii, Path.Direction.CW);
+        // 94 % opaque: dense enough to hide the camera's burn-in underneath.
+        fill.setShader(new LinearGradient(0, y, 0, y + h, 0xF01A1D24, 0xF0090B0E, Shader.TileMode.CLAMP));
+        c.drawPath(body, fill);
         fill.setShader(null);
+        Path edge = new Path();
+        edge.addRoundRect(new RectF(x + 0.75f, y + 0.75f, x + w - 0.75f, y + h - 0.75f), radii, Path.Direction.CW);
         stroke.setStrokeWidth(1.5f);
         stroke.setColor(0x1FFFFFFF);
-        c.drawRoundRect(new RectF(x + 0.75f, y + 0.75f, x + w - 0.75f, y + h - 0.75f), 29.25f, 29.25f, stroke);
+        c.drawPath(edge, stroke);
     }
 
     private void textAt(Canvas c, String value, float x, float baseline, float size, Typeface face, int color,
