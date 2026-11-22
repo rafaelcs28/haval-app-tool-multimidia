@@ -51,6 +51,12 @@ public final class DashcamCarTrack {
             {"tin", CarConstants.CAR_BASIC_INSIDE_TEMP.getValue()},
             {"tout", CarConstants.CAR_BASIC_OUTSIDE_TEMP.getValue()},
             {"odo", CarConstants.CAR_BASIC_TOTAL_ODOMETER.getValue()},
+            // 177: power share (negative = regeneration), combustion engine rpm, doors.
+            {"outpct", CarConstants.CAR_EV_INFO_ENERGY_OUTPUT_PERCENTAGE.getValue()},
+            {"rpm", CarConstants.CAR_BASIC_ENGINE_SPEED.getValue()},
+            {"doors", CarConstants.CAR_BASIC_DOOR_STATUS.getValue()},
+            // 1 = trancado, 3 = destrancado (measured in the car, see ServiceManager).
+            {"lock", CarConstants.CAR_BASIC_DOOR_LOCK_STATUS.getValue()},
     };
 
     private static volatile DashcamCarTrack instance;

@@ -127,6 +127,12 @@ public final class DashcamClipStore {
         if (deleted) {
             File gpx = new File(file.getParentFile(), gpxName(file.getName()));
             if (gpx.isFile() && !gpx.delete()) Log.w(TAG, "cannot delete " + gpx);
+            if (!DashcamStampJob.isStamped(file.getName())) {
+                File ev = new File(file.getParentFile(), eventName(file.getName()));
+                if (ev.isFile() && !ev.delete()) Log.w(TAG, "cannot delete " + ev);
+            }
+            File sha = new File(file.getParentFile(), file.getName() + ".sha256");
+            if (sha.isFile() && !sha.delete()) Log.w(TAG, "cannot delete " + sha);
         }
         return deleted;
     }
@@ -226,6 +232,7 @@ public final class DashcamClipStore {
                 return;
             }
             Log.i(TAG, "saved " + name + " bytes=" + written);
+            if (recording.isEmergency()) markEvent(target);
             List<DashcamGpsTrack.Fix> trail = trailFor(name);
             writeGpx(target, trail);
             if (isTs(name)) {
@@ -275,6 +282,25 @@ public final class DashcamClipStore {
             Log.w(TAG, "trail unavailable for " + clipName, e);
             return Collections.emptyList();
         }
+    }
+
+    /** {@code <clip>.event}: the camera flagged it (emergency / G-sensor); the stamp shows a badge. */
+    static String eventName(String clipName) {
+        String base = clipName.replace("_carimbo.", ".");
+        int dot = base.lastIndexOf('.');
+        return (dot > 0 ? base.substring(0, dot) : base) + ".event";
+    }
+
+    private void markEvent(File clip) {
+        try {
+            if (!new File(clip.getParentFile(), eventName(clip.getName())).createNewFile()) Log.i(TAG, "event mark exists");
+        } catch (java.io.IOException e) {
+            Log.w(TAG, "event mark failed", e);
+        }
+    }
+
+    public static boolean isEvent(File clip) {
+        return new File(clip.getParentFile(), eventName(clip.getName())).isFile();
     }
 
     static String gpxName(String clipName) {

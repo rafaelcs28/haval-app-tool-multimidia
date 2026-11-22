@@ -35,3 +35,28 @@ class MapTilesTest {
         assertNull(MapTiles.formatAddress(JSONObject("""{"address":{}}""")))
     }
 }
+
+class DashcamRoadInfoTest {
+    @Test
+    fun ctbTolerance() {
+        assertEquals(false, DashcamRoadInfo.isOverLimit(67f, 60))
+        assertEquals(true, DashcamRoadInfo.isOverLimit(67.5f, 60))
+        // 110 km/h: 7 % = 7.7 km/h of tolerance.
+        assertEquals(false, DashcamRoadInfo.isOverLimit(117.5f, 110))
+        assertEquals(true, DashcamRoadInfo.isOverLimit(118f, 110))
+        assertEquals(true, DashcamRoadInfo.isOverLimit(108f, 100))
+        assertEquals(false, DashcamRoadInfo.isOverLimit(null, 60))
+        assertEquals(false, DashcamRoadInfo.isOverLimit(90f, null))
+    }
+
+    @Test
+    fun maxspeedParsing() {
+        val reply = JSONObject("""{"elements":[{"tags":{"maxspeed":"60"}},{"tags":{"maxspeed":"40"}},{"tags":{"maxspeed":"BR:urban"}}]}""")
+        assertEquals(40, DashcamRoadInfo.parseMaxspeed(reply))
+        assertEquals(48, DashcamRoadInfo.parseMaxspeed(JSONObject("""{"elements":[{"tags":{"maxspeed":"30 mph"}}]}""")))
+        assertNull(DashcamRoadInfo.parseMaxspeed(JSONObject("""{"elements":[]}""")))
+        assertEquals(60, DashcamRoadInfo.effectiveLimit(null, DashcamRoadInfo.Radar(120.0, 60)))
+        assertNull(DashcamRoadInfo.effectiveLimit(null, DashcamRoadInfo.Radar(500.0, 60)))
+        assertEquals(80, DashcamRoadInfo.effectiveLimit(80, DashcamRoadInfo.Radar(100.0, 60)))
+    }
+}

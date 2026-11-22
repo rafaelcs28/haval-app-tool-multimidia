@@ -18,7 +18,7 @@ public class DashcamStampFrameTest {
 
     private static DashcamCarTrack.Sample sample(long utc, String speed, String gear, String belt, String left) {
         // speed|gear|belt|left|right|hazard|low|high|handbrake|steer|mode|soc|power|tin|tout|odo
-        String line = utc + "|" + speed + "|" + gear + "|" + belt + "|" + left + "|0|0|0|1|0|-12.5|2|72.0|-15.3|23|31|12345";
+        String line = utc + "|" + speed + "|" + gear + "|" + belt + "|" + left + "|0|0|0|1|0|-12.5|2|72.0|-15.3|23|31|12345|-35.0|1450|0";
         return DashcamCarTrack.parseLine(line, cols());
     }
 
@@ -42,13 +42,14 @@ public class DashcamStampFrameTest {
     public void frameInterpretsSignals() {
         List<DashcamCarTrack.Sample> samples = new ArrayList<>();
         // 36 km/h -> 54 km/h over 2 s = 2.5 m/s^2 = 0.255 g
-        samples.add(sample(0L, "36", "2", "0", "0"));
-        samples.add(sample(1000L, "45", "2", "1", "1"));
-        samples.add(sample(2000L, "54", "2", "1", "1"));
+        long t0 = 1_795_361_560_000L;
+        samples.add(sample(t0, "36", "2", "0", "0"));
+        samples.add(sample(t0 + 1000L, "45", "2", "1", "1"));
+        samples.add(sample(t0 + 2000L, "54", "2", "1", "1"));
         List<DashcamGpsTrack.Fix> fixes = Arrays.asList(
-                new DashcamGpsTrack.Fix(0L, -16.0, -49.0, 10f, 80f, 3f),
-                new DashcamGpsTrack.Fix(2000L, -16.0, -48.9998, 15f, 80f, 3f));
-        DashcamStampFrame f = DashcamStampFrame.build(1000L, fixes, samples);
+                new DashcamGpsTrack.Fix(t0, -16.0, -49.0, 10f, 80f, 3f),
+                new DashcamGpsTrack.Fix(t0 + 2000L, -16.0, -48.9998, 15f, 80f, 3f));
+        DashcamStampFrame f = DashcamStampFrame.build(t0 + 1000L, fixes, samples);
         assertEquals(45f, f.speedKmh, 1e-4);
         assertEquals(0.255f, f.accelG, 0.002f);
         assertEquals("D", f.gear);
@@ -63,6 +64,10 @@ public class DashcamStampFrameTest {
         assertEquals(23f, f.insideC, 1e-4);
         assertEquals(31f, f.outsideC, 1e-4);
         assertEquals("L", f.compass);
+        assertEquals(-35f, f.outputPct, 1e-4);
+        assertEquals(1450f, f.rpm, 1e-4);
+        assertTrue(f.engineOn);
+        assertFalse(f.doorOpen);
         assertNotNull(f.lat);
     }
 
@@ -92,5 +97,15 @@ public class DashcamStampFrameTest {
         assertEquals("NO", DashcamStampFrame.compass(-45f));
         assertEquals(-2f, DashcamStampFrame.toG(100f, 0f, 100L), 1e-6);
         assertEquals("1,25", DashcamStampFrame.decimal(1.25f, 2));
+    }
+
+    @Test
+    public void painterHelpers() {
+        assertEquals("ENE", DashcamStampPainter.compass16(73f));
+        assertEquals("N", DashcamStampPainter.compass16(355f));
+        assertEquals("SSO", DashcamStampPainter.compass16(200f));
+        assertEquals("12.483", DashcamStampPainter.thousands(12483));
+        assertEquals("1.450", DashcamStampPainter.thousands(1450));
+        assertEquals("M9.70 4.20a2.30 2.30 0 1 0 4.60 0a2.30 2.30 0 1 0 -4.60 0z", DashcamStampPainter.circle(12f, 4.2f, 2.3f));
     }
 }

@@ -31,6 +31,24 @@ public final class DashcamStampFrame {
     public Float insideC;
     public Float outsideC;
     public Float odometerKm;
+    /** Share of the available power, %; negative = regeneration. */
+    public Float outputPct;
+    /** Combustion engine speed; the engine counts as running above {@link #ENGINE_ON_RPM}. */
+    public Float rpm;
+    public Boolean engineOn;
+    /** Any door reported open. */
+    public boolean doorOpen;
+    static final float ENGINE_ON_RPM = 300f;
+    /** True = locked (1), false = unlocked (3), null unknown. */
+    public Boolean locked;
+    /** The camera flagged this clip as an event (G-sensor / emergency). */
+    public boolean event;
+    /** Road limit (or a camera's nearby), km/h. */
+    public Integer limitKmh;
+    /** Speed camera ahead: metres and its limit. */
+    public Float radarDistanceM;
+    public Integer radarLimitKmh;
+    public boolean overLimit;
     public Double lat;
     public Double lon;
     public Float bearing;
@@ -71,6 +89,13 @@ public final class DashcamStampFrame {
             f.insideC = range(number(s.get("tin")), -40f, 85f);
             f.outsideC = range(number(s.get("tout")), -40f, 85f);
             f.odometerKm = range(number(s.get("odo")), 0f, 2_000_000f);
+            f.outputPct = range(number(s.get("outpct")), -100f, 100f);
+            Float rpm = range(number(s.get("rpm")), 0f, 9_000f);
+            f.rpm = rpm;
+            f.engineOn = rpm == null ? null : rpm > ENGINE_ON_RPM;
+            f.doorOpen = s.get("doors").matches(".*[1-9].*");
+            String lock = s.get("lock").trim();
+            f.locked = "1".equals(lock) ? Boolean.TRUE : ("3".equals(lock) ? Boolean.FALSE : null);
         }
         return f;
     }

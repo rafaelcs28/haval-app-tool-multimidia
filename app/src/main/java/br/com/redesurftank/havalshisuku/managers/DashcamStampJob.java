@@ -98,7 +98,22 @@ public final class DashcamStampJob {
                     addressTexts.add(a);
                 }
             }
+            // Road limit along the minute (OpenStreetMap maxspeed, online only).
+            List<long[]> limitTimes = new ArrayList<>();
+            List<Integer> limitValues = new ArrayList<>();
+            for (long dt = 0; dt <= DashcamGpsTrack.CLIP_MS; dt += 20_000L) {
+                DashcamGpsTrack.Fix f = DashcamGpsTrack.interpolate(fixes, start + dt);
+                if (f == null) continue;
+                Integer limit = DashcamRoadInfo.roadLimit(context, f.lat, f.lon);
+                if (limit != null) {
+                    limitTimes.add(new long[]{start + dt});
+                    limitValues.add(limit);
+                }
+            }
+            final boolean event = DashcamClipStore.isEvent(clip);
             StampMap map = StampMap.build(context, fixes);
+            DashcamStampPainter.Extras extras = new DashcamStampPainter.Extras(
+                    shortSha256(clip), distanceMetres(fixes, start, start + DashcamGpsTrack.CLIP_MS));
             DashcamStampPainter painter = new DashcamStampPainter();
             final long clipStart = start;
             final long[] lastBucket = {-1};
@@ -119,8 +134,21 @@ public final class DashcamStampJob {
                 target.eraseColor(0);
                 long t = clipStart + ptsUs / 1000L;
                 DashcamStampFrame frame = DashcamStampFrame.build(t, fixes, samples);
+                frame.event = event;
+                Integer roadLimit = nearestInt(limitTimes, limitValues, t);
+                if (frame.lat != null) {
+                    DashcamRoadInfo.Radar radar = DashcamRoadInfo.radarAhead(context, frame.lat, frame.lon, frame.bearing);
+                    if (radar != null) {
+                        frame.radarDistanceM = (float) radar.getDistanceM();
+                        frame.radarLimitKmh = radar.getLimitKmh();
+                    }
+                    frame.limitKmh = DashcamRoadInfo.effectiveLimit(roadLimit, radar);
+                } else {
+                    frame.limitKmh = roadLimit;
+                }
+                frame.overLimit = DashcamRoadInfo.isOverLimit(frame.speedKmh, frame.limitKmh);
                 String address = nearest(addressTimes, addressTexts, t);
-                painter.paint(new Canvas(target), width, height, frame, address, map, fixes);
+                painter.paint(new Canvas(target), width, height, frame, address, map, fixes, extras);
                 last[0] = target;
                 return target;
             };
@@ -149,6 +177,51 @@ public final class DashcamStampJob {
         } finally {
             running = "";
         }
+    }
+
+    /** First 12 hex digits of the original's SHA-256: shown on the stamp as proof of the source. */
+    static String shortSha256(File file) {
+        try (java.io.InputStream in = new java.io.FileInputStream(file)) {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest()) sb.append(String.format(java.util.Locale.ROOT, "%02x", b));
+            java.io.File sidecar = new File(file.getParentFile(), stampedName(file.getName()) + ".sha256");
+            try (java.io.Writer w = new java.io.FileWriter(sidecar)) {
+                w.write(sb + "  " + file.getName() + "\n");
+            } catch (java.io.IOException ignored) {
+            }
+            return sb.substring(0, 12);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Metres driven between [from] and [to] along the trail. */
+    static float distanceMetres(List<DashcamGpsTrack.Fix> fixes, long from, long to) {
+        double d = 0;
+        DashcamGpsTrack.Fix prev = null;
+        for (DashcamGpsTrack.Fix f : fixes) {
+            if (f.utcMs < from || f.utcMs > to) continue;
+            if (prev != null) d += DashcamGpsTrack.metres(prev, f);
+            prev = f;
+        }
+        return (float) d;
+    }
+
+    private static Integer nearestInt(List<long[]> times, List<Integer> values, long t) {
+        Integer best = null;
+        long bestDt = Long.MAX_VALUE;
+        for (int i = 0; i < times.size(); i++) {
+            long dt = Math.abs(times.get(i)[0] - t);
+            if (dt < bestDt && dt <= 15_000L) {
+                bestDt = dt;
+                best = values.get(i);
+            }
+        }
+        return best;
     }
 
     private static String nearest(List<long[]> times, List<String> texts, long t) {
