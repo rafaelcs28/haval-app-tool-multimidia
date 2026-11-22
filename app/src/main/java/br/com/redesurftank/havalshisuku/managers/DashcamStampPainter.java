@@ -89,8 +89,14 @@ public final class DashcamStampPainter {
         c.save();
         c.scale(s, s);
         c.translate(0, dy);
-        // Owner: smaller stamp (60 %), sitting just above the camera's own "4K / date" burn-in in
-        // the bottom-left corner (it ends ~7 % above the bottom), so both stay readable.
+        // Owner: smaller stamp (60 %) just above the bottom edge, and the camera's own "4K / date"
+        // burn-in (bottom-left, y ≈ 1010–1070) hidden under an opaque band along the bottom, which
+        // blends with the dark bonnet: fades in over y 984–1000, solid below.
+        fill.setShader(new LinearGradient(0, BOTTOM_EDGE - 16, 0, BOTTOM_EDGE, 0x00050608, 0xFF050608, Shader.TileMode.CLAMP));
+        c.drawRect(0, BOTTOM_EDGE - 16, 1920 + dxR, BOTTOM_EDGE, fill);
+        fill.setShader(null);
+        fill.setColor(0xFF050608);
+        c.drawRect(0, BOTTOM_EDGE, 1920 + dxR, 1080, fill);
         c.save();
         c.translate(SIDE_MARGIN, BOTTOM_EDGE);
         c.scale(SIZE, SIZE);
