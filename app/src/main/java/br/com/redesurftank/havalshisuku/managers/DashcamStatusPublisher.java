@@ -23,6 +23,8 @@ import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys;
  *   <li>{@code app.dashcam.pause_reason}: charging | ready | "" (with paused_auto)
  *   <li>{@code app.dashcam.profile}: novatek | hisilicon | none
  *   <li>{@code app.dashcam.free_mb}: last known free space on the camera card, or ""
+ *   <li>{@code app.dashcam.total_mb}: last known card capacity (free + listed clips; Novatek
+ *       only), or ""
  *   <li>{@code app.dashcam.saved_count}: clips saved on the head unit
  *   <li>{@code app.dashcam.saving}: "" | "NN" percent | "converting"
  *   <li>{@code app.dashcam.checked_at}: epoch ms of the last successful camera read ("0" never)
@@ -38,11 +40,16 @@ public final class DashcamStatusPublisher {
     private static final long LOCAL_POLL_MS = 3_000L;
     private static final String KEY_LAST_FREE_MB = "status_last_free_mb";
     private static final String KEY_LAST_CHECKED_AT = "status_last_checked_at";
+    private static final String KEY_LAST_TOTAL_MB = "status_last_total_mb";
+    private static final String KEY_LAST_TOTAL_AT = "status_last_total_at";
+    /** The capacity only changes when the card is swapped; the file list is slow, so re-read rarely. */
+    static final long TOTAL_REFRESH_MS = 6L * 60L * 60L * 1000L;
 
     public static final String STATE = "app.dashcam.state";
     public static final String PAUSE_REASON = "app.dashcam.pause_reason";
     public static final String PROFILE = "app.dashcam.profile";
     public static final String FREE_MB = "app.dashcam.free_mb";
+    public static final String TOTAL_MB = "app.dashcam.total_mb";
     public static final String SAVED_COUNT = "app.dashcam.saved_count";
     public static final String SAVING = "app.dashcam.saving";
     public static final String CHECKED_AT = "app.dashcam.checked_at";
@@ -122,6 +129,7 @@ public final class DashcamStatusPublisher {
         handler = new Handler(thread.getLooper());
         // Last known values first, so the card is not empty until the first camera read.
         publish(FREE_MB, statePreferences.getString(KEY_LAST_FREE_MB, ""));
+        publish(TOTAL_MB, statePreferences.getString(KEY_LAST_TOTAL_MB, ""));
         publish(CHECKED_AT, String.valueOf(statePreferences.getLong(KEY_LAST_CHECKED_AT, 0L)));
         handler.post(localPoll);
         handler.postDelayed(cameraPoll, 5_000L);
@@ -160,7 +168,25 @@ public final class DashcamStatusPublisher {
                     .apply();
             publish(CHECKED_AT, String.valueOf(now));
             publish(FREE_MB, free);
+            if (profile == DashcamProfile.NOVATEK && shouldRefreshTotal(
+                    statePreferences.getString(KEY_LAST_TOTAL_MB, ""),
+                    statePreferences.getLong(KEY_LAST_TOTAL_AT, 0L), now)) {
+                Long total = DashcamGalleryRepository.getInstance(context).readNovatekTotalBytes();
+                if (total != null && total > 0) {
+                    String totalMb = String.valueOf(total / 1_000_000L);
+                    statePreferences.edit()
+                            .putString(KEY_LAST_TOTAL_MB, totalMb)
+                            .putLong(KEY_LAST_TOTAL_AT, now)
+                            .apply();
+                    publish(TOTAL_MB, totalMb);
+                }
+            }
         }
+    }
+
+    static boolean shouldRefreshTotal(String lastTotalMb, long lastTotalAt, long now) {
+        if (lastTotalMb == null || lastTotalMb.isEmpty()) return true;
+        return now - lastTotalAt >= TOTAL_REFRESH_MS || now < lastTotalAt;
     }
 
     static String stateValue(DashcamGalleryRepository.StateSnapshot snapshot, DashcamProfile profile) {

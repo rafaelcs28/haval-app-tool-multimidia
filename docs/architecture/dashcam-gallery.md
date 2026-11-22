@@ -127,6 +127,6 @@ dobra durante a conversão. O "Enviar ao celular" entrega o `.mp4` (`video/mp4`)
 publica no barramento público `com.haval.vehicle.EVENT_CHANGED`, só quando o valor muda e de novo
 em todo `REQUEST_SNAPSHOT`: `app.dashcam.state` (recording | paused | paused_auto | emergency |
 other_mode | unreachable | no_wifi | unknown), `app.dashcam.pause_reason` (charging | ready),
-`app.dashcam.profile`, `app.dashcam.free_mb` (último conhecido), `app.dashcam.saved_count`,
+`app.dashcam.profile`, `app.dashcam.free_mb` (último conhecido), `app.dashcam.total_mb` (capacidade do cartão = livre + clipes listados; só Novatek, relida a cada 6 h), `app.dashcam.saved_count`,
 `app.dashcam.saving` ("NN" | converting) e `app.dashcam.checked_at`. O toque no card abre
 `OpenDashcamActivity` (exportada, só abre a aba Dashcam; ignorada no Modo Concessionária).

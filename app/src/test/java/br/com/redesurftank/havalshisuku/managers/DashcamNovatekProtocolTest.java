@@ -107,4 +107,14 @@ public class DashcamNovatekProtocolTest {
         assertEquals("frozen counter is stopped", Boolean.FALSE, DashcamNovatekProtocol.recordingFromSamples(19L, 19L));
         assertNull(DashcamNovatekProtocol.recordingFromSamples(null, 3L));
     }
+
+    @Test
+    public void cardTotalIsFreeSpacePlusListedClips() {
+        List<DashcamNovatekProtocol.Entry> entries = DashcamNovatekProtocol.parseFileList(LIST);
+        assertNotNull(entries);
+        assertEquals(Long.valueOf(1_000L + 139540180L + 139520440L + 139553528L),
+                DashcamNovatekProtocol.cardTotalBytes(1_000L, entries));
+        assertNull(DashcamNovatekProtocol.cardTotalBytes(null, entries));
+        assertNull(DashcamNovatekProtocol.cardTotalBytes(1_000L, null));
+    }
 }

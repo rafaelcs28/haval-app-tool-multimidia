@@ -1,6 +1,8 @@
 package br.com.redesurftank.havalshisuku.managers;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -35,5 +37,17 @@ public class DashcamStatusPublisherTest {
         assertEquals("unknown", DashcamStatusPublisher.stateValue(
                 snap(DashcamGalleryRepository.StateKind.UNKNOWN, "camera_busy"), DashcamProfile.NOVATEK));
         assertEquals("unknown", DashcamStatusPublisher.stateValue(null, DashcamProfile.NOVATEK));
+    }
+
+    @Test
+    public void cardCapacityIsReadOnceAndThenEverySixHours() {
+        long now = 100_000_000L;
+        assertTrue(DashcamStatusPublisher.shouldRefreshTotal("", 0L, now));
+        assertTrue(DashcamStatusPublisher.shouldRefreshTotal(null, now, now));
+        assertFalse(DashcamStatusPublisher.shouldRefreshTotal("31000", now - 60_000L, now));
+        assertTrue(DashcamStatusPublisher.shouldRefreshTotal(
+                "31000", now - DashcamStatusPublisher.TOTAL_REFRESH_MS, now));
+        // Clock moved backwards (camera/head unit time reset): re-read instead of waiting forever.
+        assertTrue(DashcamStatusPublisher.shouldRefreshTotal("31000", now + 60_000L, now));
     }
 }

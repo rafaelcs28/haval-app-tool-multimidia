@@ -182,6 +182,20 @@ public final class DashcamNovatekProtocol {
         }
     }
 
+    /**
+     * Card capacity as the camera can see it: free bytes (3017) plus every listed file (3015). The
+     * firmware has no documented "total" command; the loop recorder keeps the card full of listed
+     * clips, so this lands a little under the card's nominal size. Null without both inputs.
+     */
+    public static Long cardTotalBytes(Long freeBytes, List<Entry> entries) {
+        if (freeBytes == null || freeBytes < 0 || entries == null) return null;
+        long total = freeBytes;
+        for (Entry entry : entries) {
+            if (entry != null && entry.size > 0) total += entry.size;
+        }
+        return total;
+    }
+
     public static final class Entry {
         final String dir;
         final String name;

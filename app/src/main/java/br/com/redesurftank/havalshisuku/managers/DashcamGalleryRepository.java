@@ -300,6 +300,25 @@ public final class DashcamGalleryRepository {
         }
     }
 
+    /**
+     * Novatek card capacity (free + listed files), or null when it cannot be read. Read-only and
+     * blocking: call it off the main thread. The list takes a few seconds, so callers cache it.
+     */
+    public Long readNovatekTotalBytes() {
+        if (!lock()) return null;
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> free;
+        DashcamHisiliconClient.Result<List<DashcamNovatekProtocol.Entry>> list;
+        try {
+            free = novatek.query(DashcamNovatekProtocol.CMD_FREE_SPACE);
+            if (!free.isSuccess() || free.getValue().getStatus() != 0) return null;
+            list = novatek.fileList();
+        } finally {
+            DashcamHisiliconClient.CAMERA_LOCK.unlock();
+        }
+        if (!list.isSuccess()) return null;
+        return DashcamNovatekProtocol.cardTotalBytes(free.getValue().getLongValue(), list.getValue());
+    }
+
     /** Novatek lists while recording (observed 2026-11-21): no pause, no confirmation. */
     private CatalogResult refreshNovatek(Cached cached) {
         if (!lock()) return fromCache(cached, CatalogStatus.BUSY, "camera_busy", false, null);
