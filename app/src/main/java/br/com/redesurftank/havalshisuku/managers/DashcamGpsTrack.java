@@ -190,6 +190,12 @@ public final class DashcamGpsTrack {
         if (utc - lastPruneMs > 60L * 60 * 1000) {
             lastPruneMs = utc;
             prune(utc);
+            // Map tiles along the last day's trail, only on an unmetered Wi-Fi (home).
+            try {
+                MapTiles.prefetchAsync(context, decimate(query(utc - 24L * 60 * 60 * 1000, utc), 40, 60_000L));
+            } catch (RuntimeException e) {
+                Log.w(TAG, "prefetch skipped", e);
+            }
         }
     }
 
@@ -340,6 +346,33 @@ public final class DashcamGpsTrack {
                     f < 0.5 ? a.bearing : b.bearing, Math.max(a.accuracy, b.accuracy));
         }
         return last;
+    }
+
+    /**
+     * Thins a trail for drawing: keeps a fix when it is at least {@code minMeters} from the last kept
+     * one or {@code maxGapMs} later, plus the last fix. Order is kept.
+     */
+    public static List<Fix> decimate(List<Fix> fixes, double minMeters, long maxGapMs) {
+        List<Fix> out = new ArrayList<>();
+        if (fixes == null || fixes.isEmpty()) return out;
+        Fix kept = null;
+        for (Fix fix : fixes) {
+            if (kept == null || metres(kept, fix) >= minMeters || fix.utcMs - kept.utcMs >= maxGapMs) {
+                out.add(fix);
+                kept = fix;
+            }
+        }
+        Fix last = fixes.get(fixes.size() - 1);
+        if (out.get(out.size() - 1) != last) out.add(last);
+        return out;
+    }
+
+    /** Equirectangular distance; plenty for metres-scale thinning. */
+    public static double metres(Fix a, Fix b) {
+        double k = Math.cos(Math.toRadians((a.lat + b.lat) / 2));
+        double dx = Math.toRadians(b.lon - a.lon) * k;
+        double dy = Math.toRadians(b.lat - a.lat);
+        return Math.sqrt(dx * dx + dy * dy) * 6_371_000d;
     }
 
     /** GPX 1.1 track of the fixes (UTC times from the GPS), for the clip saved on the head unit. */

@@ -137,7 +137,17 @@ private data class PlayerSource(
     val uri: Uri,
     val title: String,
     val subtitle: String,
-    val recording: DashcamCatalog.Recording?
+    val recording: DashcamCatalog.Recording?,
+    /** Where playback starts (a moment picked on the map); 0 = from the beginning. */
+    val startMs: Long = 0L
+)
+
+private fun cameraSourceAt(r: DashcamCatalog.Recording, startMs: Long) = PlayerSource(
+    DashcamVideoDataSource.uriFor(r),
+    "${r.start.format(DayMonth)} · ${r.start.format(HourMinute)}",
+    r.name,
+    r,
+    startMs.coerceAtLeast(0L)
 )
 
 private fun cameraSource(clip: DashcamCatalog.Clip): PlayerSource {
@@ -150,7 +160,8 @@ private fun cameraSource(clip: DashcamCatalog.Clip): PlayerSource {
     )
 }
 
-private fun localSource(file: File) = PlayerSource(Uri.fromFile(file), "Salvo no carro", file.name, null)
+private fun localSource(file: File, startMs: Long = 0L) =
+    PlayerSource(Uri.fromFile(file), "Salvo no carro", file.name, null, startMs.coerceAtLeast(0L))
 
 @Composable
 fun DashcamTab() {
@@ -174,6 +185,7 @@ fun DashcamTab() {
     val saveStatus = remember { mutableStateMapOf<String, String>() }
     var sharing by remember { mutableStateOf<File?>(null) }
     var showSaved by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(false) }
 
     fun reloadSaved() {
         savedFiles = store.list()
@@ -280,11 +292,34 @@ fun DashcamTab() {
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ViewTab("Câmera", selected = !showSaved) { showSaved = false }
+            ViewTab("Câmera", selected = !showSaved && !showMap) {
+                showSaved = false
+                showMap = false
+            }
+            ViewTab("Mapa", selected = showMap) {
+                reloadSaved()
+                showSaved = false
+                showMap = true
+            }
             ViewTab("Salvos no carro (${savedFiles.size})", selected = showSaved) {
                 reloadSaved()
                 showSaved = true
+                showMap = false
             }
+        }
+
+        if (showMap) {
+            message?.let { Notice(it) }
+            DashcamMapCard(
+                catalog = catalog,
+                savedFiles = savedFiles,
+                saveStatus = saveStatus,
+                onPlayCamera = { r, at -> playing = cameraSourceAt(r, at) },
+                onPlaySaved = { f, at -> playing = localSource(f, at) },
+                onSave = { saveClips(it) }
+            )
+            Spacer(Modifier.height(8.dp))
+            return@Column
         }
 
         if (showSaved) {
@@ -950,7 +985,7 @@ private fun PlayerDialog(
             }
         }
         exoPlayer.addListener(listener)
-        exoPlayer.setMediaItem(MediaItem.fromUri(source.uri))
+        exoPlayer.setMediaItem(MediaItem.fromUri(source.uri), source.startMs)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
         onDispose {
