@@ -110,6 +110,14 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamFailureWarning",
             "Avisar quando a dashcam não estiver gravando"
     ),
+    // Rede da câmera (Novatek): rede Wi-Fi compartilhada para onde a câmera pode ser levada.
+    // Texto livre; a senha nunca vai para log.
+    DASHCAM_STATION_SSID("dashcamStationSsid", "Nome da rede Wi-Fi para a dashcam"),
+    DASHCAM_STATION_PASSWORD("dashcamStationPassword", "Senha da rede Wi-Fi para a dashcam"),
+    ENABLE_DASHCAM_AUTO_STATION(
+            "enableDashcamAutoStation",
+            "Levar a dashcam para a rede configurada a cada partida (padrão desligado)"
+    ),
     // ===== Debloat: desativa apps do sistema (OEM) que rodam e consomem RAM/CPU da multimídia =====
     // Reversível (pm install-existing) e reaplicado no boot por ServiceManager.ensureDebloatedSystemApps().
     DISABLE_NATIVE_NAVIGATION("disableNativeNavigation", "Desativar navegador GPS nativo (Neusoft)"),

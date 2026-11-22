@@ -164,8 +164,15 @@ public final class DashcamClipStore {
         File dir = directory();
         File target = new File(dir, name);
         File part = new File(dir, name + ".part");
+        boolean novatek = DashcamNovatekProtocol.isValidHttpPath(recording.getHttpPath());
+        // Novatek: the camera's current host (AP or station network), not the one it was listed on.
+        String host = novatek ? DashcamVideoDataSource.currentNovatekHost(context) : recording.getHost();
+        if (novatek && host == null) {
+            post(() -> listener.onFailed(name, "camera_not_found"));
+            return;
+        }
         if (!isClipName(name)
-                || !DashcamVideoDataSource.isAllowed(recording.getHost(), recording.getHttpPath())) {
+                || !DashcamVideoDataSource.isAllowed(host, recording.getHttpPath(), novatek ? host : null)) {
             post(() -> listener.onFailed(name, "invalid_path"));
             return;
         }
@@ -175,20 +182,36 @@ public final class DashcamClipStore {
             return;
         }
         HttpURLConnection http = null;
+        DashcamCameraHttp.Response raw = null;
         try {
-            URL url = new URL("http", recording.getHost(), DashcamHisiliconClient.PORT, recording.getHttpPath());
-            http = (HttpURLConnection) network.openConnection(url);
-            http.setInstanceFollowRedirects(false);
-            http.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            http.setReadTimeout(READ_TIMEOUT_MS);
-            http.setUseCaches(false);
-            http.setRequestProperty("Accept-Encoding", "identity");
-            int code = http.getResponseCode();
+            int code;
+            long length;
+            if (novatek) {
+                // Raw socket: a station-network camera (10.x…) is outside the cleartext allow-list.
+                try {
+                    raw = DashcamCameraHttp.get(network, host, recording.getHttpPath(), 0, -1,
+                            CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+                } catch (java.io.IOException e) {
+                    if (!"dashcam_redirect_refused".equals(e.getMessage())) DashcamCameraHost.reportFailure(host);
+                    throw e;
+                }
+                code = raw.head.statusCode;
+                length = raw.contentLength;
+            } else {
+                URL url = new URL("http", host, DashcamHisiliconClient.PORT, recording.getHttpPath());
+                http = (HttpURLConnection) network.openConnection(url);
+                http.setInstanceFollowRedirects(false);
+                http.setConnectTimeout(CONNECT_TIMEOUT_MS);
+                http.setReadTimeout(READ_TIMEOUT_MS);
+                http.setUseCaches(false);
+                http.setRequestProperty("Accept-Encoding", "identity");
+                code = http.getResponseCode();
+                length = code == HttpURLConnection.HTTP_OK ? http.getContentLengthLong() : -1;
+            }
             if (code != HttpURLConnection.HTTP_OK) {
                 fail(listener, name, part, "http_" + code);
                 return;
             }
-            long length = http.getContentLengthLong();
             if (target.isFile() && length > 0 && target.length() == length) {
                 post(() -> listener.onDone(name, target));
                 return;
@@ -202,7 +225,7 @@ public final class DashcamClipStore {
             }
             long written = 0;
             long lastReport = 0;
-            try (InputStream input = http.getInputStream();
+            try (InputStream input = raw != null ? raw.body : http.getInputStream();
                     FileOutputStream output = new FileOutputStream(part)) {
                 byte[] buffer = new byte[64 * 1024];
                 int read;
@@ -253,6 +276,7 @@ public final class DashcamClipStore {
         } finally {
             saving = "";
             if (http != null) http.disconnect();
+            if (raw != null) raw.close();
         }
     }
 

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext only for the dashcam on its own Wi-Fi (DashcamVideoDataSource streams the clips with
-  HttpURLConnection, which enforces this policy). Everything else keeps the platform default.
+  Cleartext only for the dashcam on its own Wi-Fi (HiSilicon clips are streamed and downloaded with
+  HttpURLConnection, which enforces this policy). A Novatek camera moved to a shared "station"
+  network gets a DHCP address (e.g. 10.x); its stream/download use a raw socket bound to the camera
+  Wi-Fi (DashcamCameraHttp), limited to the camera's current private IPv4 address and validated
+  paths, so app-wide cleartext stays off. Everything else keeps the platform default.
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">

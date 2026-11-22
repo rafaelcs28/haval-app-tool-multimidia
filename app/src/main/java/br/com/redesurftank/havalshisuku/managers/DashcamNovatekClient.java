@@ -6,19 +6,23 @@ import android.net.Network;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Read-only client for the Novatek CarDV profile ({@link DashcamNovatekProtocol}). Same transport
- * rules as the HiSilicon client: socket bound to the Android Wi-Fi network (never VPN), fixed host,
- * HTTP/1.0, bounded answers, no redirects. Only {@link #setRecording} changes the camera.
+ * Client for the Novatek CarDV profile ({@link DashcamNovatekProtocol}). Same transport rules as the
+ * HiSilicon client: socket bound to the Android Wi-Fi network (never VPN), HTTP/1.0, bounded
+ * answers, no redirects. The host comes from {@link DashcamCameraHost} (camera AP or station
+ * network), always a private IPv4 literal. Writes: {@link #setRecording}, {@link #setClock} and the
+ * Wi-Fi mode commands sent by {@link DashcamNetworkManager} through {@link #queryAt}.
  */
 final class DashcamNovatekClient {
     private static final int PORT = 80;
     private static final int TIMEOUT_MS = 3000;
+    private static final int PROBE_TIMEOUT_MS = 1500;
     private static final int LIST_TIMEOUT_MS = 10_000;
     private static final int MAX_REPLY_BYTES = 64 * 1024;
     /** 915 files took 211 KB; 8 MB covers far larger cards. */
@@ -107,14 +111,55 @@ final class DashcamNovatekClient {
         return DashcamHisiliconClient.Result.success(entries);
     }
 
+    /**
+     * {@code cmd} on the current camera host ({@link DashcamCameraHost}): 192.168.1.254 on the camera
+     * AP, the discovered DHCP address on the station network. A transport failure on the station
+     * network drops the cached address so the next request rediscovers it.
+     */
     private DashcamHisiliconClient.Result<String> get(String cmd, int maxBytes, int readTimeoutMs) {
+        String host = DashcamCameraHost.resolve(context, true, false, this::isNovatekAt);
+        if (host == null) return DashcamHisiliconClient.Result.failure("transport_camera_not_found");
+        DashcamHisiliconClient.Result<String> result = getAt(host, cmd, maxBytes, TIMEOUT_MS, readTimeoutMs);
+        if (!result.isSuccess() && isWrongHostError(result.getError())) {
+            DashcamCameraHost.reportFailure(host);
+        } else if (result.isSuccess() && DashcamCameraHost.AP_HOST.equals(host)) {
+            DashcamCameraHost.rememberApIdentity(context, false);
+        }
+        return result;
+    }
+
+    /** Errors that mean "not the camera (any more)" at that address, so it is rediscovered. */
+    static boolean isWrongHostError(String error) {
+        return error != null && (error.startsWith("transport_") || error.startsWith("http_")
+                || "malformed_http".equals(error));
+    }
+
+    /** One command on an explicit host (network moves and discovery). Status is not checked. */
+    DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> queryAt(String host, String cmdAndParams) {
+        DashcamHisiliconClient.Result<String> body = getAt(host, cmdAndParams, MAX_REPLY_BYTES, TIMEOUT_MS, TIMEOUT_MS);
+        if (!body.isSuccess()) return DashcamHisiliconClient.Result.failure(body.getError());
+        DashcamNovatekProtocol.Reply reply = DashcamNovatekProtocol.parseReply(body.getValue());
+        if (reply == null) return DashcamHisiliconClient.Result.failure("malformed_reply");
+        return DashcamHisiliconClient.Result.success(reply);
+    }
+
+    /** Discovery probe: {@code 3016} answers with a Novatek XML reply. */
+    boolean isNovatekAt(String host) {
+        DashcamHisiliconClient.Result<String> body = getAt(host,
+                String.valueOf(DashcamNovatekProtocol.CMD_HEARTBEAT), MAX_REPLY_BYTES, PROBE_TIMEOUT_MS, PROBE_TIMEOUT_MS);
+        return body.isSuccess() && DashcamNovatekProtocol.parseReply(body.getValue()) != null;
+    }
+
+    private DashcamHisiliconClient.Result<String> getAt(String host, String cmd, int maxBytes,
+            int connectTimeoutMs, int readTimeoutMs) {
+        if (!DashcamCameraHost.isAcceptableHost(host)) return DashcamHisiliconClient.Result.failure("invalid_host");
         Network wifi = DashcamHisiliconClient.findCameraNetwork(context);
         if (wifi == null) return DashcamHisiliconClient.Result.failure("wifi_unavailable");
         try (Socket socket = wifi.getSocketFactory().createSocket()) {
-            socket.connect(new InetSocketAddress(DashcamNovatekProtocol.HOST, PORT), TIMEOUT_MS);
+            socket.connect(new InetSocketAddress(InetAddress.getByName(host), PORT), connectTimeoutMs);
             socket.setSoTimeout(readTimeoutMs);
             String request = "GET /?custom=1&cmd=" + cmd + " HTTP/1.0\r\n"
-                    + "Host: " + DashcamNovatekProtocol.HOST + "\r\n"
+                    + "Host: " + host + "\r\n"
                     + "Connection: close\r\n\r\n";
             OutputStream output = socket.getOutputStream();
             output.write(request.getBytes(StandardCharsets.ISO_8859_1));

@@ -51,11 +51,20 @@ public final class DashcamCatalog {
         return new DashcamCatalog(recordings);
     }
 
-    /** Novatek {@code 3015} entries; their end time is the camera's own, not an estimate. */
+    /** Novatek {@code 3015} entries on the camera AP address. */
     public static DashcamCatalog fromNovatek(List<DashcamNovatekProtocol.Entry> entries) {
+        return fromNovatek(entries, DashcamNovatekProtocol.HOST);
+    }
+
+    /**
+     * Novatek {@code 3015} entries served from {@code host} (AP address or the station-network
+     * address); their end time is the camera's own, not an estimate.
+     */
+    public static DashcamCatalog fromNovatek(List<DashcamNovatekProtocol.Entry> entries, String host) {
+        String server = host == null ? DashcamNovatekProtocol.HOST : host;
         List<Recording> recordings = new ArrayList<>();
         if (entries != null) for (DashcamNovatekProtocol.Entry entry : entries) {
-            recordings.add(Recording.fromNovatek(entry));
+            recordings.add(Recording.fromNovatek(entry, server));
         }
         return new DashcamCatalog(recordings);
     }
@@ -211,9 +220,9 @@ public final class DashcamCatalog {
                     dir, name, parseStart(name), null, "emr".equals(dir), -1L);
         }
 
-        static Recording fromNovatek(DashcamNovatekProtocol.Entry entry) {
+        static Recording fromNovatek(DashcamNovatekProtocol.Entry entry, String host) {
             if (entry == null) return null;
-            return new Recording(entry.httpPath, DashcamNovatekProtocol.HOST, entry.httpPath, entry.dir,
+            return new Recording(entry.httpPath, host, entry.httpPath, entry.dir,
                     entry.name, entry.start, entry.end, entry.emergency, entry.size);
         }
 
@@ -222,7 +231,10 @@ public final class DashcamCatalog {
             return path;
         }
 
-        /** Camera host the file is served from. */
+        /**
+         * Camera host the file was listed from. Novatek files are fetched from the camera's
+         * current host ({@link DashcamVideoDataSource#uriFor}), since the camera can move networks.
+         */
         public String getHost() {
             return host;
         }

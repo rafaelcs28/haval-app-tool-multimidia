@@ -12,6 +12,8 @@ import java.net.InetAddress;
 /**
  * Which camera protocol the current Wi-Fi speaks, chosen by the Wi-Fi's own IPv4 subnet:
  * 192.168.1.x → Novatek CarDV at 192.168.1.254 (observed in the car, "CARDV-xxxx");
+ * the configured station network ("Rede da câmera") once the Novatek camera is known there (MAC or
+ * IP remembered) → Novatek at its discovered address;
  * anything else → the HiSilicon profile at 192.168.0.1 (validated on another unit). A home router
  * on 192.168.0.x therefore stays HISILICON and fails its strict state parser, as before.
  */
@@ -31,6 +33,8 @@ public enum DashcamProfile {
                 if (isNovatekSubnet(address.getAddress())) return NOVATEK;
             }
         }
+        // The Novatek camera moved to the configured station network (see DashcamCameraHost).
+        if (DashcamCameraHost.isNovatekStation(context)) return NOVATEK;
         return HISILICON;
     }
 

@@ -336,7 +336,8 @@ public final class DashcamGalleryRepository {
         long now = System.currentTimeMillis();
         writeNovatekCache(entries, now);
         log("catalog", "profile=novatek status=OK files=" + entries.size());
-        return new CatalogResult(CatalogStatus.OK, DashcamCatalog.fromNovatek(entries), now, false, null,
+        return new CatalogResult(CatalogStatus.OK,
+                DashcamCatalog.fromNovatek(entries, DashcamCameraHost.lastNovatekHost()), now, false, null,
                 false, null);
     }
 
@@ -426,7 +427,8 @@ public final class DashcamGalleryRepository {
                         if (entry != null) entries.add(entry);
                     }
                 }
-                return new Cached(DashcamCatalog.fromNovatek(entries), json.optLong("fetchedAtMs", 0L), false);
+                return new Cached(DashcamCatalog.fromNovatek(entries, DashcamCameraHost.lastNovatekHost()),
+                        json.optLong("fetchedAtMs", 0L), false);
             }
             JSONArray array = json.optJSONArray("paths");
             List<String> paths = new ArrayList<>();
