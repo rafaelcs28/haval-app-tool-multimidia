@@ -131,6 +131,21 @@ other_mode | unreachable | no_wifi | unknown), `app.dashcam.pause_reason` (charg
 `app.dashcam.saving` ("NN" | converting) e `app.dashcam.checked_at`. O toque no card abre
 `OpenDashcamActivity` (exportada, só abre a aba Dashcam; ignorada no Modo Concessionária).
 
+Rede (a cada leitura da câmera, sem tráfego extra para ela; mesmas regras de envio):
+
+- `app.dashcam.link`: `camera_ap` (central no Wi-Fi da própria câmera: 192.168.1.x, o SSID do
+  Wi-Fi da câmera lembrado, ou uma HiSilicon que respondeu), `same_network` (central na rede
+  configurada no card "Rede da câmera" e a câmera respondeu), `camera_missing` (na rede
+  configurada, mas a câmera não respondeu), `other_wifi` (qualquer outro Wi-Fi) ou `no_wifi`.
+  Com o SSID oculto pelo Android, uma câmera que respondeu fora do Wi-Fi dela conta como
+  `same_network`. Regra pura em `DashcamStatusPublisher.linkValue` (testada).
+- `app.dashcam.wifi_ssid`: SSID atual da central sem aspas ("" sem Wi-Fi ou `<unknown ssid>`).
+- `app.dashcam.camera_ip`: endereço da câmera em uso (192.168.1.254 no Wi-Fi dela, 192.168.0.1 na
+  HiSilicon, o IP do DHCP na rede configurada); "" quando desconhecido.
+
+O Haval 3D antigo ignora as três; sem `app.dashcam.link`, o card do 3D mantém o comportamento
+anterior.
+
 ## Trajeto GPS dos vídeos (174)
 
 `DashcamGpsTrack` grava o GPS da própria central (1 Hz, `LocationManager.GPS_PROVIDER`) com o
@@ -216,6 +231,24 @@ confirmado nesta câmera).
 
 **Risco**: na rede compartilhada a câmera não tem senha; qualquer aparelho dela pode ver, apagar e
 reconfigurar. O card avisa.
+
+**Pré-configuração só pelo adb** (`DashcamStationConfigReceiver`): para preencher a rede numa
+central específica sem embutir nenhuma rede no app. O receiver é exportado, mas protegido por
+`android.permission.DUMP` (só o shell do adb e o sistema têm; apps de terceiros não conseguem).
+Valores de exemplo; troque NOME e SENHA pelos da rede:
+
+```
+adb shell am broadcast -a br.com.redesurftank.havalshisuku.DASHCAM_STATION_CONFIG \
+  -n br.com.redesurftank.havalshisuku/.broadcastReceivers.DashcamStationConfigReceiver \
+  --es ssid NOME --es password SENHA --es auto 1
+```
+
+`ssid` e `password` vão juntos e passam pelas regras de `DashcamStationPolicy.validate` (SSID sem
+`:`, até 32 bytes; senha de 8 a 26 caracteres ASCII). `auto` é opcional (`1`/`true`/`0`/`false`,
+ou `--ez auto true`) e liga/desliga "Fazer isso sozinho a cada partida"; pode ir sozinho. Grava em
+`haval_prefs` (as mesmas chaves do card, que mostra os valores ao ser aberto). O resultado do
+`am broadcast` traz `ok: ssid set, auto=…` ou `error: <código>`; o log só registra
+"ssid set, auto=…", nunca o SSID nem a senha.
 
 Permissões novas: `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE` (SSID e varredura também dependem da
 localização, já concedida para o GPS).

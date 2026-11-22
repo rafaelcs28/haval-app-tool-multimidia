@@ -95,4 +95,17 @@ public class DashcamStationPolicyTest {
         assertEquals("Não encontrada", DashcamStationPolicy.statusText(Place.OTHER, null, "Home"));
         assertEquals("Não encontrada", DashcamStationPolicy.statusText(Place.NO_WIFI, null, null));
     }
+
+    @Test
+    public void provisioningAutoFlagAcceptsBooleansAndCommonStrings() {
+        assertEquals(Boolean.TRUE, DashcamStationPolicy.parseAutoFlag(Boolean.TRUE));
+        assertEquals(Boolean.FALSE, DashcamStationPolicy.parseAutoFlag(Boolean.FALSE));
+        assertEquals(Boolean.TRUE, DashcamStationPolicy.parseAutoFlag("1"));
+        assertEquals(Boolean.TRUE, DashcamStationPolicy.parseAutoFlag(" TRUE "));
+        assertEquals(Boolean.FALSE, DashcamStationPolicy.parseAutoFlag("0"));
+        assertEquals(Boolean.FALSE, DashcamStationPolicy.parseAutoFlag("false"));
+        assertNull(DashcamStationPolicy.parseAutoFlag("yes"));
+        assertNull(DashcamStationPolicy.parseAutoFlag(1));
+        assertNull(DashcamStationPolicy.parseAutoFlag(null));
+    }
 }

@@ -28,6 +28,11 @@ import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys;
  *   <li>{@code app.dashcam.saved_count}: clips saved on the head unit
  *   <li>{@code app.dashcam.saving}: "" | "NN" percent | "converting"
  *   <li>{@code app.dashcam.checked_at}: epoch ms of the last successful camera read ("0" never)
+ *   <li>{@code app.dashcam.link}: camera_ap | same_network | camera_missing | other_wifi | no_wifi
+ *       (where the head unit is relative to the camera; see {@link #linkValue})
+ *   <li>{@code app.dashcam.wifi_ssid}: head unit's current Wi-Fi SSID without quotes, or ""
+ *   <li>{@code app.dashcam.camera_ip}: camera host in use (192.168.1.254 on its own Wi-Fi, the DHCP
+ *       address on the station network), or "" when unknown
  * </ul>
  *
  * The camera is only reachable while the head unit is on its Wi-Fi; otherwise the state is
@@ -53,6 +58,15 @@ public final class DashcamStatusPublisher {
     public static final String SAVED_COUNT = "app.dashcam.saved_count";
     public static final String SAVING = "app.dashcam.saving";
     public static final String CHECKED_AT = "app.dashcam.checked_at";
+    public static final String LINK = "app.dashcam.link";
+    public static final String WIFI_SSID = "app.dashcam.wifi_ssid";
+    public static final String CAMERA_IP = "app.dashcam.camera_ip";
+
+    static final String LINK_CAMERA_AP = "camera_ap";
+    static final String LINK_SAME_NETWORK = "same_network";
+    static final String LINK_CAMERA_MISSING = "camera_missing";
+    static final String LINK_OTHER_WIFI = "other_wifi";
+    static final String LINK_NO_WIFI = "no_wifi";
 
     private static volatile DashcamStatusPublisher instance;
 
@@ -159,6 +173,7 @@ public final class DashcamStatusPublisher {
         publish(STATE, state);
         publish(PAUSE_REASON, "paused_auto".equals(state) ? pauseReason() : "");
         boolean read = !state.equals("no_wifi") && !state.equals("unreachable") && !state.equals("unknown");
+        publishLink(profile, read);
         if (read) {
             long now = System.currentTimeMillis();
             String free = snapshot.freeBytes != null ? String.valueOf(snapshot.freeBytes / 1_000_000L) : "";
@@ -182,6 +197,95 @@ public final class DashcamStatusPublisher {
                 }
             }
         }
+    }
+
+    /**
+     * Network keys for the 3D card, derived from the read that just happened (no extra camera
+     * traffic: only the local Wi-Fi state and the cached host are consulted).
+     */
+    private void publishLink(DashcamProfile profile, boolean cameraRead) {
+        String ssid = null;
+        String link;
+        String ip;
+        try {
+            DashcamCameraHost.Wifi wifi = DashcamCameraHost.wifi(context);
+            ssid = wifi == null ? null : wifi.ssid;
+            boolean onAp = wifi != null && onCameraAp(wifi.onApSubnet, wifi.ssid,
+                    DashcamCameraHost.cameraApSsid(), profile == DashcamProfile.HISILICON && cameraRead);
+            link = linkValue(wifi != null, wifi == null ? null : wifi.ssid, onAp,
+                    DashcamCameraHost.stationSsid(), cameraRead);
+            String stationHost = null;
+            if (LINK_SAME_NETWORK.equals(link)) {
+                stationHost = DashcamCameraHost.lastNovatekHost();
+                if (stationHost == null || DashcamCameraHost.AP_HOST.equals(stationHost)
+                        || !DashcamCameraHost.isAcceptableHost(stationHost)) {
+                    stationHost = DashcamCameraHost.cachedStationHost(wifi.ownIp);
+                }
+            }
+            ip = cameraIpValue(link, profile, stationHost);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "link state unavailable", e);
+            return;
+        }
+        publish(LINK, link);
+        publish(WIFI_SSID, wifiSsidValue(ssid));
+        publish(CAMERA_IP, ip);
+    }
+
+    /** SSID as published: no quotes, "" for none or Android's {@code <unknown ssid>}. */
+    static String wifiSsidValue(String raw) {
+        String ssid = DashcamCameraHost.cleanSsid(raw);
+        return ssid == null ? "" : ssid;
+    }
+
+    /**
+     * The head unit is on the camera's own Wi-Fi: Novatek 192.168.1.x, the camera AP SSID learned
+     * there, or a HiSilicon camera that just answered (it only answers on its own AP).
+     */
+    static boolean onCameraAp(boolean onApSubnet, String currentSsid, String rememberedApSsid,
+            boolean hisiliconAnswered) {
+        if (onApSubnet || hisiliconAnswered) return true;
+        String ssid = DashcamCameraHost.cleanSsid(currentSsid);
+        String remembered = DashcamCameraHost.cleanSsid(rememberedApSsid);
+        return ssid != null && ssid.equals(remembered);
+    }
+
+    /**
+     * Where the head unit is relative to the camera.
+     *
+     * @param hasWifi       a Wi-Fi network is connected
+     * @param currentSsid   connected SSID (raw or clean; null/{@code <unknown ssid>} when hidden)
+     * @param onCameraAp    see {@link #onCameraAp}
+     * @param stationSsid   SSID configured in the "Rede da câmera" card, or null/""
+     * @param cameraRead    the camera read that just ran succeeded
+     */
+    static String linkValue(boolean hasWifi, String currentSsid, boolean onCameraAp, String stationSsid,
+            boolean cameraRead) {
+        if (!hasWifi) return LINK_NO_WIFI;
+        if (onCameraAp) return LINK_CAMERA_AP;
+        String ssid = DashcamCameraHost.cleanSsid(currentSsid);
+        String station = stationSsid == null || stationSsid.trim().isEmpty() ? null : stationSsid;
+        if (ssid == null) {
+            // Android hides the SSID (no location): a camera that answered off its own AP can only
+            // be on the station network.
+            return cameraRead && station != null ? LINK_SAME_NETWORK : LINK_OTHER_WIFI;
+        }
+        if (station != null && ssid.equals(station)) {
+            return cameraRead ? LINK_SAME_NETWORK : LINK_CAMERA_MISSING;
+        }
+        return LINK_OTHER_WIFI;
+    }
+
+    /** Camera host for {@code app.dashcam.camera_ip}; "" when the camera is not reachable here. */
+    static String cameraIpValue(String link, DashcamProfile profile, String stationHost) {
+        if (LINK_CAMERA_AP.equals(link)) {
+            return profile == DashcamProfile.HISILICON ? DashcamHisiliconClient.HOST : DashcamCameraHost.AP_HOST;
+        }
+        if (LINK_SAME_NETWORK.equals(link) && stationHost != null
+                && DashcamCameraHost.isAcceptableHost(stationHost)) {
+            return stationHost;
+        }
+        return "";
     }
 
     static boolean shouldRefreshTotal(String lastTotalMb, long lastTotalAt, long now) {

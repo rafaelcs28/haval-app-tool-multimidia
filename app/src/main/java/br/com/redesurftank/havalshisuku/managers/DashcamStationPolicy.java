@@ -40,6 +40,20 @@ public final class DashcamStationPolicy {
         return null;
     }
 
+    /**
+     * The {@code auto} extra of the device-only provisioning broadcast: a boolean ({@code --ez}) or
+     * a string ({@code --es}) "1"/"true"/"0"/"false" (case-insensitive). Null when absent or not
+     * understood, so the stored switch is left alone.
+     */
+    public static Boolean parseAutoFlag(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (!(value instanceof String)) return null;
+        String v = ((String) value).trim().toLowerCase(java.util.Locale.ROOT);
+        if (v.equals("1") || v.equals("true")) return Boolean.TRUE;
+        if (v.equals("0") || v.equals("false")) return Boolean.FALSE;
+        return null;
+    }
+
     public static String validationMessage(String code) {
         if (code == null) return null;
         switch (code) {
