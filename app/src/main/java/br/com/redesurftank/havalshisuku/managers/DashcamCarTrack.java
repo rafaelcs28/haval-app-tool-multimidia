@@ -57,6 +57,9 @@ public final class DashcamCarTrack {
             {"doors", CarConstants.CAR_BASIC_DOOR_STATUS.getValue()},
             // 1 = trancado, 3 = destrancado (measured in the car, see ServiceManager).
             {"lock", CarConstants.CAR_BASIC_DOOR_LOCK_STATUS.getValue()},
+            // The belt "warning" is a per-seat vector that can sit at {1,0,0,0,0} for minutes with
+            // nothing on the cluster; the cluster lamp is what decides (ClusterWarningPolicy).
+            {"beltlamp", CarConstants.CAR_IPK_LIGHT_SEAT_BELT_WARNING_INDICATOR.getValue()},
     };
 
     private static volatile DashcamCarTrack instance;

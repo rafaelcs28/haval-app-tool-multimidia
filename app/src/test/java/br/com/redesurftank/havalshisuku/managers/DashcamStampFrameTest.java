@@ -16,9 +16,10 @@ public class DashcamStampFrameTest {
         return DashcamCarTrack.header().substring(6).split(",");
     }
 
+    /** belt = cluster lamp value; the per-seat vector column is always "{1,0,0,0,0}" here. */
     private static DashcamCarTrack.Sample sample(long utc, String speed, String gear, String belt, String left) {
         // speed|gear|belt|left|right|hazard|low|high|handbrake|steer|mode|soc|power|tin|tout|odo
-        String line = utc + "|" + speed + "|" + gear + "|" + belt + "|" + left + "|0|0|0|1|0|-12.5|2|72.0|-15.3|23|31|12345|-35.0|1450|0";
+        String line = utc + "|" + speed + "|" + gear + "|" + "{1,0,0,0,0}|" + left + "|0|0|0|1|0|-12.5|2|72.0|-15.3|23|31|12345|-35.0|1450|{0,0,0,0,0}|1|" + belt;
         return DashcamCarTrack.parseLine(line, cols());
     }
 
@@ -107,5 +108,23 @@ public class DashcamStampFrameTest {
         assertEquals("12.483", DashcamStampPainter.thousands(12483));
         assertEquals("1.450", DashcamStampPainter.thousands(1450));
         assertEquals("M9.70 4.20a2.30 2.30 0 1 0 4.60 0a2.30 2.30 0 1 0 -4.60 0z", DashcamStampPainter.circle(12f, 4.2f, 2.3f));
+    }
+
+    @Test
+    public void beltFollowsTheClusterLampNotTheStuckVector() {
+        String[] cols = DashcamCarTrack.header().substring(6).split(",");
+        java.util.function.BiFunction<Long, String, DashcamCarTrack.Sample> lamp = (utc, v) ->
+                DashcamCarTrack.parseLine(utc + "|50|2|{1,0,0,0,0}|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|3|" + v, cols);
+        // Vector stuck at {1,0,0,0,0} with the lamp dark: no warning (seen for 20+ min in the car).
+        assertFalse(DashcamStampFrame.beltWarning("{1,0,0,0,0}", Arrays.asList(lamp.apply(10_000L, "0")), 10_000L));
+        // Lamp blinking: lit 1.5 s ago still counts.
+        assertTrue(DashcamStampFrame.beltWarning("{1,0,0,0,0}",
+                Arrays.asList(lamp.apply(8_500L, "1"), lamp.apply(9_500L, "0")), 10_000L));
+        // Lamp lit but vector clear: no warning.
+        assertFalse(DashcamStampFrame.beltWarning("{0,0,0,0,0}", Arrays.asList(lamp.apply(10_000L, "1")), 10_000L));
+        // Lamp never reported: unknown.
+        assertNull(DashcamStampFrame.beltWarning("{1,0,0,0,0}", Arrays.asList(lamp.apply(10_000L, "")), 10_000L));
+        assertFalse(DashcamStampFrame.warningActive("{0,0,0,0,0}"));
+        assertTrue(DashcamStampFrame.warningActive("{0,1,0,0,0}"));
     }
 }

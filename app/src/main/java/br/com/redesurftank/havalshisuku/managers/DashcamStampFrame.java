@@ -73,8 +73,7 @@ public final class DashcamStampFrame {
         f.accelG = accel(utcMs, samples, fixes);
         if (s != null) {
             f.gear = gear(s.get("gear"));
-            String belt = s.get("belt");
-            f.beltWarning = belt.isEmpty() ? null : !"0".equals(belt);
+            f.beltWarning = beltWarning(s.get("belt"), samples, utcMs);
             f.left = on(s.get("left"));
             f.right = on(s.get("right"));
             f.hazard = on(s.get("hazard"));
@@ -122,6 +121,39 @@ public final class DashcamStampFrame {
     static float toG(float kmhFrom, float kmhTo, long ms) {
         float g = (kmhTo - kmhFrom) / 3.6f / (ms / 1000f) / 9.80665f;
         return Math.max(-2f, Math.min(2f, g));
+    }
+
+    /** Lamp counts as lit for 2 s after it goes dark: it blinks at ~1 Hz (ClusterWarningPolicy). */
+    static final long BELT_LAMP_LATCH_MS = 2_000L;
+
+    /**
+     * Same rule as the cluster warnings (ClusterWarningPolicy): the per-seat vector must be active
+     * AND the cluster belt lamp lit (latched over its blink). Null when the lamp is not reported.
+     */
+    static Boolean beltWarning(String vector, List<DashcamCarTrack.Sample> samples, long utcMs) {
+        boolean reported = false;
+        boolean lit = false;
+        if (samples != null) {
+            for (DashcamCarTrack.Sample x : samples) {
+                if (x.utcMs < utcMs - BELT_LAMP_LATCH_MS || x.utcMs > utcMs + 1_000L) continue;
+                String lamp = x.get("beltlamp");
+                if (lamp.isEmpty()) continue;
+                reported = true;
+                if (warningActive(lamp)) lit = true;
+            }
+        }
+        if (!reported) return null;
+        return lit && warningActive(vector);
+    }
+
+    /** ClusterWarningPolicy.isWarningValueActive: "0", "{0,0,0,0,0}", empty and the like are off. */
+    static boolean warningActive(String raw) {
+        if (raw == null) return false;
+        String v = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (v.isEmpty() || v.equals("false") || v.equals("null") || v.equals("unknown") || v.equals("--") || v.equals("nan")) {
+            return false;
+        }
+        return v.matches(".*[1-9].*");
     }
 
     /** Same mapping the rest of Impulse uses (InstrumentProjector2.getGearLabel). */
