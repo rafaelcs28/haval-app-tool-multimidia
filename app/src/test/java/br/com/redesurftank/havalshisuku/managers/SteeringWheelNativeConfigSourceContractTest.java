@@ -43,7 +43,9 @@ public class SteeringWheelNativeConfigSourceContractTest {
         String text = manager();
         assertEquals("0d931d2ff963c3d1a8b3648e1cc6548f21af6a277c3a6526783e0a13bbc2c1f2", sha256(between(text,
                 "    public void ensureSteeringWheelButtonIntegration() {", "        boolean enabled = sharedPreferences.getBoolean(")));
-        assertEquals("ac687bc64f4d7676d1d83a29460a0f255647d9de41a93ad3534fa7a5d17ba67e", sha256(between(text,
+        // Re-pinned 2026-11-22 (Impulse 172): an unreadable gear no longer discards the dealer-mode
+        // exit sequence (it locked owners out when Shizuku died on the reboot). Only that gate changed.
+        assertEquals("18998de43a77a6f5d258ac7c1ca4878534e9774cf91fec155d278216bb72a2e9", sha256(between(text,
                 "    // ===== Toques nos botoes personalizados do volante", "    public void enableSteeringWheelButton1Integration() {")));
     }
 
