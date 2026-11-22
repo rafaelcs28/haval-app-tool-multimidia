@@ -43,6 +43,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -63,6 +65,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -81,6 +87,8 @@ import br.com.redesurftank.havalshisuku.managers.DashcamCatalog
 import br.com.redesurftank.havalshisuku.managers.DashcamClipStore
 import br.com.redesurftank.havalshisuku.managers.DashcamShareServer
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository
+import br.com.redesurftank.havalshisuku.managers.DashcamNetworkManager
+import br.com.redesurftank.havalshisuku.managers.DashcamStationPolicy
 import br.com.redesurftank.havalshisuku.managers.DashcamProfile
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.CatalogStatus
 import br.com.redesurftank.havalshisuku.managers.DashcamGalleryRepository.StateKind
@@ -414,6 +422,7 @@ fun DashcamTab() {
             )
         }
 
+        CameraNetworkCard()
         AutomationCard()
         Spacer(Modifier.height(8.dp))
     }
@@ -463,6 +472,7 @@ private fun saveErrorText(error: String): String = when {
     error == "wifi_unavailable" -> "Wi-Fi da dashcam não conectado"
     error == "cancelled" -> "cancelado"
     error == "truncated" -> "arquivo incompleto"
+    error == "camera_not_found" -> "câmera não encontrada nesta rede"
     error.startsWith("transport_") -> "conexão com a câmera caiu"
     else -> error
 }
@@ -488,6 +498,7 @@ private fun errorText(error: String?): String = when {
     error == "resume_unconfirmed" -> "uma pausa anterior ainda não teve a retomada confirmada"
     error.contains("time_budget") -> "tempo limite da leitura"
     error.contains("busy_recording") -> "a câmera recusou a lista enquanto grava"
+    error.contains("camera_not_found") -> "câmera não encontrada nesta rede"
     error.contains("transport_") -> "sem resposta da câmera"
     error.contains("untrusted_status") -> "modelo ou modo da câmera não reconhecido"
     else -> error
@@ -861,6 +872,156 @@ private fun ListRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CameraNetworkCard() {
+    val context = LocalContext.current
+    val prefs = remember {
+        App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
+    }
+    val manager = remember { DashcamNetworkManager.getInstance(context) }
+    var ssid by remember { mutableStateOf(prefs.getString(SharedPreferencesKeys.DASHCAM_STATION_SSID.key, "") ?: "") }
+    var password by remember {
+        mutableStateOf(prefs.getString(SharedPreferencesKeys.DASHCAM_STATION_PASSWORD.key, "") ?: "")
+    }
+    var showPassword by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(manager.isBusy) }
+    var result by remember { mutableStateOf<String?>(null) }
+
+    fun refreshStatus() {
+        manager.readStatus { status = it.text }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            refreshStatus()
+            busy = manager.isBusy
+            delay(STATE_POLL_MS)
+        }
+    }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = ImpTokens.Accent,
+        unfocusedBorderColor = CardBorder,
+        focusedContainerColor = ImpTokens.Container,
+        unfocusedContainerColor = ImpTokens.Container,
+        focusedTextColor = ImpTokens.TextPrimary,
+        unfocusedTextColor = ImpTokens.TextPrimary,
+        focusedLabelColor = ImpTokens.Accent,
+        unfocusedLabelColor = ImpTokens.TextMuted
+    )
+
+    SectionCard(Modifier.fillMaxWidth()) {
+        Text("Rede da câmera", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Leva a câmera (Novatek, sem botões) do Wi-Fi próprio para outra rede, como o roteador do celular. " +
+                "A central entra junto e continua vendo os vídeos.",
+            color = ImpTokens.TextMuted,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = ssid,
+                onValueChange = {
+                    ssid = it
+                    prefs.edit { putString(SharedPreferencesKeys.DASHCAM_STATION_SSID.key, it) }
+                },
+                label = { Text("Nome da rede (SSID)") },
+                singleLine = true,
+                enabled = !busy,
+                colors = fieldColors,
+                shape = RowShape,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = {
+                    password = it
+                    prefs.edit { putString(SharedPreferencesKeys.DASHCAM_STATION_PASSWORD.key, it) }
+                },
+                label = { Text("Senha") },
+                singleLine = true,
+                enabled = !busy,
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    TextButton(onClick = { showPassword = !showPassword }) {
+                        Text(if (showPassword) "Ocultar" else "Mostrar", fontSize = ImpulseTextSizes.BodyCompact)
+                    }
+                },
+                colors = fieldColors,
+                shape = RowShape,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Onde está a câmera: " + (status ?: "verificando…"),
+            color = ImpTokens.TextPrimary,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = {
+                    val invalid = DashcamStationPolicy.validate(ssid, password)
+                    if (invalid != null) {
+                        result = DashcamStationPolicy.validationMessage(invalid)
+                    } else {
+                        busy = true
+                        result = "Levando a câmera para a rede $ssid… (pode levar até 2 minutos)"
+                        manager.moveToStation {
+                            busy = false
+                            result = it.message
+                            refreshStatus()
+                        }
+                    }
+                },
+                enabled = !busy,
+                colors = impButtonColors()
+            ) { Text("Levar câmera para esta rede") }
+            OutlinedButton(
+                onClick = {
+                    busy = true
+                    result = "Trazendo a câmera para o Wi-Fi próprio… (pode levar até 2 minutos)"
+                    manager.returnToAp {
+                        busy = false
+                        result = it.message
+                        refreshStatus()
+                    }
+                },
+                enabled = !busy
+            ) { Text("Trazer câmera para o Wi-Fi próprio") }
+        }
+        result?.let {
+            Spacer(Modifier.height(12.dp))
+            Notice(it)
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Fazer isso sozinho a cada partida",
+                hint = "Com a central no Wi-Fi da câmera e a rede acima ao alcance, leva a câmera para ela " +
+                    "(uma tentativa por partida). A câmera costuma voltar ao Wi-Fi próprio quando o carro é desligado.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION,
+                prefs = prefs,
+                default = false
+            )
+            Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "Atenção: na rede compartilhada a câmera não tem proteção por senha. Qualquer aparelho dessa rede " +
+                "pode ver e apagar os vídeos e mudar a configuração dela. Use só uma rede sua, de confiança.",
+            color = ImpTokens.Attention,
+            fontSize = ImpulseTextSizes.BodyCompact
+        )
     }
 }
 
