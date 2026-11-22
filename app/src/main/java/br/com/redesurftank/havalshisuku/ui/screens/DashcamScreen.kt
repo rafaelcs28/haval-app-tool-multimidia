@@ -31,6 +31,7 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.Stroke
 import br.com.redesurftank.havalshisuku.managers.DashcamAutomationManager
 import br.com.redesurftank.havalshisuku.managers.DashcamGpsTrack
+import br.com.redesurftank.havalshisuku.managers.DashcamStampJob
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -183,6 +184,7 @@ fun DashcamTab() {
     val store = remember { DashcamClipStore.getInstance(context) }
     var savedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     val saveStatus = remember { mutableStateMapOf<String, String>() }
+    val stampStatus = remember { mutableStateMapOf<String, String>() }
     var sharing by remember { mutableStateOf<File?>(null) }
     var showSaved by remember { mutableStateOf(false) }
     var showMap by remember { mutableStateOf(false) }
@@ -323,6 +325,7 @@ fun DashcamTab() {
         }
 
         if (showSaved) {
+            message?.let { Notice(it) }
             SavedCard(
                 files = savedFiles,
                 freeBytes = store.directory().usableSpace,
@@ -332,6 +335,29 @@ fun DashcamTab() {
                     store.delete(it)
                     saveStatus.remove(it.name)
                     reloadSaved()
+                },
+                stampStatus = stampStatus,
+                onStamp = { file ->
+                    stampStatus[file.name] = "carimbando…"
+                    DashcamStampJob.start(context, file, object : DashcamStampJob.Listener {
+                        override fun onProgress(name: String, fraction: Float) {
+                            stampStatus[name] = "carimbando ${(fraction * 100).toInt()}%"
+                        }
+
+                        override fun onDone(name: String, output: File) {
+                            stampStatus[name] = "carimbo pronto: ${output.name}"
+                            message = "${output.name} criado com o carimbo. O original continua salvo."
+                            reloadSaved()
+                        }
+
+                        override fun onFailed(name: String, error: String) {
+                            stampStatus[name] = "carimbo falhou: " + when (error) {
+                                "sem_dados" -> "sem GPS e dados do carro para este horário"
+                                "cancelled" -> "cancelado"
+                                else -> error
+                            }
+                        }
+                    })
                 }
             )
             Spacer(Modifier.height(8.dp))
@@ -1246,7 +1272,9 @@ private fun SavedCard(
     freeBytes: Long,
     onPlay: (File) -> Unit,
     onShare: (File) -> Unit,
-    onDelete: (File) -> Unit
+    onDelete: (File) -> Unit,
+    stampStatus: Map<String, String> = emptyMap(),
+    onStamp: (File) -> Unit = {}
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Text("Salvos no carro", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
@@ -1282,10 +1310,21 @@ private fun SavedCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(file.name, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
-                    Text(formatBytes(file.length()), color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+                    Text(
+                        formatBytes(file.length()) + (stampStatus[file.name]?.let { " · $it" } ?: ""),
+                        color = ImpTokens.TextMuted,
+                        fontSize = ImpulseTextSizes.BodyCompact
+                    )
                 }
                 OutlinedButton(onClick = { onPlay(file) }) { Text("Assistir", color = ImpTokens.TextPrimary) }
                 Spacer(Modifier.width(8.dp))
+                if (!DashcamStampJob.isStamped(file.name) && file.name.endsWith(".mp4", ignoreCase = true)) {
+                    val busy = stampStatus[file.name]?.startsWith("carimbando") == true
+                    OutlinedButton(onClick = { onStamp(file) }, enabled = !busy) {
+                        Text("Gerar com carimbo", color = ImpTokens.TextPrimary)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
                 Button(onClick = { onShare(file) }, colors = impButtonColors()) { Text("Enviar ao celular") }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = { onDelete(file) }) { Text("Apagar", color = ImpTokens.Danger) }

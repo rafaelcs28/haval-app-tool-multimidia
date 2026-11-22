@@ -67,6 +67,12 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
                 .getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE);
         this.client = new DashcamHisiliconClient(this.context);
         this.novatek = new DashcamNovatekClient(this.context);
+        // 177: the owner asked for the camera clock sync to be on (it lines clips up with the GPS
+        // trail). Turn it on once, even where it had been switched off; later choices stick.
+        if (!statePreferences.getBoolean("migrated_clock_sync_on_177", false)) {
+            preferences.edit().putBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC.getKey(), true).apply();
+            statePreferences.edit().putBoolean("migrated_clock_sync_on_177", true).apply();
+        }
         this.timeSource = new DashcamTimeSource(this.context);
     }
 

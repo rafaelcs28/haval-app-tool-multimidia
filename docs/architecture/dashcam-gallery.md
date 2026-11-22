@@ -149,3 +149,23 @@ a velocidade, as coordenadas e um QR que abre o ponto no mapa do celular. Ao sal
 clipe ganha `<nome>.gpx` (trajeto com hora do GPS) e o MP4 leva a localização de início
 (`MediaMuxer.setLocation`), então a galeria do celular mostra o vídeo no mapa. Apagar o clipe apaga
 o `.gpx`.
+
+## Mapa e carimbo (175–177)
+
+Aba **Mapa** (`DashcamMapCard`): tiles do OpenStreetMap em `files/map-tiles` (até 200 MB, 30 dias;
+`MapTiles`), baixados ao abrir o mapa e, ao longo do trajeto do último dia, só em Wi-Fi sem
+franquia. Endereço pelo Nominatim (1 pedido/s, cache). Trajeto colorido: azul no cartão da câmera,
+verde salvo, cinza gravado por cima. Tocar no trajeto ou arrastar a barra escolhe o momento;
+"Assistir" abre o player naquele segundo, "Salvar" baixa o minuto (ou com o anterior e o seguinte).
+
+**Dados do carro** (`DashcamCarTrack`, 1 Hz, mesmos 72 h e mesma chave do GPS): velocidade, marcha,
+alerta de cinto, setas, pisca-alerta, faróis, freio de mão, volante, modo, bateria, potência,
+temperaturas, hodômetro. Valor bruto por coluna; arquivo começa com `#keys`.
+
+**Carimbo** ("Gerar com carimbo" em Salvos): `DashcamStampJob` monta `DashcamStampFrame` a cada 0,5 s
+(aceleração em g pela variação da velocidade em ~2 s), desenha com `DashcamStampPainter` e
+`DashcamStampEncoder` recodifica no hardware (MediaCodec → OpenGL com o carimbo → H.264), gerando
+`<clipe>_carimbo.mp4`. O original não é alterado.
+
+Na 177, "Sincronizar o relógio da dashcam" é ligado uma vez para todos (pedido do dono), e todas
+as opções da Dashcam têm padrão ligado.
