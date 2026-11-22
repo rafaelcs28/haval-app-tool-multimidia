@@ -130,3 +130,22 @@ other_mode | unreachable | no_wifi | unknown), `app.dashcam.pause_reason` (charg
 `app.dashcam.profile`, `app.dashcam.free_mb` (último conhecido), `app.dashcam.total_mb` (capacidade do cartão = livre + clipes listados; só Novatek, relida a cada 6 h), `app.dashcam.saved_count`,
 `app.dashcam.saving` ("NN" | converting) e `app.dashcam.checked_at`. O toque no card abre
 `OpenDashcamActivity` (exportada, só abre a aba Dashcam; ignorada no Modo Concessionária).
+
+## Trajeto GPS dos vídeos (174)
+
+`DashcamGpsTrack` grava o GPS da própria central (1 Hz, `LocationManager.GPS_PROVIDER`) com o
+horário que o GPS informa (`Location.getTime()`, UTC dos satélites), nunca o horário de chegada.
+Fica só no carro, em `files/dashcam-gps/AAAAMMDDHH.csv` (hora UTC), por 72 h; nada é enviado
+para fora. Chave: "Localizar os vídeos no mapa (GPS)" (`enableDashcamGpsTrack`, padrão ligado).
+
+O clipe é casado pelo início no nome (`20261121152923_…`, hora local da câmera, lida no fuso da
+central) mais 60 s. Isso só fica exato com o relógio da câmera em dia: "Sincronizar o relógio da
+dashcam" agora vale também para a Novatek (`3005&str=AAAA-MM-DD`, `3006&str=HH:MM:SS`, a cada 6 h,
+com a hora confiável de NTP ou GPS de `DashcamTimeSource`). O último ajuste aceito fica em
+`dashcam_state/clock_synced_at`; sem ele o painel avisa que a posição pode estar deslocada.
+
+No player, o painel "Trajeto GPS" desenha a linha do clipe, com o ponto acompanhando a reprodução,
+a velocidade, as coordenadas e um QR que abre o ponto no mapa do celular. Ao salvar no carro, o
+clipe ganha `<nome>.gpx` (trajeto com hora do GPS) e o MP4 leva a localização de início
+(`MediaMuxer.setLocation`), então a galeria do celular mostra o vídeo no mapa. Apagar o clipe apaga
+o `.gpx`.

@@ -26,6 +26,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
+import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.drawscope.Stroke
+import br.com.redesurftank.havalshisuku.managers.DashcamAutomationManager
+import br.com.redesurftank.havalshisuku.managers.DashcamGpsTrack
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -833,10 +838,22 @@ private fun AutomationCard() {
             AutomationSwitch(
                 modifier = Modifier.weight(1f),
                 title = "Sincronizar o relógio da dashcam",
-                hint = "Usa a hora de rede (NTP) ou um GPS recente. Não corrige gravações antigas.",
+                hint = "Usa a hora de rede (NTP) ou do GPS. Necessário para casar o vídeo com o trajeto. Não corrige gravações antigas.",
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC,
                 prefs = prefs
             )
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Localizar os vídeos no mapa (GPS)",
+                hint = "Guarda o trajeto do GPS da central por 72 h, só no carro. Precisa do relógio sincronizado.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_GPS_TRACK,
+                prefs = prefs,
+                default = true
+            )
+            Spacer(Modifier.weight(1f))
         }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -990,38 +1007,190 @@ private fun PlayerDialog(
                 Button(onClick = onClose, colors = impButtonColors()) { Text("Fechar") }
             }
             Spacer(Modifier.height(12.dp))
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            player = exoPlayer
-                        }
-                    },
-                    update = { it.player = exoPlayer },
-                    modifier = Modifier.fillMaxSize()
-                )
-                blockReason?.let { reason ->
-                    Box(
-                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            reason,
-                            color = ImpTokens.TextPrimary,
-                            fontSize = ImpulseTextSizes.Body,
-                            textAlign = TextAlign.Center
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Video and GPS trail side by side; the video keeps 16:9 and never outgrows the screen.
+                val panelW = 300.dp
+                val videoW0 = maxWidth - panelW - 12.dp
+                val videoH = minOf(videoW0 * 9f / 16f, 500.dp)
+                val videoW = videoH * 16f / 9f
+                Row {
+                    Box(Modifier.width(videoW).height(videoH), contentAlignment = Alignment.Center) {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    layoutParams = ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                    player = exoPlayer
+                                }
+                            },
+                            update = { it.player = exoPlayer },
+                            modifier = Modifier.fillMaxSize()
                         )
+                        blockReason?.let { reason ->
+                            Box(
+                                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    reason,
+                                    color = ImpTokens.TextPrimary,
+                                    fontSize = ImpulseTextSizes.Body,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
+                    Spacer(Modifier.width(12.dp))
+                    TrailPanel(
+                        clipName = source.recording?.name ?: source.subtitle,
+                        player = exoPlayer,
+                        modifier = Modifier.width(panelW).height(videoH)
+                    )
                 }
             }
             error?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(it, color = ImpTokens.Danger, fontSize = ImpulseTextSizes.BodyCompact)
             }
+        }
+    }
+}
+
+/**
+ * GPS trail of the clip, from the head unit's own GPS (satellite time, see DashcamGpsTrack). The
+ * dot follows the playback position. No map tiles: the line, the speed and the coordinates, plus a
+ * QR code that opens the point in the phone's map app.
+ */
+@Composable
+private fun TrailPanel(clipName: String, player: ExoPlayer, modifier: Modifier) {
+    val context = LocalContext.current
+    var fixes by remember(clipName) { mutableStateOf<List<DashcamGpsTrack.Fix>?>(null) }
+    LaunchedEffect(clipName) {
+        fixes = withContext(Dispatchers.IO) { DashcamGpsTrack.getInstance(context).forClip(clipName) }
+    }
+    val startUtc = remember(clipName) { DashcamGpsTrack.clipStartUtcMs(clipName, java.time.ZoneId.systemDefault()) }
+    var positionMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(player) {
+        while (true) {
+            positionMs = player.currentPosition
+            delay(250)
+        }
+    }
+    val clockSyncedAt = remember {
+        App.getDeviceProtectedContext()
+            .getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE)
+            .getLong(DashcamAutomationManager.KEY_CLOCK_SYNCED_AT, 0L)
+    }
+    var qrFor by remember { mutableStateOf<DashcamGpsTrack.Fix?>(null) }
+
+    Column(
+        modifier
+            .clip(CardShape)
+            .background(Color(0xFF111418))
+            .border(BorderStroke(1.dp, CardBorder), CardShape)
+            .padding(12.dp)
+    ) {
+        Text("Trajeto GPS", color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.Label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        val list = fixes
+        when {
+            list == null -> Text("Carregando…", color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+            list.isEmpty() -> {
+                Text("Sem trajeto GPS para este horário.", color = ImpTokens.TextSecondary, fontSize = ImpulseTextSizes.BodyCompact)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "O trajeto é guardado por 72 h a partir da ativação de \"Localizar os vídeos no mapa\" (Automação).",
+                    color = ImpTokens.TextMuted,
+                    fontSize = ImpulseTextSizes.BodyCompact
+                )
+            }
+            else -> {
+                val current = startUtc?.let { DashcamGpsTrack.interpolate(list, it + positionMs) }
+                TrailCanvas(list, current, Modifier.fillMaxWidth().weight(1f))
+                Spacer(Modifier.height(8.dp))
+                val shown = current ?: list.first()
+                val kmh = shown.speedKmh
+                Text(
+                    if (kmh >= 0) "${kmh.roundToInt()} km/h" else "Velocidade indisponível",
+                    color = ImpTokens.TextPrimary,
+                    fontSize = ImpulseTextSizes.Body,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    String.format(java.util.Locale.ROOT, "%.5f, %.5f", shown.lat, shown.lon).replace('.', ',')
+                        .replace(", ", "; "),
+                    color = ImpTokens.TextSecondary,
+                    fontSize = ImpulseTextSizes.BodyCompact
+                )
+                Text(
+                    "GPS " + java.time.Instant.ofEpochMilli(shown.utcMs).atZone(java.time.ZoneId.systemDefault())
+                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")),
+                    color = ImpTokens.TextMuted,
+                    fontSize = ImpulseTextSizes.BodyCompact
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { qrFor = shown }) { Text("Abrir no celular", color = ImpTokens.TextPrimary) }
+            }
+        }
+        if (clockSyncedAt == 0L) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Relógio da câmera ainda não sincronizado: a posição pode estar deslocada.",
+                color = ImpTokens.Attention,
+                fontSize = ImpulseTextSizes.BodyCompact
+            )
+        }
+    }
+
+    qrFor?.let { fix ->
+        val url = String.format(java.util.Locale.ROOT, "https://www.google.com/maps?q=%.6f,%.6f", fix.lat, fix.lon)
+        AlertDialog(
+            onDismissRequest = { qrFor = null },
+            title = { Text("Abrir no celular") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Leia o QR code com a câmera do celular para abrir este ponto no mapa.", fontSize = ImpulseTextSizes.BodyCompact)
+                    Spacer(Modifier.height(12.dp))
+                    QrCode(url, 240.dp)
+                }
+            },
+            confirmButton = { Button(onClick = { qrFor = null }, colors = impButtonColors()) { Text("Fechar") } }
+        )
+    }
+}
+
+@Composable
+private fun TrailCanvas(fixes: List<DashcamGpsTrack.Fix>, current: DashcamGpsTrack.Fix?, modifier: Modifier) {
+    Canvas(modifier.clip(CardShape).background(Color(0xFF0A0C0F))) {
+        val pad = 16f
+        val midLat = fixes.sumOf { it.lat } / fixes.size
+        val kx = Math.cos(Math.toRadians(midLat))
+        val minX = fixes.minOf { it.lon * kx }
+        val maxX = fixes.maxOf { it.lon * kx }
+        val minY = fixes.minOf { it.lat }
+        val maxY = fixes.maxOf { it.lat }
+        // At least ~60 m across, so a parked car is a dot in the middle, not a zoomed-in jitter.
+        val span = maxOf(maxX - minX, maxY - minY, 0.0006)
+        val scale = minOf(size.width - 2 * pad, size.height - 2 * pad) / span
+        val cx = (minX + maxX) / 2
+        val cy = (minY + maxY) / 2
+        fun point(f: DashcamGpsTrack.Fix) = Offset(
+            (size.width / 2 + (f.lon * kx - cx) * scale).toFloat(),
+            (size.height / 2 - (f.lat - cy) * scale).toFloat()
+        )
+        val path = androidx.compose.ui.graphics.Path()
+        fixes.forEachIndexed { i, f ->
+            val o = point(f)
+            if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
+        }
+        drawPath(path, ImpTokens.Accent, style = Stroke(width = 4f))
+        drawCircle(Color(0xFF9AA4AE), radius = 5f, center = point(fixes.first()))
+        current?.let {
+            val o = point(it)
+            drawCircle(ImpTokens.Accent.copy(alpha = 0.3f), radius = 14f, center = o)
+            drawCircle(Color.White, radius = 7f, center = o)
         }
     }
 }

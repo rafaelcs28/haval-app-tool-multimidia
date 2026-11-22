@@ -102,6 +102,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamClockSync",
             "Ajustar o relógio da dashcam com a hora de rede (NTP) ou do GPS"
     ),
+    ENABLE_DASHCAM_GPS_TRACK(
+            "enableDashcamGpsTrack",
+            "Registrar o trajeto GPS para localizar os vídeos da dashcam no mapa"
+    ),
     ENABLE_DASHCAM_FAILURE_WARNING(
             "enableDashcamFailureWarning",
             "Avisar quando a dashcam não estiver gravando"

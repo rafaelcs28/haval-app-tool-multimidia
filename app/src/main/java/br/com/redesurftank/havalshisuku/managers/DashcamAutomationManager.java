@@ -43,6 +43,9 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     private final SharedPreferences preferences;
     private final SharedPreferences statePreferences;
     private final DashcamHisiliconClient client;
+    private final DashcamNovatekClient novatek;
+    /** Epoch ms (trusted UTC) of the last accepted camera clock set, either profile; 0 never. */
+    public static final String KEY_CLOCK_SYNCED_AT = "clock_synced_at";
     private final DashcamTimeSource timeSource;
     private final Object lifecycleLock = new Object();
     private final Runnable tick = this::tick;
@@ -63,6 +66,7 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         this.statePreferences = App.getDeviceProtectedContext()
                 .getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE);
         this.client = new DashcamHisiliconClient(this.context);
+        this.novatek = new DashcamNovatekClient(this.context);
         this.timeSource = new DashcamTimeSource(this.context);
     }
 
@@ -137,9 +141,21 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         // NTP needs an internet network, which is usually not the camera Wi-Fi: sample first.
         if (clockEnabled) timeSource.refreshIfDue();
         if (!client.hasWifiNetwork()) return;
-        // Resume, clock and the HiSilicon state parser are HiSilicon-only for now; a Novatek camera
-        // only gets the gallery (read-only) until its write commands are validated.
-        if (DashcamProfile.detect(context) == DashcamProfile.NOVATEK) return;
+        // Resume and the HiSilicon state parser are HiSilicon-only; a Novatek camera gets the clock
+        // (so its clip names line up with the GPS trail) and nothing else here.
+        if (DashcamProfile.detect(context) == DashcamProfile.NOVATEK) {
+            if (!clockEnabled) return;
+            if (!lock()) {
+                log("check", "camera_busy");
+                return;
+            }
+            try {
+                syncNovatekClockIfDue();
+            } finally {
+                DashcamHisiliconClient.CAMERA_LOCK.unlock();
+            }
+            return;
+        }
 
         if (!lock()) {
             log("check", "camera_busy");
@@ -196,9 +212,31 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         DashcamHisiliconClient.Result<Boolean> result = client.setSystemTime(local);
         if (result.isSuccess()) {
             lastClockSyncElapsed = now;
+            statePreferences.edit().putLong(KEY_CLOCK_SYNCED_AT, utc).apply();
             log("clock", "set source=" + timeSource.lastSource());
         } else {
             log("clock", "failed=" + result.getError());
+        }
+    }
+
+    private void syncNovatekClockIfDue() {
+        long now = SystemClock.elapsedRealtime();
+        if (lastClockSyncElapsed > 0 && now - lastClockSyncElapsed < CLOCK_SYNC_INTERVAL_MS) return;
+        Long utc = timeSource.currentUtcMs();
+        if (utc == null) {
+            log("clock", "novatek no_trusted_time");
+            return;
+        }
+        // Two requests; aim the time at the second one (~0.5 s later), rounded to the second.
+        java.time.LocalDateTime local = Instant.ofEpochMilli(utc + 500L).atZone(ZoneId.systemDefault())
+                .toLocalDateTime().withNano(0);
+        DashcamHisiliconClient.Result<Boolean> result = novatek.setClock(local);
+        if (result.isSuccess()) {
+            lastClockSyncElapsed = now;
+            statePreferences.edit().putLong(KEY_CLOCK_SYNCED_AT, utc).apply();
+            log("clock", "novatek set " + local + " source=" + timeSource.lastSource());
+        } else {
+            log("clock", "novatek failed=" + result.getError());
         }
     }
 

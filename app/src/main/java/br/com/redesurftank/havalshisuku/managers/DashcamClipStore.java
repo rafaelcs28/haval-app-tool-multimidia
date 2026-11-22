@@ -122,8 +122,13 @@ public final class DashcamClipStore {
     }
 
     public boolean delete(File file) {
-        return file != null && file.getParentFile() != null
+        boolean deleted = file != null && file.getParentFile() != null
                 && file.getParentFile().equals(directory()) && file.delete();
+        if (deleted) {
+            File gpx = new File(file.getParentFile(), gpxName(file.getName()));
+            if (gpx.isFile() && !gpx.delete()) Log.w(TAG, "cannot delete " + gpx);
+        }
+        return deleted;
     }
 
     public void cancel() {
@@ -221,10 +226,12 @@ public final class DashcamClipStore {
                 return;
             }
             Log.i(TAG, "saved " + name + " bytes=" + written);
+            List<DashcamGpsTrack.Fix> trail = trailFor(name);
+            writeGpx(target, trail);
             if (isTs(name)) {
                 saving = "converting";
                 post(() -> listener.onProgress(name, PROGRESS_CONVERTING));
-                File mp4 = convertToMp4(target);
+                File mp4 = convertToMp4(target, trail.isEmpty() ? null : trail.get(0));
                 File result = mp4 != null ? mp4 : target;
                 post(() -> listener.onDone(name, result));
             } else {
@@ -243,11 +250,11 @@ public final class DashcamClipStore {
     }
 
     /** Remuxes [ts] to an .mp4 next to it; deletes the .TS on success. Null when it fails. */
-    private File convertToMp4(File ts) {
+    private File convertToMp4(File ts, DashcamGpsTrack.Fix location) {
         File mp4 = new File(ts.getParentFile(), mp4Name(ts.getName()));
         File part = new File(ts.getParentFile(), mp4.getName() + ".part");
         long start = System.currentTimeMillis();
-        boolean ok = remuxVideoOnly(ts, part);
+        boolean ok = remuxVideoOnly(ts, part, location);
         if (ok && part.length() > 0 && (!mp4.exists() || mp4.delete()) && part.renameTo(mp4)) {
             if (!ts.delete()) Log.w(TAG, "cannot delete " + ts);
             Log.i(TAG, "mp4 " + mp4.getName() + " bytes=" + mp4.length()
@@ -260,7 +267,48 @@ public final class DashcamClipStore {
     }
 
     /** Copies the first video track of [input] into an MP4 container without re-encoding. */
+    /** The clip's GPS trail, when recorded (empty otherwise). */
+    private List<DashcamGpsTrack.Fix> trailFor(String clipName) {
+        try {
+            return DashcamGpsTrack.getInstance(context).forClip(clipName);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "trail unavailable for " + clipName, e);
+            return Collections.emptyList();
+        }
+    }
+
+    static String gpxName(String clipName) {
+        int dot = clipName.lastIndexOf('.');
+        return (dot > 0 ? clipName.substring(0, dot) : clipName) + ".gpx";
+    }
+
+    /** {@code <clip>.gpx} next to the saved clip (same base name for .TS and .mp4). */
+    private void writeGpx(File clip, List<DashcamGpsTrack.Fix> trail) {
+        if (trail == null || trail.isEmpty()) return;
+        File gpx = new File(clip.getParentFile(), gpxName(clip.getName()));
+        try (java.io.Writer w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(gpx),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write(DashcamGpsTrack.gpx(trail, clip.getName()));
+        } catch (java.io.IOException e) {
+            Log.w(TAG, "gpx write failed for " + clip.getName(), e);
+        }
+    }
+
+    /** Saved trail of a saved clip ({@code <clip>.gpx}), read back as fixes; empty when absent. */
+    public File gpxFor(File clip) {
+        File gpx = new File(clip.getParentFile(), gpxName(clip.getName()));
+        return gpx.isFile() ? gpx : null;
+    }
+
     static boolean remuxVideoOnly(File input, File output) {
+        return remuxVideoOnly(input, output, null);
+    }
+
+    /**
+     * Copies the first video track of [input] into an MP4 container without re-encoding. With a
+     * [location], the MP4 carries it (ISO 6709), so the phone's gallery shows the clip on the map.
+     */
+    static boolean remuxVideoOnly(File input, File output, DashcamGpsTrack.Fix location) {
         MediaExtractor extractor = new MediaExtractor();
         MediaMuxer muxer = null;
         boolean started = false;
@@ -281,6 +329,7 @@ public final class DashcamClipStore {
             extractor.selectTrack(videoTrack);
             muxer = new MediaMuxer(output.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             int outTrack = muxer.addTrack(format);
+            if (location != null) muxer.setLocation((float) location.lat, (float) location.lon);
             muxer.start();
             started = true;
             int capacity = format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)

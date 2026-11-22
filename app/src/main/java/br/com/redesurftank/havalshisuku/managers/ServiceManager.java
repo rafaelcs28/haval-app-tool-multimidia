@@ -1286,6 +1286,8 @@ public class ServiceManager {
         br.com.redesurftank.havalshisuku.services.AndroidAutoNavigationMonitor.INSTANCE.start(context);
         br.com.redesurftank.havalshisuku.hud.HudOverlayController.INSTANCE.start();
         br.com.redesurftank.havalshisuku.radar.RadarManager.INSTANCE.start();
+        // GPS trail for the dashcam clips (local only, 72 h). Records only while its switch is on.
+        DashcamGpsTrack.getInstance(context).start();
         synchronized (pendingTasks) {
             for (Runnable task : pendingTasks) backgroundHandler.post(task);
             pendingTasks.clear();

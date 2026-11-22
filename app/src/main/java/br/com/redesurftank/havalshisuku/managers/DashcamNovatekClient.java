@@ -76,6 +76,28 @@ final class DashcamNovatekClient {
         return DashcamHisiliconClient.Result.success(Boolean.TRUE);
     }
 
+    /**
+     * Sets the camera clock (local time, which is what it writes in the clip names): date, then
+     * time. Status 0 on both is accepted; the next clip's name is the real proof.
+     */
+    DashcamHisiliconClient.Result<Boolean> setClock(java.time.LocalDateTime local) {
+        String date = local.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        String time = local.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> d =
+                query(DashcamNovatekProtocol.CMD_SET_DATE + "&str=" + date);
+        if (!d.isSuccess()) return DashcamHisiliconClient.Result.failure(d.getError());
+        if (d.getValue().getStatus() != 0) {
+            return DashcamHisiliconClient.Result.failure("date_status_" + d.getValue().getStatus());
+        }
+        DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> t =
+                query(DashcamNovatekProtocol.CMD_SET_TIME + "&str=" + time);
+        if (!t.isSuccess()) return DashcamHisiliconClient.Result.failure(t.getError());
+        if (t.getValue().getStatus() != 0) {
+            return DashcamHisiliconClient.Result.failure("time_status_" + t.getValue().getStatus());
+        }
+        return DashcamHisiliconClient.Result.success(Boolean.TRUE);
+    }
+
     DashcamHisiliconClient.Result<List<DashcamNovatekProtocol.Entry>> fileList() {
         DashcamHisiliconClient.Result<String> body =
                 get(String.valueOf(DashcamNovatekProtocol.CMD_FILE_LIST), MAX_LIST_BYTES, LIST_TIMEOUT_MS);

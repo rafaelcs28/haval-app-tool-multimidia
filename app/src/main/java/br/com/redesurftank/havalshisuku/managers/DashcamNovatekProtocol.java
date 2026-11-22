@@ -24,6 +24,9 @@ public final class DashcamNovatekProtocol {
     public static final int CMD_RECORDING_SECONDS = 2016;
     /** Movie record on/off ({@code par=1} start, {@code par=0} stop). Standard Novatek CarDV. */
     public static final int CMD_RECORD = 2001;
+    /** Standard Novatek CarDV clock set: {@code 3005&str=yyyy-MM-dd} then {@code 3006&str=HH:mm:ss}. */
+    public static final int CMD_SET_DATE = 3005;
+    public static final int CMD_SET_TIME = 3006;
     /** 3037 value for movie (recording) mode. */
     public static final int MODE_MOVIE = 1;
 

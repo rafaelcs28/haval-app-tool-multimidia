@@ -33,7 +33,7 @@ public final class DashcamGalleryRepository {
     private static final String TAG = "DashcamGallery";
     private static final String CACHE_FILE = "dashcam_catalog.json";
     private static final long LOCK_WAIT_SECONDS = 20L;
-    static final String STATE_PREFS = "dashcam_state";
+    public static final String STATE_PREFS = "dashcam_state";
     static final String KEY_PAUSED_BY_CHARGING = "pausedByApp";
     static final String KEY_PAUSED_BY_GALLERY = "pausedByGallery";
 
