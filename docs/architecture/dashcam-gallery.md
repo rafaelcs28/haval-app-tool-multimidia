@@ -169,3 +169,53 @@ temperaturas, hodômetro. Valor bruto por coluna; arquivo começa com `#keys`.
 
 Na 177, "Sincronizar o relógio da dashcam" é ligado uma vez para todos (pedido do dono), e todas
 as opções da Dashcam têm padrão ligado.
+
+## Rede da câmera: levar a Novatek para outra rede (185)
+
+A Novatek não tem botões. O card **Rede da câmera** (aba Câmera, acima de Automação) a leva do
+Wi-Fi próprio para uma rede compartilhada ("station", ex.: roteador do celular) e de volta.
+Sequência validada no carro (firmware TY670DLA335):
+
+- **Para a rede**: com a central no Wi-Fi da câmera, `3016` (responde), `3032&str=SSID:SENHA`
+  (cada metade com percent-encoding, `:` literal; SSID sem `:`, senha de 8 a 26 caracteres),
+  `3033&par=1`, `3018`. Cada um exige `Status 0` (no `3018` a conexão pode cair antes da
+  resposta: conta como enviado). Depois a central entra na rede (`WifiManager.addNetwork`/
+  `enableNetwork`, WPA2, reaproveitando a configuração salva com esse SSID) e procura a câmera por
+  até 90 s.
+- **De volta**: na rede, com a câmera encontrada, `3033&par=0` e `3018`; a central volta ao SSID do
+  Wi-Fi da câmera, lembrado quando ela esteve nele.
+
+Pré-requisitos do envio: perfil Novatek, central no 192.168.1.x, SSID/senha válidos e a rede
+visível em `getScanResults()`. SSID e senha ficam em `haval_prefs` (`dashcamStationSsid`,
+`dashcamStationPassword`); nunca vão para log. Comandos sob `CAMERA_LOCK`; as esperas de Wi-Fi não
+seguram a trava. Eventos `dashcam_network` só com fase e código de erro.
+
+**Endereço dinâmico** (`DashcamCameraHost`): 192.168.1.254 no Wi-Fi da câmera; na rede
+configurada, o IP do DHCP. Na rede, o perfil é Novatek quando o SSID atual é o configurado (ou,
+sem SSID legível, quando o IP guardado está na mesma /24) e a câmera já é conhecida (MAC ou IP).
+
+**Descoberta** (`DashcamCameraDiscovery`): no Wi-Fi da câmera, o MAC de 192.168.1.254 é lido de
+`/proc/net/arp` e guardado em `dashcam_state` com o SSID do Wi-Fi da câmera. Na rede: MAC no ARP;
+se não estiver, varredura TCP 80 concorrente da /24 (~3 s) e novo ARP; por fim `3016` nos hosts
+com a porta 80 aberta (até 16). O IP fica em cache; falha de transporte/HTTP o descarta e a próxima
+consulta redescobre (varredura no máximo 1×/min, fora as trocas de rede).
+
+**Cleartext**: o `network_security_config` continua permitindo só 192.168.0.1 e 192.168.1.254.
+Vídeo (`DashcamVideoDataSource`) e download (`DashcamClipStore`) da Novatek usam
+`DashcamCameraHttp`: HTTP/1.1 por socket da rede Wi-Fi (nunca VPN), só IPv4 privado literal igual
+ao host atual da câmera, só caminhos `/CARDV/…` validados, `Range`, sem redirecionamento, sem
+`Transfer-Encoding`, cabeçalho limitado a 16 KB e corpo limitado ao `Content-Length`. A HiSilicon
+continua com `HttpURLConnection`.
+
+**Automático** ("Fazer isso sozinho a cada partida", `enableDashcamAutoStation`, **padrão
+desligado**): no ciclo da automação (30 s após iniciar e a cada 5 min), no Wi-Fi da câmera com a
+rede ao alcance → leva a câmera; na rede sem a câmera mas com o Wi-Fi dela ao alcance → a central
+volta ao Wi-Fi da câmera e a leva de novo. No máximo uma tentativa por partida e uma a cada 10 min.
+Relatos da comunidade dizem que o modo station não persiste ao desligar o carro (ainda não
+confirmado nesta câmera).
+
+**Risco**: na rede compartilhada a câmera não tem senha; qualquer aparelho dela pode ver, apagar e
+reconfigurar. O card avisa.
+
+Permissões novas: `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE` (SSID e varredura também dependem da
+localização, já concedida para o GPS).
