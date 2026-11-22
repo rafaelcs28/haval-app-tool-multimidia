@@ -55,6 +55,13 @@
             </intent-filter>
         </activity>
         
+        <!-- Entrada estreita para o card Dashcam do Haval 3D: só abre a aba Dashcam. -->
+        <activity
+            android:name=".OpenDashcamActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity
             android:name=".MainActivity"
             android:exported="false"

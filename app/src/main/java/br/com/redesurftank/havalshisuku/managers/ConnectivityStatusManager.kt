@@ -142,9 +142,22 @@ object ConnectivityStatusManager {
             try { hr.readRoutedWifiNameBlocking() } catch (t: Throwable) { null }
         } else null
         val controlEnabled = MobileDataManager.isControlEnabled()
-        val reason = MobileDataManager.blockReason(context)
+        val wanted = MobileDataManager.blockReason(context)
+        // A regra pede corte, mas o sistema não confirmou (ex.: Shizuku sem root): o 4G segue
+        // utilizável e a tela diz isso, em vez de "4G off".
+        val notEnforced = wanted != null && MobileDataManager.isBlockEnforced() == false
+        val reason = if (notEnforced) null else wanted
         val hotspotActive = isHotspotActive(context)
-        val s = buildStatus(mode, wifi, controlEnabled, reason, hotspotActive, headUnitOnWifi)
+        var s = buildStatus(mode, wifi, controlEnabled, reason, hotspotActive, headUnitOnWifi)
+        if (notEnforced) {
+            val why = if (MobileDataManager.blockEnforceError() == "sem_root") "sem root" else "não confirmado"
+            s = s.copy(
+                    mobileBlockReason = "$wanted (não aplicado: $why)",
+                    displayText = "4G NÃO cortado · $wanted · $why",
+                    displayLevel = "bad",
+                    displayIcon = "alert"
+            )
+        }
         cached = s
         cachedAtMs = now
         return s

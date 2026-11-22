@@ -18,6 +18,7 @@ import br.com.redesurftank.havalshisuku.services.ForegroundService
 import br.com.redesurftank.havalshisuku.utils.ShizukuUtils
 import org.json.JSONArray
 import org.json.JSONObject
+import rikka.shizuku.Shizuku
 
 /**
  * MODO CONCESSIONÁRIA — devolve o carro ao comportamento de fábrica antes de levar à revisão.
@@ -173,6 +174,24 @@ object StealthModeManager {
      * DONT_KILL_APP) — deixá-lo também na varredura genérica só duplicaria o comando.
      */
     private val NEVER_TOUCH = setOf("br.com.redesurftank.havalshisuku")
+
+    /**
+     * O Shizuku NUNCA tem o ícone escondido. Ele segue rodando escondido, mas a ativação reinicia a
+     * central e, sem root, o Shizuku não volta sozinho: com o ícone escondido o dono não conseguia
+     * religá-lo, o Impulse ficava sem dados do carro e a sequência de saída não era reconhecida.
+     */
+    private val NEVER_HIDE = setOf("moe.shizuku.privileged.api")
+
+    /**
+     * O Shizuku sobrevive a um reinício da central? Só quando roda como root (uid 0) iniciado no boot;
+     * pelo adb (uid 2000) ele morre no reinício e precisa ser aberto e iniciado de novo.
+     */
+    @JvmStatic
+    fun shizukuSurvivesReboot(): Boolean = try {
+        Shizuku.pingBinder() && Shizuku.getUid() == 0
+    } catch (t: Throwable) {
+        false
+    }
 
     // ===== Ensaio da saída, ANTES de ativar =====
     // Sugestão de um colega, e a proteção que faltava: em vez de explicar o gesto num texto
@@ -535,7 +554,7 @@ object StealthModeManager {
         val raw = ShizukuUtils.runCommandAndGetOutput(arrayOf("pm", "list", "packages", "-3"))
         val packages = raw.lineSequence()
             .map { it.trim().removePrefix("package:").trim() }
-            .filter { it.isNotEmpty() && it !in NEVER_TOUCH }
+            .filter { it.isNotEmpty() && it !in NEVER_TOUCH && it !in NEVER_HIDE }
             .distinct()
             .toList()
         if (packages.isEmpty()) {
@@ -591,6 +610,19 @@ object StealthModeManager {
      * quem esta dirigindo. Velocidade ilegivel conta como em movimento.
      */
     private fun rebootHeadUnitAfterEnter(context: Context) {
+        // Sem root o Shizuku morre no reinício, e sem ele o Impulse não lê o carro nem reconhece a
+        // sequência de saída. Nesse caso o modo fica aplicado com o sistema em pé e o dono decide
+        // quando reiniciar (e religa o Shizuku depois).
+        if (!shizukuSurvivesReboot()) {
+            Log.w(TAG, "Shizuku sem root; NAO reiniciando a central")
+            ClusterPersistentEventLogger.log("stealth_reboot_skipped", mapOf("reason" to "shizuku_not_root"))
+            toast(
+                context,
+                "Modo Concessionária ativo. Não reiniciei a central porque o Shizuku não roda como root: " +
+                    "se reiniciar, abra o Shizuku e inicie-o antes de fazer a sequência de saída."
+            )
+            return
+        }
         try {
             val raw = ServiceManager.getInstance()
                 .getData(br.com.redesurftank.havalshisuku.models.CarConstants.CAR_BASIC_VEHICLE_SPEED.value)

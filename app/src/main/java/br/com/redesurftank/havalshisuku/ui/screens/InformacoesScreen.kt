@@ -613,6 +613,15 @@ fun InformacoesTab() {
                                                         }
                                                 )
                                         }
+                                        if (!StealthModeManager.shizukuSurvivesReboot()) {
+                                                Text(
+                                                        "Atenção: o Shizuku desta central não roda como root. " +
+                                                                "O modo não vai reiniciar a central. Se ela reiniciar, abra o Shizuku " +
+                                                                "e inicie-o antes de fazer a sequência de saída (o ícone dele continua visível).",
+                                                        color = Color(0xFFFBBF24),
+                                                        fontSize = ImpulseTextSizes.BodyCompact
+                                                )
+                                        }
                                         Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.End

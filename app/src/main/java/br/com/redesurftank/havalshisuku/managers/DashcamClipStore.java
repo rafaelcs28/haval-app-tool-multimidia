@@ -58,6 +58,13 @@ public final class DashcamClipStore {
         void onFailed(String name, String error);
     }
 
+    /** "" idle, "NN" percent while downloading, "converting" while remuxing (for the 3D card). */
+    private static volatile String saving = "";
+
+    public static String savingStatus() {
+        return saving;
+    }
+
     /** Progress value meaning "converting to MP4" (download finished). */
     public static final float PROGRESS_CONVERTING = -2f;
 
@@ -195,6 +202,7 @@ public final class DashcamClipStore {
                     if (now - lastReport > 400) {
                         lastReport = now;
                         float progress = length > 0 ? (float) written / length : -1f;
+                        saving = progress >= 0 ? String.valueOf((int) (progress * 100)) : "0";
                         post(() -> listener.onProgress(name, progress));
                     }
                 }
@@ -214,6 +222,7 @@ public final class DashcamClipStore {
             }
             Log.i(TAG, "saved " + name + " bytes=" + written);
             if (isTs(name)) {
+                saving = "converting";
                 post(() -> listener.onProgress(name, PROGRESS_CONVERTING));
                 File mp4 = convertToMp4(target);
                 File result = mp4 != null ? mp4 : target;
@@ -224,6 +233,7 @@ public final class DashcamClipStore {
         } catch (Exception e) {
             fail(listener, name, part, "transport_" + e.getClass().getSimpleName());
         } finally {
+            saving = "";
             if (http != null) http.disconnect();
         }
     }

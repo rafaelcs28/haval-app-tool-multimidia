@@ -4,6 +4,7 @@ import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.TrafficStats
 import android.util.Log
@@ -26,6 +27,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   b) por consumo (>= teto no ciclo)
  *   c) quando conectado ao WiFi
  *   d) quando no Android Auto/CarPlay (projeção)
+ *
+ * COMO O CORTE É FEITO: nesta central o 4G não é telefonia da própria tela — é a rede "Mobile"
+ * que o TBOX entrega pela vlan13. `svc data disable` responde ok e não corta nada (medido no carro
+ * em 2026-11-22: mobile_data seguiu 1 e a rede Mobile seguiu conectada). Por isso o corte é um
+ * firewall (chain `impulse_mobile_block` em OUTPUT e FORWARD, via Shizuku root) que recusa a saída
+ * pela interface Mobile, liberando só a sub-rede do próprio TBOX (funções do carro). O estado é
+ * VERIFICADO no sistema ([isBlockEnforced]); sem root o app diz que não consegue cortar, em vez
+ * de mostrar o 4G como cortado.
  *
  * Contador: uso móvel no ciclo (dia de renovação configurável) via NetworkStatsManager; fallback pra
  * TrafficStats acumulado quando o NSM não estiver disponível. (A fatura inclui o TBOX, que a tela não
@@ -121,6 +130,18 @@ object MobileDataManager {
 
     @Volatile private var lastAppliedBlock: Boolean? = null
 
+    /** Resultado verificado do último corte pedido: null = nada pedido. */
+    @Volatile private var lastEnforced: Boolean? = null
+    @Volatile private var lastEnforceError: String? = null
+
+    /** O corte pedido está de fato aplicado no sistema? null quando nenhuma regra pede corte. */
+    fun isBlockEnforced(): Boolean? = lastEnforced
+
+    /** Motivo de o corte não estar aplicado (ex.: "sem_root"), ou null. */
+    fun blockEnforceError(): String? = lastEnforceError
+
+    private const val CHAIN = "impulse_mobile_block"
+
     internal fun decideOwnedBlockActionForTest(
         desiredBlocked: Boolean,
         disabledByApp: Boolean,
@@ -169,11 +190,20 @@ object MobileDataManager {
             lastAppliedBlock,
             reassertBlock = true
         )
-        if (action == OwnedBlockAction.NONE) return
+        if (action == OwnedBlockAction.NONE) {
+            if (!block) {
+                lastEnforced = null
+                lastEnforceError = null
+            }
+            return
+        }
         try {
             val disabling = action == OwnedBlockAction.DISABLE
-            if (!runVerifiedMobileDataCommand(disabling)) {
-                Log.e(TAG, "Falha ao confirmar estado real do dado móvel")
+            val error = applyFirewallBlock(disabling)
+            lastEnforced = if (disabling) error == null else null
+            lastEnforceError = if (disabling) error else null
+            if (error != null) {
+                Log.e(TAG, "Corte do 4G não aplicado: $error")
                 return
             }
             prefs().edit()
@@ -189,17 +219,79 @@ object MobileDataManager {
         }
     }
 
-    private fun runVerifiedMobileDataCommand(block: Boolean): Boolean {
-        val verb = if (block) "disable" else "enable"
-        val expected = if (block) "0" else "1"
-        val command =
-            "svc data $verb || exit 1; attempts=0; " +
-                "while [ \"\$attempts\" -lt 5 ]; do " +
-                "state=\$(settings get global mobile_data); " +
-                "if [ \"\$state\" = \"$expected\" ]; then echo MOBILE_DATA_APPLIED; exit 0; fi; " +
-                "attempts=\$((attempts + 1)); sleep 1; done; exit 1"
-        val output = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", command))
-        return output.lineSequence().any { it.trim() == "MOBILE_DATA_APPLIED" }
+    /** Interface e sub-rede (CIDR) da rede Mobile, lidas do sistema; fallback vlan13. */
+    private fun mobileInterface(): Pair<String, String?> {
+        try {
+            val cm = App.getContext().getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            if (cm != null) {
+                for (net in cm.allNetworks) {
+                    val caps = cm.getNetworkCapabilities(net) ?: continue
+                    if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) continue
+                    val lp: LinkProperties = cm.getLinkProperties(net) ?: continue
+                    val iface = lp.interfaceName ?: continue
+                    val v4 = lp.linkAddresses.firstOrNull { it.address is java.net.Inet4Address }
+                    val cidr = v4?.let { subnetCidr(it.address.address, it.prefixLength) }
+                    if (isSafeIface(iface)) return iface to cidr
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "mobileInterface: ${t.message}")
+        }
+        return "vlan13" to null
+    }
+
+    internal fun isSafeIface(name: String): Boolean = name.matches(Regex("[A-Za-z0-9_.-]{1,15}"))
+
+    /** Endereço de rede em notação CIDR, ex.: 172.16.13.0/24. */
+    internal fun subnetCidr(address: ByteArray, prefix: Int): String? {
+        if (address.size != 4 || prefix !in 8..32) return null
+        var value = 0L
+        for (b in address) value = (value shl 8) or (b.toLong() and 0xff)
+        val mask = if (prefix == 0) 0L else (0xffffffffL shl (32 - prefix)) and 0xffffffffL
+        val net = value and mask
+        return "${(net shr 24) and 0xff}.${(net shr 16) and 0xff}.${(net shr 8) and 0xff}.${net and 0xff}/$prefix"
+    }
+
+    /** Script idempotente que liga (ou desliga) o firewall do 4G e imprime FIREWALL_OK se confere. */
+    internal fun firewallScript(block: Boolean, iface: String, tboxCidr: String?): String {
+        val jumps = "for t in OUTPUT FORWARD; do " +
+            "while iptables -D \$t -j $CHAIN 2>/dev/null; do :; done; " +
+            "while ip6tables -D \$t -j $CHAIN 2>/dev/null; do :; done; done; "
+        if (!block) {
+            return jumps +
+                "iptables -F $CHAIN 2>/dev/null; iptables -X $CHAIN 2>/dev/null; " +
+                "ip6tables -F $CHAIN 2>/dev/null; ip6tables -X $CHAIN 2>/dev/null; " +
+                "iptables -C OUTPUT -j $CHAIN 2>/dev/null && exit 1; echo FIREWALL_OK"
+        }
+        val allowTbox = if (tboxCidr != null) "iptables -A $CHAIN -o $iface -d $tboxCidr -j RETURN; " else ""
+        val intact = "iptables -C OUTPUT -j $CHAIN 2>/dev/null && iptables -C FORWARD -j $CHAIN 2>/dev/null && " +
+            "iptables -S $CHAIN 2>/dev/null | grep -q -- '-o $iface -j REJECT'"
+        return "[ \"\$(id -u)\" = 0 ] || { echo NOT_ROOT; exit 2; }; " +
+            // Já aplicado (reafirmação a cada 15 s): não mexe, para não abrir brecha ao recriar.
+            "if $intact; then echo FIREWALL_OK; exit 0; fi; " +
+            "iptables -N $CHAIN 2>/dev/null; iptables -F $CHAIN; " +
+            allowTbox +
+            "iptables -A $CHAIN -o $iface -j REJECT; " +
+            "ip6tables -N $CHAIN 2>/dev/null; ip6tables -F $CHAIN; " +
+            "ip6tables -A $CHAIN -o $iface -j REJECT; " +
+            jumps +
+            "for t in OUTPUT FORWARD; do iptables -I \$t 1 -j $CHAIN; ip6tables -I \$t 1 -j $CHAIN; done; " +
+            "iptables -C OUTPUT -j $CHAIN && iptables -C FORWARD -j $CHAIN && " +
+            "iptables -S $CHAIN | grep -q -- '-o $iface -j REJECT' && echo FIREWALL_OK"
+    }
+
+    /** Aplica/retira o corte; null = conferido no sistema, senão o motivo da falha. */
+    private fun applyFirewallBlock(block: Boolean): String? {
+        // svc data continua sendo emitido (inofensivo; numa central com telefonia própria ajuda).
+        ShizukuUtils.runCommandAndGetOutput(arrayOf("svc", "data", if (block) "disable" else "enable"))
+        val (iface, cidr) = mobileInterface()
+        val output = ShizukuUtils.runCommandAndGetOutput(arrayOf("sh", "-c", firewallScript(block, iface, cidr)))
+        val lines = output.lineSequence().map { it.trim() }.toList()
+        return when {
+            lines.any { it == "FIREWALL_OK" } -> null
+            lines.any { it == "NOT_ROOT" } -> "sem_root"
+            else -> "firewall_nao_confirmado"
+        }
     }
 
     // ================= Telemetria OEM (DataTrack -> nuvem) =================

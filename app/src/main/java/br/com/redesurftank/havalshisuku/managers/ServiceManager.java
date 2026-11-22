@@ -1485,14 +1485,18 @@ public class ServiceManager {
         // ato deliberado, com o carro estacionado — parado num semáforo o gesto poderia sair sem
         // querer, e manobrar produz seta-seta naturalmente.
         //
-        // Marcha ilegível conta como "não está em P": lado seguro. No pior caso o dono repete o
-        // gesto; sair sozinho na garagem de terceiros seria bem pior.
+        // Marcha ILEGÍVEL não bloqueia mais: era o que trancava o dono do lado de fora. Sem o canal
+        // de dados do carro (ex.: Shizuku caiu num reinício), a marcha não é lida — e nesse estado
+        // só os botões do volante chegam até aqui. Bloqueia apenas quando a marcha É lida e não é P.
         boolean inPark;
         try {
             String gear = getData(CarConstants.CAR_BASIC_GEAR_STATUS.getValue());
-            inPark = gear != null && "3".equals(gear.trim());   // 3 = P (ver getGearLabel)
+            String g = gear == null ? "" : gear.trim();
+            inPark = g.isEmpty() || "3".equals(g);   // 3 = P (ver getGearLabel)
+            if (g.isEmpty()) Log.w(TAG, "Sequencia de saida: marcha ilegivel; aceitando o passo");
         } catch (Exception e) {
-            inPark = false;
+            inPark = true;
+            Log.w(TAG, "Sequencia de saida: marcha ilegivel (" + e.getMessage() + "); aceitando o passo");
         }
         if (!inPark) {
             StealthExitSequence.reset();
@@ -2058,6 +2062,7 @@ public class ServiceManager {
         // Constant, so it is published rather than cached: every snapshot carries it.
         dispatchTelemetryOnly(AndroidAutoTelemetryKeys.API_VERSION, AndroidAutoTelemetryKeys.API_VERSION_VALUE);
         dispatchAppPreferences();
+        DashcamStatusPublisher.dispatchSnapshot();
         for (String key : AndroidAutoTelemetryKeys.SYNTHETIC_KEYS) {
             String value = dataCache.get(key);
             if (value != null) {

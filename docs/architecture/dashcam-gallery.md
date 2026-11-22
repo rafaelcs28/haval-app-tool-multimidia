@@ -120,3 +120,13 @@ salvar um `.TS`, `DashcamClipStore` faz um remux só da faixa de vídeo para `.m
 (`MediaExtractor` → `MediaMuxer`, sem recodificar; começa no primeiro quadro-chave). O áudio é
 descartado: o dono não grava áudio. Se o remux falhar, o `.TS` é mantido. O espaço exigido
 dobra durante a conversão. O "Enviar ao celular" entrega o `.mp4` (`video/mp4`).
+
+## Estado para o Haval 3D
+
+`DashcamStatusPublisher` consulta a câmera a cada 30 s (só leitura, mesmo `CAMERA_LOCK`) e
+publica no barramento público `com.haval.vehicle.EVENT_CHANGED`, só quando o valor muda e de novo
+em todo `REQUEST_SNAPSHOT`: `app.dashcam.state` (recording | paused | paused_auto | emergency |
+other_mode | unreachable | no_wifi | unknown), `app.dashcam.pause_reason` (charging | ready),
+`app.dashcam.profile`, `app.dashcam.free_mb` (último conhecido), `app.dashcam.saved_count`,
+`app.dashcam.saving` ("NN" | converting) e `app.dashcam.checked_at`. O toque no card abre
+`OpenDashcamActivity` (exportada, só abre a aba Dashcam; ignorada no Modo Concessionária).

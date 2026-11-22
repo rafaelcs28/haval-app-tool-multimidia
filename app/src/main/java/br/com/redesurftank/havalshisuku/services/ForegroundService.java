@@ -773,6 +773,8 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                             getApplicationContext(), ServiceManager.getInstance());
         }
         dashcamAutomationManager.start();
+        br.com.redesurftank.havalshisuku.managers.DashcamStatusPublisher.start(
+                getApplicationContext(), ServiceManager.getInstance());
         startCarPlaySystemUiIconWatchdogSafely("post-service-init");
         try {
             DisplayAppLauncher.INSTANCE.startAndroidAutoSteeringMediaFocusKeepAlive();
@@ -973,6 +975,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
             dashcamAutomationManager.stop();
             dashcamAutomationManager = null;
         }
+        br.com.redesurftank.havalshisuku.managers.DashcamStatusPublisher.stop();
         ServiceManager.getInstance().stopManagedBackgroundGuards(getApplicationContext());
         // Drop our cluster callback before the process goes away. The car's
         // ClusterService otherwise keeps dispatching to a dead binder and throws

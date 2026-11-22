@@ -53,6 +53,9 @@ class ConnectivityStatusProvider : ContentProvider() {
         return caller == null || caller == CONSUMER_PKG || caller == ctx.packageName
     }
 
+    /** Leitura (query) também para o shell do adb, só para diagnóstico; comandos continuam fechados. */
+    private fun authorizedRead(ctx: Context): Boolean = authorized(ctx) || callingPackage == "com.android.shell"
+
     override fun query(
             uri: Uri,
             projection: Array<out String>?,
@@ -61,7 +64,7 @@ class ConnectivityStatusProvider : ContentProvider() {
             sortOrder: String?
     ): Cursor {
         val ctx = context!!
-        if (!authorized(ctx)) return MatrixCursor(COLS, 0)
+        if (!authorizedRead(ctx)) return MatrixCursor(COLS, 0)
         val s = ConnectivityStatusManager.computeFresh(ctx)
         val prefs = App.getDeviceProtectedContext().getSharedPreferences("haval_prefs", Context.MODE_PRIVATE)
         val cur = MatrixCursor(COLS, 1)
@@ -82,7 +85,9 @@ class ConnectivityStatusProvider : ContentProvider() {
                 if (MobileDataManager.isAutoblockEnabled()) 1 else 0,
                 MobileDataManager.getAutoblockCapMb(),
                 MobileDataManager.getCycleDay(),
-                MobileDataManager.getMobileUsedMbThisCycle(ctx, System.currentTimeMillis()).toInt()
+                MobileDataManager.getMobileUsedMbThisCycle(ctx, System.currentTimeMillis()).toInt(),
+                when (MobileDataManager.isBlockEnforced()) { true -> 1; false -> 0; null -> -1 },
+                MobileDataManager.blockEnforceError()
         ))
         return cur
     }
@@ -339,7 +344,9 @@ class ConnectivityStatusProvider : ContentProvider() {
                 // Regras de corte + consumo do ciclo, pro EcoTrip LER por query() em vez de
                 // martelar call() a cada 4s (handoff mobileUsedMb).
                 "mobileManualBlock", "mobileBlockOnWifi", "mobileAutoblock",
-                "mobileLimitMb", "mobileCycleDay", "mobileUsedMb"
+                "mobileLimitMb", "mobileCycleDay", "mobileUsedMb",
+                // Corte VERIFICADO no sistema: 1 aplicado, 0 pedido e não aplicado, -1 nada pedido.
+                "mobileBlockEnforced", "mobileBlockError"
         )
     }
 }
