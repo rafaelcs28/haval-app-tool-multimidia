@@ -43,7 +43,11 @@ public final class DashcamClipStore {
      * Android refuses installs (and starts failing) near its low-storage threshold (~500 MB on
      * this head unit's 10 GB /data), so saving never leaves less than 1 GB free.
      */
-    private static final long FREE_SPACE_MARGIN = 1024L * 1024 * 1024;
+    /**
+     * Free space left after a save. Android refuses app updates (OTA) below ~500 MB, so keep a
+     * little above that; 1 GB refused clips with 1.1 GB free (2026-11-22).
+     */
+    static final long FREE_SPACE_MARGIN = 600L * 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 15_000;
 

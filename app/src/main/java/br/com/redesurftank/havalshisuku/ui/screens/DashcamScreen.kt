@@ -353,6 +353,7 @@ fun DashcamTab() {
                         override fun onFailed(name: String, error: String) {
                             stampStatus[name] = "carimbo falhou: " + when (error) {
                                 "sem_dados" -> "sem GPS e dados do carro para este horário"
+                                "no_space" -> "sem espaço na central (libere em Recursos → Limpar armazenamento)"
                                 "cancelled" -> "cancelado"
                                 else -> error
                             }
@@ -458,7 +459,7 @@ fun DashcamTab() {
 }
 
 private fun saveErrorText(error: String): String = when {
-    error == "no_space" -> "sem espaço na central"
+    error == "no_space" -> "sem espaço na central (libere em Recursos → Limpar armazenamento)"
     error == "wifi_unavailable" -> "Wi-Fi da dashcam não conectado"
     error == "cancelled" -> "cancelado"
     error == "truncated" -> "arquivo incompleto"

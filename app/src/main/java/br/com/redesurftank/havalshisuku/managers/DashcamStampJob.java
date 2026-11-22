@@ -72,6 +72,12 @@ public final class DashcamStampJob {
         File out = new File(clip.getParentFile(), stampedName(name));
         File part = new File(clip.getParentFile(), out.getName() + ".part");
         try {
+            // The stamped copy is about the original's size (re-encoded); keep the same margin as saving.
+            long needed = clip.length() + clip.length() / 3 + DashcamClipStore.FREE_SPACE_MARGIN;
+            if (clip.getParentFile() != null && clip.getParentFile().getUsableSpace() < needed) {
+                post(() -> listener.onFailed(name, "no_space"));
+                return;
+            }
             Long start = DashcamGpsTrack.clipStartUtcMs(name, ZoneId.systemDefault());
             if (start == null) {
                 post(() -> listener.onFailed(name, "nome_invalido"));
