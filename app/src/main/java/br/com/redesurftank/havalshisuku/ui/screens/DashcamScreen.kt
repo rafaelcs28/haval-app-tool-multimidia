@@ -1073,9 +1073,10 @@ private fun PlayerDialog(
                 // Video and GPS trail side by side; the video keeps 16:9 and never outgrows the screen.
                 val panelW = 300.dp
                 val videoW0 = maxWidth - panelW - 12.dp
-                val videoH = minOf(videoW0 * 9f / 16f, 500.dp)
+                val videoH = minOf(videoW0 * 9f / 16f, 540.dp)
                 val videoW = videoH * 16f / 9f
-                Row {
+                // Centred: the dialog is wider than video + panel on the 1920×720 head unit.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Box(Modifier.width(videoW).height(videoH), contentAlignment = Alignment.Center) {
                         AndroidView(
                             factory = { ctx ->
