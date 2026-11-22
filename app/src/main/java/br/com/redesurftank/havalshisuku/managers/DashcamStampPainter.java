@@ -89,10 +89,10 @@ public final class DashcamStampPainter {
         c.save();
         c.scale(s, s);
         c.translate(0, dy);
-        // Owner: smaller stamp (60 %), docked flush in the bottom corners and nearly opaque, so the
-        // left capsule hides the camera's own "4K / date" burn-in in the bottom-left corner.
+        // Owner: smaller stamp (60 %), sitting just above the camera's own "4K / date" burn-in in
+        // the bottom-left corner (it ends ~7 % above the bottom), so both stay readable.
         c.save();
-        c.translate(0, 1080);
+        c.translate(SIDE_MARGIN, BOTTOM_EDGE);
         c.scale(SIZE, SIZE);
         c.translate(-36, -1044);
         capsule(c, 36, 776, 640, 268, LEFT_RADII);
@@ -107,7 +107,7 @@ public final class DashcamStampPainter {
         drawAlerts(c, f);
         c.restore();
         c.save();
-        c.translate(dxR + 1920, 1080);
+        c.translate(dxR + 1920 - SIDE_MARGIN, BOTTOM_EDGE);
         c.scale(SIZE, SIZE);
         c.translate(-1884, -1044);
         capsule(c, 1084, 776, 800, 268, RIGHT_RADII);
@@ -446,15 +446,17 @@ public final class DashcamStampPainter {
 
     // ---- primitives ----
 
-    /** Rounded only on the corner that faces the picture; square where it meets the frame edges. */
-    private static final float[] LEFT_RADII = {0, 0, 30, 30, 0, 0, 0, 0};
-    private static final float[] RIGHT_RADII = {30, 30, 0, 0, 0, 0, 0, 0};
+    private static final float[] LEFT_RADII = {30, 30, 30, 30, 30, 30, 30, 30};
+    private static final float[] RIGHT_RADII = LEFT_RADII;
+    /** Capsule outer edges on the 1920×1080 grid: 22 px from the sides, bottom at y 1000, which
+     * clears the camera burn-in (y ≈ 1010–1070 at 1080p, x ≤ 14 % of the width). */
+    static final float SIDE_MARGIN = 22f;
+    static final float BOTTOM_EDGE = 1000f;
 
     private void capsule(Canvas c, float x, float y, float w, float h, float[] radii) {
         Path body = new Path();
         body.addRoundRect(new RectF(x, y, x + w, y + h), radii, Path.Direction.CW);
-        // 94 % opaque: dense enough to hide the camera's burn-in underneath.
-        fill.setShader(new LinearGradient(0, y, 0, y + h, 0xF01A1D24, 0xF0090B0E, Shader.TileMode.CLAMP));
+        fill.setShader(new LinearGradient(0, y, 0, y + h, 0xCC1A1D24, 0xCC090B0E, Shader.TileMode.CLAMP));
         c.drawPath(body, fill);
         fill.setShader(null);
         Path edge = new Path();
