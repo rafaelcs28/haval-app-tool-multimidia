@@ -42,6 +42,21 @@ class CarDataWriteReceiver : BroadcastReceiver() {
             Log.w(TAG, "Blocked oversized write for $key from $caller")
             return
         }
+        // HEV % to keep: same path as Impulse's own "Modo HEV" popup, which also stores it so the
+        // HEV-SOC monitor keeps it instead of putting the old value back.
+        if (key == "car.ev_setting.charge_soc_target_config") {
+            val pct = value.trim().toIntOrNull()
+            if (pct == null) {
+                Log.w(TAG, "Blocked non-numeric HEV SOC target from $caller")
+                return
+            }
+            try {
+                ServiceManager.getInstance().setHevSocTargetValue(pct)
+            } catch (t: Throwable) {
+                Log.w(TAG, "setHevSocTargetValue failed from $caller", t)
+            }
+            return
+        }
         try {
             ServiceManager.getInstance().updateData(key, value)
         } catch (t: Throwable) {
