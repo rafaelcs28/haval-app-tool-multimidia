@@ -296,15 +296,15 @@ fun DashcamTab() {
                 showSaved = false
                 showMap = false
             }
-            ViewTab("Mapa", selected = showMap) {
-                reloadSaved()
-                showSaved = false
-                showMap = true
-            }
             ViewTab("Salvos no carro (${savedFiles.size})", selected = showSaved) {
                 reloadSaved()
                 showSaved = true
                 showMap = false
+            }
+            ViewTab("Mapa", selected = showMap) {
+                reloadSaved()
+                showSaved = false
+                showMap = true
             }
         }
 
@@ -918,7 +918,8 @@ private fun AutomationSwitch(
     hint: String,
     key: SharedPreferencesKeys,
     prefs: android.content.SharedPreferences,
-    default: Boolean = false
+    // Every dashcam option is on until the user turns it off.
+    default: Boolean = true
 ) {
     var checked by remember { mutableStateOf(prefs.getBoolean(key.key, default)) }
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {

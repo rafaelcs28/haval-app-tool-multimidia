@@ -111,8 +111,9 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         handler.postDelayed(tick, PREF_CHANGE_DELAY_MS);
     }
 
+    /** Every dashcam option is on until the user turns it off. */
     private boolean pref(SharedPreferencesKeys key) {
-        return preferences.getBoolean(key.getKey(), false);
+        return preferences.getBoolean(key.getKey(), true);
     }
 
     private void tick() {

@@ -221,7 +221,7 @@ public final class DashcamStatusPublisher {
     private String pauseReason() {
         try {
             boolean chargingRule = preferences.getBoolean(
-                    SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.getKey(), false);
+                    SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.getKey(), true);
             String charging = serviceManager.getUpdatedData(CarConstants.CAR_EV_INFO_CHARGING_STATE.getValue());
             String speed = serviceManager.getUpdatedData(CarConstants.CAR_BASIC_VEHICLE_SPEED.getValue());
             if (DashcamChargingPausePolicy.decide(chargingRule, charging, speed)
@@ -229,7 +229,7 @@ public final class DashcamStatusPublisher {
                 return "charging";
             }
             boolean readyRule = preferences.getBoolean(
-                    SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY.getKey(), false);
+                    SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY.getKey(), true);
             String ready = serviceManager.getUpdatedData(CarConstants.CAR_BASIC_DRIVING_READY_STATE.getValue());
             if (DashcamRecordingPolicy.decideReady(readyRule, ready) == DashcamChargingPausePolicy.Action.PAUSE) {
                 return "ready";

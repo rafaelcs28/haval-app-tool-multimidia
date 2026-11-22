@@ -142,9 +142,9 @@ public final class DashcamChargingPauseManager
 
     private void evaluate() {
         DashcamChargingPausePolicy.Action action = DashcamRecordingPolicy.decide(
-                preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.getKey(), false),
+                preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_PAUSE_WHILE_CHARGING.getKey(), true),
                 chargingRaw, speedRaw,
-                preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY.getKey(), false),
+                preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_RECORD_ONLY_WHEN_READY.getKey(), true),
                 readyRaw);
         if (action == DashcamChargingPausePolicy.Action.HOLD) {
             scheduleRetry();
