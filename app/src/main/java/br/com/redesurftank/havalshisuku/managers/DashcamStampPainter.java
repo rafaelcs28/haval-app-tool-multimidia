@@ -45,6 +45,8 @@ public final class DashcamStampPainter {
         }
     }
 
+    /** Overall stamp size relative to the design grid (spec at 100 %). */
+    static final float SIZE = 0.6f;
     private static final int WHITE = 0xFFFFFFFF;
     private static final int W2 = 0x9EFFFFFF;
     private static final int LABEL = 0x8CFFFFFF;
@@ -87,6 +89,9 @@ public final class DashcamStampPainter {
         c.save();
         c.scale(s, s);
         c.translate(0, dy);
+        // Owner asked for a smaller stamp: at 60 % both capsules sit on the bonnet, clear of the road.
+        c.save();
+        c.scale(SIZE, SIZE, 0, 1080);
         capsule(c, 36, 776, 640, 268);
         if (f.event) {
             stroke.setStrokeWidth(3);
@@ -95,8 +100,10 @@ public final class DashcamStampPainter {
         }
         drawLeft(c, f);
         drawAlerts(c, f);
+        c.restore();
         c.save();
         c.translate(dxR, 0);
+        c.scale(SIZE, SIZE, 1920, 1080);
         capsule(c, 1084, 776, 800, 268);
         drawMap(c, f, map, fixes);
         drawRight(c, f, address, extras);
@@ -106,6 +113,7 @@ public final class DashcamStampPainter {
             c.save();
             c.scale(s, s);
             c.translate(dxR, 0);
+            c.scale(SIZE, SIZE, 1920, 0);
             drawEvent(c);
             c.restore();
         }
