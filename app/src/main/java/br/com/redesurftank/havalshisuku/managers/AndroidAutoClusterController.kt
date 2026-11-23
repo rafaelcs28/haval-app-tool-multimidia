@@ -229,6 +229,15 @@ object AndroidAutoClusterController {
             mainHandler.removeCallbacks(navigationEndedRunnable)
             if (!navigationActive.getAndSet(true)) {
                 Log.w(TAG, "CLUSTER navigation started")
+                // A new trip is a fresh demand: forget an old failed request and the spent budget,
+                // so the map is requested again instead of staying blank until a reboot.
+                if (!surfaceAttached.get()) {
+                    demandEpoch.incrementAndGet()
+                    recoveryCount = 0
+                    lastRecoveryAtMs = 0L
+                    recoveryInFlight = false
+                    recoveryDemandEpoch = -1L
+                }
                 if (clusterRequested.get()) attachIfSessionAllows("navigation_started")
             }
             if (AndroidAutoSessionTelemetry.shouldReviveSessionFromNavigation(
@@ -389,6 +398,14 @@ object AndroidAutoClusterController {
                     "healthy_ms" to (nowMs - lastRecoveryAtMs),
                     "frame_age_ms" to (nowMs - lastFrameAtMs)
                 )
+            )
+            recoveryCount = 0
+            lastRecoveryAtMs = 0L
+        }
+        if (AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(nowMs, lastRecoveryAtMs, recoveryCount)) {
+            ClusterPersistentEventLogger.log(
+                "aa_cluster_recovery_budget_cooldown_rearmed",
+                mapOf("previous_recovery_count" to recoveryCount, "since_ms" to (nowMs - lastRecoveryAtMs))
             )
             recoveryCount = 0
             lastRecoveryAtMs = 0L

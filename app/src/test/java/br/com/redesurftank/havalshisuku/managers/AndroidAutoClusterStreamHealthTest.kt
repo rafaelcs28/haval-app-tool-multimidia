@@ -21,8 +21,8 @@ class AndroidAutoClusterStreamHealthTest {
     }
 
     @Test
-    fun `startup and ownership failures do not admit decoder recovery`() {
-        assertFalse(AndroidAutoClusterStreamHealth.nextDecoderFailurePending(
+    fun `decoder failure before the first frame is recoverable, ownership failures are not`() {
+        assertTrue(AndroidAutoClusterStreamHealth.nextDecoderFailurePending(
             false, AaClusterProtocol.FAILED, "CLUSTER decoder/config failed", false
         ))
         for (reason in listOf("Service died; consumer remains quarantined",
@@ -202,5 +202,15 @@ class AndroidAutoClusterStreamHealthTest {
     fun `recovery in flight expires only after its bounded timeout`() {
         assertFalse(AndroidAutoClusterStreamHealth.isRecoveryTimedOut(34_999L, 20_000L))
         assertTrue(AndroidAutoClusterStreamHealth.isRecoveryTimedOut(35_000L, 20_000L))
+    }
+
+    @Test
+    fun `exhausted recovery budget re-arms after the cooldown only`() {
+        val max = AndroidAutoClusterStreamHealth.MAX_RECOVERIES_PER_BURST
+        val cool = AndroidAutoClusterStreamHealth.EXHAUSTED_BUDGET_COOLDOWN_MS
+        assertFalse(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool - 1, 1_000L, max))
+        assertTrue(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool, 1_000L, max))
+        assertFalse(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool, 1_000L, max - 1))
+        assertFalse(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool, 0L, max))
     }
 }

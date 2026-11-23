@@ -9,15 +9,22 @@ internal object AndroidAutoClusterStreamHealth {
     const val HEALTHY_BUDGET_RESET_MS = 60_000L
     const val HEALTHY_FRAME_MAX_AGE_MS = 3_000L
     const val MAX_RECOVERIES_PER_BURST = 2
+    /** An exhausted burst is re-armed after this long, so a stream lost while driving comes back. */
+    const val EXHAUSTED_BUDGET_COOLDOWN_MS = 180_000L
     const val MIN_MOVING_SPEED_KMH = 3f
     private const val DECODER_FAILURE = "CLUSTER decoder/config failed"
     private const val FAILED_REQUEST = "CLUSTER request failed"
 
-    /** Only a known decoder failure after LIVE may recover; ownership errors stay terminal. */
+    /**
+     * A known decoder failure may recover, also before the first frame (it happened right after an
+     * app update and left the cluster blank until a reboot); the bounded budget and backoff keep it
+     * from looping. Ownership errors stay terminal.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun nextDecoderFailurePending(pending: Boolean, state: Int, reason: String, wasLive: Boolean): Boolean {
         if (state != AaClusterProtocol.FAILED) return false
         return when (reason) {
-            DECODER_FAILURE -> pending || wasLive
+            DECODER_FAILURE -> true
             FAILED_REQUEST -> pending // Service repeats this for the same failed request.
             else -> false
         }
@@ -67,6 +74,10 @@ internal object AndroidAutoClusterStreamHealth {
         if (nowMs < lastRecoveryAtMs || nowMs - lastRecoveryAtMs < HEALTHY_BUDGET_RESET_MS) return false
         return nowMs >= lastFrameAtMs && nowMs - lastFrameAtMs <= HEALTHY_FRAME_MAX_AGE_MS
     }
+
+    fun shouldRearmExhaustedBudget(nowMs: Long, lastRecoveryAtMs: Long, recoveryCount: Int): Boolean =
+        recoveryCount >= MAX_RECOVERIES_PER_BURST && lastRecoveryAtMs > 0L && nowMs >= lastRecoveryAtMs &&
+            nowMs - lastRecoveryAtMs >= EXHAUSTED_BUDGET_COOLDOWN_MS
 
     fun isRecoveryTimedOut(nowMs: Long, recoveryStartedAtMs: Long): Boolean =
         recoveryStartedAtMs > 0L && nowMs >= recoveryStartedAtMs &&
