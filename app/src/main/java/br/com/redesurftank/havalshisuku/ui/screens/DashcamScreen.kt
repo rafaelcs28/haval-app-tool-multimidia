@@ -890,9 +890,20 @@ private fun CameraNetworkCard() {
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(manager.isBusy) }
     var result by remember { mutableStateOf<String?>(null) }
+    val statePrefs = remember {
+        App.getDeviceProtectedContext().getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE)
+    }
+    var lastAuto by remember { mutableStateOf<String?>(null) }
 
     fun refreshStatus() {
         manager.readStatus { status = it.text }
+        val at = statePrefs.getLong(DashcamAutomationManager.KEY_AUTO_STATION_LAST_RESULT_AT, 0L)
+        val text = statePrefs.getString(DashcamAutomationManager.KEY_AUTO_STATION_LAST_RESULT_TEXT, null)
+        lastAuto = if (at <= 0L || text.isNullOrBlank()) null else {
+            val time = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale("pt", "BR")).format(java.util.Date(at))
+            val ok = statePrefs.getBoolean(DashcamAutomationManager.KEY_AUTO_STATION_LAST_RESULT_OK, false)
+            "Última troca automática ($time): " + (if (ok) "" else "falhou. ") + text
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -1002,13 +1013,18 @@ private fun CameraNetworkCard() {
             Spacer(Modifier.height(12.dp))
             Notice(it)
         }
+        lastAuto?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = ImpTokens.TextMuted, fontSize = ImpulseTextSizes.BodyCompact)
+        }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             AutomationSwitch(
                 modifier = Modifier.weight(1f),
-                title = "Fazer isso sozinho a cada partida",
-                hint = "Com a central no Wi-Fi da câmera e a rede acima ao alcance, leva a câmera para ela " +
-                    "(uma tentativa por partida). A câmera costuma voltar ao Wi-Fi próprio quando o carro é desligado.",
+                title = "Fazer isso sozinho",
+                hint = "Confere a cada minuto: com a central no Wi-Fi da câmera e a rede acima ao alcance, leva a " +
+                    "câmera para ela; se a central entrou na rede antes da câmera, passa pelo Wi-Fi da câmera e a " +
+                    "leva. A câmera volta ao Wi-Fi próprio quando o carro é desligado.",
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION,
                 prefs = prefs,
                 default = false

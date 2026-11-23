@@ -39,6 +39,8 @@ public final class DashcamNetworkManager {
     private static final long RETRY_ENABLE_MS = 10_000L;
     private static final long POLL_MS = 1_500L;
     private static final long SCAN_SETTLE_MS = 3_000L;
+    private static final int HEARTBEAT_ATTEMPTS = 6;
+    private static final long HEARTBEAT_RETRY_MS = 3_000L;
 
     private static volatile DashcamNetworkManager instance;
 
@@ -224,8 +226,16 @@ public final class DashcamNetworkManager {
 
         if (!lock()) return fail("to_station", "camera_busy", "A câmera está ocupada. Tente de novo.");
         try {
-            DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> heartbeat =
-                    novatek.queryAt(DashcamCameraHost.AP_HOST, String.valueOf(DashcamNovatekProtocol.CMD_HEARTBEAT));
+            // Right after the head unit joins the AP (or the camera boots) its HTTP server can take
+            // a few seconds to answer: retry the heartbeat before giving up.
+            DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> heartbeat = null;
+            for (int attempt = 1; attempt <= HEARTBEAT_ATTEMPTS; attempt++) {
+                heartbeat = novatek.queryAt(DashcamCameraHost.AP_HOST,
+                        String.valueOf(DashcamNovatekProtocol.CMD_HEARTBEAT));
+                if (heartbeat.isSuccess()) break;
+                log("to_station", "heartbeat_retry=" + attempt + " error=" + heartbeat.getError());
+                if (attempt < HEARTBEAT_ATTEMPTS) sleep(HEARTBEAT_RETRY_MS);
+            }
             if (!heartbeat.isSuccess()) {
                 return fail("to_station", "heartbeat_" + heartbeat.getError(), "A câmera não respondeu.");
             }
@@ -252,8 +262,9 @@ public final class DashcamNetworkManager {
         String host = discoverOnStation(CAMERA_DISCOVERY_TIMEOUT_MS);
         if (host == null) {
             return fail("to_station", "camera_not_found",
-                    "A central está na rede " + ssid + ", mas a câmera não foi encontrada. "
-                            + "Se ela não aparecer, desligar e ligar o carro a devolve ao Wi-Fi próprio.");
+                    "A câmera saiu do Wi-Fi próprio, mas não apareceu na rede " + ssid + ". Confira se a rede "
+                            + "aceita novos aparelhos (no iPhone, deixe a tela Acesso Pessoal aberta). Desligar e "
+                            + "ligar o carro devolve a câmera ao Wi-Fi próprio.");
         }
         log("to_station", "done");
         return Result.ok("Câmera na rede " + ssid + " (" + host + ").");

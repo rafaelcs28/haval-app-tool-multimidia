@@ -65,6 +65,10 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     static final String KEY_AUTO_STATION_LAST_ATTEMPT = "auto_station_last_attempt_ms";
     /** Wall-clock ms of the last manual "back to the camera Wi-Fi"; holds the automatic mode off. */
     public static final String KEY_AUTO_STATION_PAUSED_AT = "auto_station_paused_at_ms";
+    /** Last automatic switch outcome, shown on the "Rede da câmera" card. */
+    public static final String KEY_AUTO_STATION_LAST_RESULT_AT = "auto_station_last_result_at_ms";
+    public static final String KEY_AUTO_STATION_LAST_RESULT_OK = "auto_station_last_result_ok";
+    public static final String KEY_AUTO_STATION_LAST_RESULT_TEXT = "auto_station_last_result_text";
 
     public DashcamAutomationManager(Context context, ServiceManager serviceManager) {
         this.context = context.getApplicationContext();
@@ -240,6 +244,11 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
                 ? network.moveToStationBlocking("auto")
                 : network.hopToApThenMoveBlocking();
         log("auto_station", "ok=" + result.ok + " code=" + result.code);
+        statePreferences.edit()
+                .putLong(KEY_AUTO_STATION_LAST_RESULT_AT, now)
+                .putBoolean(KEY_AUTO_STATION_LAST_RESULT_OK, result.ok)
+                .putString(KEY_AUTO_STATION_LAST_RESULT_TEXT, result.message)
+                .apply();
         if (result.ok) {
             statePreferences.edit().remove(KEY_AUTO_STATION_LAST_ATTEMPT).apply();
         } else {
