@@ -24,7 +24,7 @@ public final class DashcamStationPolicy {
     /** "Trazer câmera para o Wi-Fi próprio" holds the automatic mode off for this long. */
     static final long AUTO_PAUSE_AFTER_RETURN_MS = 30L * 60 * 1000;
 
-    enum AutoAction { NONE, MOVE_TO_STATION }
+    enum AutoAction { NONE, MOVE_TO_STATION, HOP_TO_AP_THEN_MOVE }
 
     private DashcamStationPolicy() {}
 
@@ -113,21 +113,29 @@ public final class DashcamStationPolicy {
     }
 
     /**
-     * Automatic mode, checked every {@link #AUTO_CHECK_INTERVAL_MS}. It acts only while the head unit
-     * is on the camera's own Wi-Fi and the station network is in range; anywhere else it does
-     * nothing (owner's rule). A failed attempt waits {@link #AUTO_RETRY_WINDOW_MS}; a manual
+     * Automatic mode, checked every {@link #AUTO_CHECK_INTERVAL_MS}. Two cases only (owner's rules):
+     * <ul>
+     *   <li>head unit on the camera's own Wi-Fi and the station SSID in range: move the camera;</li>
+     *   <li>head unit on the station network, the camera not answering there and the camera's own
+     *       Wi-Fi in range (the head unit joined the station before the camera was moved): hop to the
+     *       camera Wi-Fi and move it.</li>
+     * </ul>
+     * Anywhere else nothing happens. A failed attempt waits {@link #AUTO_RETRY_WINDOW_MS}; a manual
      * "back to the camera Wi-Fi" holds it off for {@link #AUTO_PAUSE_AFTER_RETURN_MS}.
      *
      * @param msSinceLastAttempt -1 when none (a negative value from a clock change also counts as none)
      * @param msSinceManualReturn -1 when none
      */
     static AutoAction decideAuto(boolean enabled, DashcamCameraHost.Place place, boolean stationVisible,
-            long msSinceLastAttempt, long msSinceManualReturn) {
+            boolean cameraFoundOnStation, boolean apVisible, long msSinceLastAttempt, long msSinceManualReturn) {
         if (!enabled) return AutoAction.NONE;
-        if (place != DashcamCameraHost.Place.CAMERA_AP || !stationVisible) return AutoAction.NONE;
         if (msSinceLastAttempt >= 0 && msSinceLastAttempt < AUTO_RETRY_WINDOW_MS) return AutoAction.NONE;
         if (msSinceManualReturn >= 0 && msSinceManualReturn < AUTO_PAUSE_AFTER_RETURN_MS) return AutoAction.NONE;
-        return AutoAction.MOVE_TO_STATION;
+        if (place == DashcamCameraHost.Place.CAMERA_AP && stationVisible) return AutoAction.MOVE_TO_STATION;
+        if (place == DashcamCameraHost.Place.STATION && !cameraFoundOnStation && apVisible) {
+            return AutoAction.HOP_TO_AP_THEN_MOVE;
+        }
+        return AutoAction.NONE;
     }
 
     /** Status line of the "Rede da câmera" card. */

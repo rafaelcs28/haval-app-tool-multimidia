@@ -161,6 +161,28 @@ public final class DashcamNetworkManager {
         }
     }
 
+    /**
+     * Automatic mode only: the head unit is on the station network, the camera did not answer there
+     * and its own AP is in range (the car started and the head unit joined the station network
+     * before the camera was moved). Hop to the camera AP, then move the camera again.
+     */
+    Result hopToApThenMoveBlocking() {
+        requireWorkerThread();
+        if (!busy.compareAndSet(false, true)) return Result.fail("busy", "Já existe uma troca de rede em andamento.");
+        try {
+            String apSsid = DashcamCameraHost.cameraApSsid();
+            if (apSsid == null) return Result.fail("ap_unknown", "Wi-Fi próprio da câmera ainda não conhecido.");
+            log("hop", "connect_ap");
+            if (!joinHeadUnit(apSsid, null, AP_RETURN_TIMEOUT_MS, this::cameraAnswersOnAp)) {
+                log("hop", "failed=ap_join");
+                return Result.fail("ap_join", "A central não voltou ao Wi-Fi da câmera.");
+            }
+            return moveToStationLocked("auto_hop");
+        } finally {
+            busy.set(false);
+        }
+    }
+
     Result returnToApBlocking(String trigger) {
         requireWorkerThread();
         if (!busy.compareAndSet(false, true)) return Result.fail("busy", "Já existe uma troca de rede em andamento.");

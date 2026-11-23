@@ -76,24 +76,32 @@ public class DashcamStationPolicyTest {
     }
 
     @Test
-    public void autoActsOnlyOnTheCameraWifiWithTheStationInRange() {
-        assertEquals(AutoAction.MOVE_TO_STATION, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, -1, -1));
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(false, Place.CAMERA_AP, true, -1, -1));
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, false, -1, -1));
-        // Off the camera Wi-Fi: nothing at all (no hop back).
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.STATION, true, -1, -1));
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.OTHER, true, -1, -1));
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.NO_WIFI, true, -1, -1));
+    public void autoMovesFromTheCameraWifiWithTheStationInRange() {
+        assertEquals(AutoAction.MOVE_TO_STATION, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, false, false, -1, -1));
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(false, Place.CAMERA_AP, true, false, false, -1, -1));
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, false, false, false, -1, -1));
+    }
+
+    @Test
+    public void autoHopsBackOnlyWhenTheCameraIsMissingAndItsWifiIsInRange() {
+        assertEquals(AutoAction.HOP_TO_AP_THEN_MOVE, DashcamStationPolicy.decideAuto(true, Place.STATION, false, false, true, -1, -1));
+        // Camera already on the station network: nothing to do.
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.STATION, false, true, true, -1, -1));
+        // Camera Wi-Fi not in range: nothing.
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.STATION, false, false, false, -1, -1));
+        // Other networks / no Wi-Fi: never.
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.OTHER, true, false, true, -1, -1));
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.NO_WIFI, true, false, true, -1, -1));
     }
 
     @Test
     public void autoWaitsAfterAFailureAndAfterAManualReturn() {
         long retry = DashcamStationPolicy.AUTO_RETRY_WINDOW_MS;
         long pause = DashcamStationPolicy.AUTO_PAUSE_AFTER_RETURN_MS;
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, retry - 1, -1));
-        assertEquals(AutoAction.MOVE_TO_STATION, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, retry, -1));
-        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, -1, pause - 1));
-        assertEquals(AutoAction.MOVE_TO_STATION, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, -1, pause));
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, false, false, retry - 1, -1));
+        assertEquals(AutoAction.MOVE_TO_STATION, DashcamStationPolicy.decideAuto(true, Place.CAMERA_AP, true, false, false, retry, -1));
+        assertEquals(AutoAction.NONE, DashcamStationPolicy.decideAuto(true, Place.STATION, false, false, true, -1, pause - 1));
+        assertEquals(AutoAction.HOP_TO_AP_THEN_MOVE, DashcamStationPolicy.decideAuto(true, Place.STATION, false, false, true, -1, pause));
         assertEquals(60_000L, DashcamStationPolicy.AUTO_CHECK_INTERVAL_MS);
         assertEquals(5L * 60 * 1000, retry);
     }

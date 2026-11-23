@@ -254,8 +254,10 @@ Permissões novas: `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE` (SSID e varredura ta
 localização, já concedida para o GPS).
 
 ### Modo automático e comandos por adb (187)
-- O automático tem a sua própria checagem **a cada 1 min** e só age com a central **no Wi-Fi da câmera** e o
-  SSID configurado visível; fora disso não faz nada (sem o "pulo de volta" da 185). Falhou: espera 5 min.
+- O automático tem a sua própria checagem **a cada 1 min** e age em dois casos só: central **no Wi-Fi da
+  câmera** com o SSID configurado visível (leva a câmera); ou central **no SSID configurado**, câmera sem
+  responder ali e o **Wi-Fi da câmera visível** (a central entrou na rede antes da câmera: pula para o Wi-Fi
+  da câmera e leva a câmera, 188). Em qualquer outra rede, nada. Falhou: espera 5 min.
   "Trazer câmera para o Wi-Fi próprio" (card ou adb) segura o automático por 30 min.
 - Comandos pela mesma entrada protegida (DUMP): `--es command move` (levar) e `--es command return`
   (trazer). Respondem "started"; o resultado sai no log `DashcamNetwork` e no card.

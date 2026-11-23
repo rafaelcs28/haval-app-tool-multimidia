@@ -195,35 +195,50 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     }
 
     /**
-     * "Fazer isso sozinho a cada partida" (off by default): every minute, only while the head unit
-     * is on the camera's own Wi-Fi and the station SSID is in range, move the camera there. Off the
-     * camera Wi-Fi it does nothing. A failed attempt waits 5 min; a manual return holds it 30 min
-     * ({@link DashcamStationPolicy#decideAuto}).
+     * "Fazer isso sozinho a cada partida" (off by default), every minute: on the camera's own Wi-Fi
+     * with the station SSID in range, move the camera; on the station network without the camera but
+     * with the camera Wi-Fi in range, hop there and move it. Anywhere else nothing. A failed attempt
+     * waits 5 min; a manual return holds it 30 min ({@link DashcamStationPolicy#decideAuto}).
      */
     private void maybeAutoStation() {
         if (!preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION.getKey(), false)) return;
         String ssid = DashcamCameraHost.stationSsid();
         if (ssid == null) return;
-        // Owner's rule: act only while the head unit is on the camera's own Wi-Fi; anywhere else, nothing.
+        // Owner's rules: only on the camera's own Wi-Fi or on the station network; anywhere else, nothing.
         DashcamCameraHost.Place place = DashcamCameraHost.place(context);
-        if (place != DashcamCameraHost.Place.CAMERA_AP) return;
+        if (place != DashcamCameraHost.Place.CAMERA_AP && place != DashcamCameraHost.Place.STATION) return;
         long now = System.currentTimeMillis();
         long sinceAttempt = since(statePreferences.getLong(KEY_AUTO_STATION_LAST_ATTEMPT, 0L), now);
         long sinceReturn = since(statePreferences.getLong(KEY_AUTO_STATION_PAUSED_AT, 0L), now);
         DashcamNetworkManager network = DashcamNetworkManager.getInstance(context);
         if (network.isBusy()) return;
-        // Cheap guards first, the Wi-Fi scan last.
-        if (DashcamStationPolicy.decideAuto(true, place, true, sinceAttempt, sinceReturn)
-                == DashcamStationPolicy.AutoAction.NONE) {
+        // Cheap guards first (timers), then the camera probe / Wi-Fi scan.
+        if (DashcamStationPolicy.decideAuto(true, DashcamCameraHost.Place.CAMERA_AP, true, false, false,
+                sinceAttempt, sinceReturn) == DashcamStationPolicy.AutoAction.NONE) {
             return;
         }
-        boolean stationVisible = network.isVisible(ssid, true);
-        if (DashcamStationPolicy.decideAuto(true, place, stationVisible, sinceAttempt, sinceReturn)
-                == DashcamStationPolicy.AutoAction.NONE) {
-            return;
+        boolean stationVisible = false;
+        boolean cameraFound = false;
+        boolean apVisible = false;
+        if (place == DashcamCameraHost.Place.CAMERA_AP) {
+            stationVisible = network.isVisible(ssid, true);
+        } else {
+            if (!lock()) return;
+            try {
+                cameraFound = DashcamCameraHost.resolve(context, true, false, novatek::isNovatekAt) != null;
+            } finally {
+                DashcamHisiliconClient.CAMERA_LOCK.unlock();
+            }
+            String apSsid = DashcamCameraHost.cameraApSsid();
+            if (!cameraFound && apSsid != null) apVisible = network.isVisible(apSsid, true);
         }
-        log("auto_station", "action=move");
-        DashcamNetworkManager.Result result = network.moveToStationBlocking("auto");
+        DashcamStationPolicy.AutoAction action = DashcamStationPolicy.decideAuto(true, place,
+                stationVisible, cameraFound, apVisible, sinceAttempt, sinceReturn);
+        if (action == DashcamStationPolicy.AutoAction.NONE) return;
+        log("auto_station", "action=" + action);
+        DashcamNetworkManager.Result result = action == DashcamStationPolicy.AutoAction.MOVE_TO_STATION
+                ? network.moveToStationBlocking("auto")
+                : network.hopToApThenMoveBlocking();
         log("auto_station", "ok=" + result.ok + " code=" + result.code);
         if (result.ok) {
             statePreferences.edit().remove(KEY_AUTO_STATION_LAST_ATTEMPT).apply();
