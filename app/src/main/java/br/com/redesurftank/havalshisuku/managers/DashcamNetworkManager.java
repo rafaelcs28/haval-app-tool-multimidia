@@ -236,7 +236,10 @@ public final class DashcamNetworkManager {
         String invalid = DashcamStationPolicy.validate(ssid, password);
         if (invalid != null) return fail("to_station", invalid, DashcamStationPolicy.validationMessage(invalid));
         if (ssid.equals(wifi.ssid)) return fail("to_station", "same_network", "Essa é a rede da própria câmera.");
-        if (!isVisible(ssid, true)) {
+        // On a hop the head unit has just left the station network: skip the 3 s scan, Android
+        // takes the head unit back to the station network a few seconds after it joins the AP.
+        boolean hop = "auto_hop".equals(trigger);
+        if (!hop && !isVisible(ssid, true)) {
             return fail("to_station", "station_not_visible", "A rede " + ssid + " não está ao alcance da central.");
         }
 
@@ -245,14 +248,16 @@ public final class DashcamNetworkManager {
             // Right after the head unit joins the AP (or the camera boots) its HTTP server can take
             // a few seconds to answer: retry the heartbeat before giving up.
             DashcamHisiliconClient.Result<DashcamNovatekProtocol.Reply> heartbeat = null;
-            for (int attempt = 1; attempt <= HEARTBEAT_ATTEMPTS; attempt++) {
+            // A hop only got here because the camera just answered on the AP: no heartbeat round.
+            int attempts = hop ? 0 : HEARTBEAT_ATTEMPTS;
+            for (int attempt = 1; attempt <= attempts; attempt++) {
                 heartbeat = novatek.queryAt(DashcamCameraHost.AP_HOST,
                         String.valueOf(DashcamNovatekProtocol.CMD_HEARTBEAT));
                 if (heartbeat.isSuccess()) break;
                 log("to_station", "heartbeat_retry=" + attempt + " error=" + heartbeat.getError());
                 if (attempt < HEARTBEAT_ATTEMPTS) sleep(HEARTBEAT_RETRY_MS);
             }
-            if (!heartbeat.isSuccess()) {
+            if (heartbeat != null && !heartbeat.isSuccess()) {
                 return fail("to_station", "heartbeat_" + heartbeat.getError(), "A câmera não respondeu.");
             }
             // The MAC is what finds the camera on the other network: learn it now.
