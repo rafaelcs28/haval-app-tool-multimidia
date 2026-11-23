@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Owns local preparation, never the lifetime of published OEM callbacks. */
 object CarPlayBridgeBootstrapManager {
     private const val TAG = "CarPlayBridgeBoot"
+    private val REVISION_DIR = Regex("[0-9]+-[a-f0-9]{12}-[a-f0-9]{12}")
     private const val ENABLED = "carplayBridgeAutomaticEnabled"
     private const val INPUT = "/data/local/tmp/impulse-carplay-input"
     private const val GATE = "persist.haval.carplay.experimental_cold_hook"
@@ -396,6 +397,7 @@ object CarPlayBridgeBootstrapManager {
         val directory = "$ROOT/versions/$revision"
         check(metadata.getString("remoteDirectory") == directory)
         val source = File(app.filesDir, "carplay-bridge/$revision").apply { mkdirs() }
+        pruneLocalRevisions(File(app.filesDir, "carplay-bridge"), revision)
         val files = metadata.getJSONArray("files")
         check(metadata.getString("policyMode") == CarPlayResidentProof.POLICY_MODE &&
             metadata.getString("patchProfile") == CarPlayResidentProof.PATCH_PROFILE)
@@ -667,6 +669,36 @@ object CarPlayBridgeBootstrapManager {
             "chown 0:0 ${q("$temporary/cpbridge-inject")}; chmod 500 ${q("$temporary/cpbridge-inject")}; mv ${q(temporary)} ${q(bundle.directory)} || exit 1; fi; " +
             "mkdir -p ${q(INPUT)}; chown ${Process.myUid()}:1000 ${q(INPUT)}; chmod 750 ${q(INPUT)}", 15_000)
         installedRevision = bundle.revision
+        pruneRootRevisions(bundle.revision)
+    }
+
+    /**
+     * Each Impulse version extracts its ~56 MB bridge into a new folder named after its revision;
+     * only the current one is ever used (the manifest is pinned to VERSION_CODE). Drop the others.
+     */
+    private fun pruneLocalRevisions(parent: File, keep: String) {
+        runCatching {
+            parent.listFiles()?.forEach { child ->
+                if (child.name != keep && child.name.matches(REVISION_DIR)) child.deleteRecursively()
+            }
+        }.onFailure { Log.w(TAG, "local bridge prune failed", it) }
+    }
+
+    /** Root-side twin of [pruneLocalRevisions]; a folder still mapped by any process is kept. */
+    private fun pruneRootRevisions(keep: String) {
+        runCatching {
+            root.run(script("""
+                cd ${q("$ROOT/versions")} || exit 0
+                for d in *; do
+                  [ -d "§d" ] && [ ! -L "§d" ] || continue
+                  [ "§d" = ${q(keep)} ] && continue
+                  case "§d" in [0-9]*-*) ;; *) continue;; esac
+                  grep -qs ${q("$ROOT/versions/")}"§d" /proc/[0-9]*/maps && continue
+                  rm -rf -- ${q("$ROOT/versions/")}"§d"
+                done
+                exit 0
+            """), 30_000)
+        }.onFailure { Log.w(TAG, "root bridge prune failed", it) }
     }
 
     private fun observe(bundle: Payload, minimal: Boolean = false, includeVisuals: Boolean = !minimal,

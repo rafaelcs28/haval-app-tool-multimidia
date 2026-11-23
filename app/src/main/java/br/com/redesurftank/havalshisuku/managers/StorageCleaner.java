@@ -92,6 +92,9 @@ public final class StorageCleaner {
     public static List<Entry> scan() {
         List<Entry> entries = new ArrayList<>();
         walk(new File(SHARED_ROOT), 0, entries);
+        // The Download folder is listed whole (any size): files there pile up and other apps
+        // rarely offer a way to remove them.
+        walkAll(new File(SHARED_ROOT, "Download"), 0, entries);
         if (ShizukuUtils.isShizukuAvailable()) {
             String out = ShizukuUtils.runCommandAndGetOutput(new String[] {
                     "sh", "-c", "for f in " + TMP_ROOT + "/* " + TMP_ROOT + "/.[!.]*; do "
@@ -115,7 +118,30 @@ public final class StorageCleaner {
             }
             if (child.isDirectory()) {
                 walk(child, depth + 1, out);
-            } else if (child.isFile() && child.length() >= MIN_SIZE_BYTES) {
+            } else if (child.isFile() && child.length() >= MIN_SIZE_BYTES && !isInDownload(child)) {
+                out.add(new Entry(child.getAbsolutePath(), child.length(), child.lastModified(), false));
+            }
+        }
+    }
+
+    private static boolean isInDownload(File file) {
+        return file.getAbsolutePath().startsWith(SHARED_ROOT + "/Download/");
+    }
+
+    /** Every regular file under {@code dir}, whatever its size (used for Download). */
+    private static void walkAll(File dir, int depth, List<Entry> out) {
+        if (depth > MAX_DEPTH) return;
+        File[] children = dir.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            try {
+                if (!child.getCanonicalPath().equals(child.getAbsolutePath())) continue;
+            } catch (Exception e) {
+                continue;
+            }
+            if (child.isDirectory()) {
+                walkAll(child, depth + 1, out);
+            } else if (child.isFile()) {
                 out.add(new Entry(child.getAbsolutePath(), child.length(), child.lastModified(), false));
             }
         }
