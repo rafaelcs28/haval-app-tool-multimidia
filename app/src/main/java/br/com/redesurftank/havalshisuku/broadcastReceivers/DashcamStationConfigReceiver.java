@@ -23,6 +23,9 @@ import br.com.redesurftank.havalshisuku.models.SharedPreferencesKeys;
  *   --es ssid NOME --es password SENHA --es auto 1
  * </pre>
  *
+ * {@code --es command move} / {@code --es command return} start a camera move / return (in the
+ * background; the result goes to the log and the card).
+ *
  * {@code ssid} and {@code password} go together and are validated with
  * {@link DashcamStationPolicy#validate}; {@code auto} (boolean or "1"/"true"/"0"/"false") sets
  * "Fazer isso sozinho a cada partida". Values land in the same prefs the card reads. The password
@@ -34,12 +37,19 @@ public final class DashcamStationConfigReceiver extends BroadcastReceiver {
     public static final String EXTRA_SSID = "ssid";
     public static final String EXTRA_PASSWORD = "password";
     public static final String EXTRA_AUTO = "auto";
+    /** "move" (camera to the station network) or "return" (back to its own Wi-Fi); runs in background. */
+    public static final String EXTRA_COMMAND = "command";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null || !ACTION.equals(intent.getAction())) return;
         try {
             Bundle extras = intent.getExtras();
+            Object commandValue = extras == null ? null : extras.get(EXTRA_COMMAND);
+            if (commandValue != null) {
+                runCommand(context, String.valueOf(commandValue).trim());
+                return;
+            }
             Object ssidValue = extras == null ? null : extras.get(EXTRA_SSID);
             Object passwordValue = extras == null ? null : extras.get(EXTRA_PASSWORD);
             Object autoValue = extras == null ? null : extras.get(EXTRA_AUTO);
@@ -81,6 +91,32 @@ public final class DashcamStationConfigReceiver extends BroadcastReceiver {
         } catch (RuntimeException e) {
             Log.e(TAG, "provisioning failed: " + e.getClass().getSimpleName());
             reply(false, "error");
+        }
+    }
+
+    /**
+     * Starts a move/return right away and answers "started"; the switch itself takes up to ~2 min
+     * (camera Wi-Fi restart, head unit join, discovery), longer than a broadcast may wait. The
+     * outcome is in the log (tag DashcamNetwork) and on the "Rede da câmera" card.
+     */
+    private void runCommand(Context context, String command) {
+        br.com.redesurftank.havalshisuku.managers.DashcamNetworkManager network =
+                br.com.redesurftank.havalshisuku.managers.DashcamNetworkManager.getInstance(context);
+        if (network.isBusy()) {
+            reply(false, "busy");
+            return;
+        }
+        switch (command) {
+            case "move":
+                network.moveToStation(r -> Log.i(TAG, "adb move: ok=" + r.ok + " code=" + r.code));
+                reply(true, "move started");
+                return;
+            case "return":
+                network.returnToAp(r -> Log.i(TAG, "adb return: ok=" + r.ok + " code=" + r.code));
+                reply(true, "return started");
+                return;
+            default:
+                reply(false, "command_invalid");
         }
     }
 

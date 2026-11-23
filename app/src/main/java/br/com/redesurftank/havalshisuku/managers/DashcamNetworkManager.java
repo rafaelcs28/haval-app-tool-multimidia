@@ -1,5 +1,7 @@
 package br.com.redesurftank.havalshisuku.managers;
 
+import br.com.redesurftank.App;
+
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
@@ -163,33 +165,21 @@ public final class DashcamNetworkManager {
         requireWorkerThread();
         if (!busy.compareAndSet(false, true)) return Result.fail("busy", "Já existe uma troca de rede em andamento.");
         try {
-            return returnToApLocked(trigger);
+            Result result = returnToApLocked(trigger);
+            // A manual "back to the camera Wi-Fi" must not be undone a minute later by the automatic mode.
+            if (!"auto".equals(trigger)) {
+                App.getDeviceProtectedContext()
+                        .getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE)
+                        .edit().putLong(DashcamAutomationManager.KEY_AUTO_STATION_PAUSED_AT, System.currentTimeMillis())
+                        .apply();
+            }
+            return result;
         } finally {
             busy.set(false);
         }
     }
 
-    /**
-     * Automatic mode only: on the station network without the camera, while the camera AP is in
-     * range (the camera went back to its AP after a power cycle). Hop the head unit to the AP, then
-     * move the camera again.
-     */
-    Result hopToApThenMoveBlocking() {
-        requireWorkerThread();
-        if (!busy.compareAndSet(false, true)) return Result.fail("busy", "Já existe uma troca de rede em andamento.");
-        try {
-            String apSsid = DashcamCameraHost.cameraApSsid();
-            if (apSsid == null) return Result.fail("ap_unknown", "Wi-Fi próprio da câmera ainda não conhecido.");
-            log("hop", "connect_ap");
-            if (!joinHeadUnit(apSsid, null, AP_RETURN_TIMEOUT_MS, this::cameraAnswersOnAp)) {
-                log("hop", "failed=ap_join");
-                return Result.fail("ap_join", "A central não voltou ao Wi-Fi da câmera.");
-            }
-            return moveToStationLocked("auto_hop");
-        } finally {
-            busy.set(false);
-        }
-    }
+
 
     private Result moveToStationLocked(String trigger) {
         log("to_station", "start trigger=" + trigger);

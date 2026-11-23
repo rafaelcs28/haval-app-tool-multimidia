@@ -17,9 +17,14 @@ public final class DashcamStationPolicy {
     static final int MIN_PASSWORD = 8;
     static final int MAX_SSID_BYTES = 32;
     /** Automatic mode: at most one attempt per this window (and one per run/ignition). */
-    static final long AUTO_RETRY_WINDOW_MS = 10L * 60 * 1000;
+    /** After an automatic attempt that did not move the camera, wait this long before the next. */
+    static final long AUTO_RETRY_WINDOW_MS = 5L * 60 * 1000;
+    /** How often the automatic mode looks, only while the head unit is on the camera's own Wi-Fi. */
+    static final long AUTO_CHECK_INTERVAL_MS = 60L * 1000;
+    /** "Trazer câmera para o Wi-Fi próprio" holds the automatic mode off for this long. */
+    static final long AUTO_PAUSE_AFTER_RETURN_MS = 30L * 60 * 1000;
 
-    enum AutoAction { NONE, MOVE_TO_STATION, HOP_TO_AP_THEN_MOVE }
+    enum AutoAction { NONE, MOVE_TO_STATION }
 
     private DashcamStationPolicy() {}
 
@@ -108,21 +113,21 @@ public final class DashcamStationPolicy {
     }
 
     /**
-     * Automatic mode, evaluated on each car start / automation tick. Never loops: one attempt per
-     * run (ignition) and none within {@link #AUTO_RETRY_WINDOW_MS} of the last one.
+     * Automatic mode, checked every {@link #AUTO_CHECK_INTERVAL_MS}. It acts only while the head unit
+     * is on the camera's own Wi-Fi and the station network is in range; anywhere else it does
+     * nothing (owner's rule). A failed attempt waits {@link #AUTO_RETRY_WINDOW_MS}; a manual
+     * "back to the camera Wi-Fi" holds it off for {@link #AUTO_PAUSE_AFTER_RETURN_MS}.
      *
-     * @param msSinceLastAttempt -1 when there was none (a negative value from a clock change also
-     *                           counts as none; the per-run guard still applies)
+     * @param msSinceLastAttempt -1 when none (a negative value from a clock change also counts as none)
+     * @param msSinceManualReturn -1 when none
      */
     static AutoAction decideAuto(boolean enabled, DashcamCameraHost.Place place, boolean stationVisible,
-            boolean apVisible, boolean cameraFoundOnStation, boolean attemptedThisRun, long msSinceLastAttempt) {
-        if (!enabled || attemptedThisRun) return AutoAction.NONE;
+            long msSinceLastAttempt, long msSinceManualReturn) {
+        if (!enabled) return AutoAction.NONE;
+        if (place != DashcamCameraHost.Place.CAMERA_AP || !stationVisible) return AutoAction.NONE;
         if (msSinceLastAttempt >= 0 && msSinceLastAttempt < AUTO_RETRY_WINDOW_MS) return AutoAction.NONE;
-        if (place == DashcamCameraHost.Place.CAMERA_AP && stationVisible) return AutoAction.MOVE_TO_STATION;
-        if (place == DashcamCameraHost.Place.STATION && !cameraFoundOnStation && apVisible) {
-            return AutoAction.HOP_TO_AP_THEN_MOVE;
-        }
-        return AutoAction.NONE;
+        if (msSinceManualReturn >= 0 && msSinceManualReturn < AUTO_PAUSE_AFTER_RETURN_MS) return AutoAction.NONE;
+        return AutoAction.MOVE_TO_STATION;
     }
 
     /** Status line of the "Rede da câmera" card. */

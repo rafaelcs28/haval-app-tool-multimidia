@@ -50,6 +50,8 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     private final DashcamTimeSource timeSource;
     private final Object lifecycleLock = new Object();
     private final Runnable tick = this::tick;
+    /** Automatic move to the station network: its own 1-minute check (see maybeAutoStation). */
+    private final Runnable stationTick = this::stationTick;
 
     private HandlerThread workerThread;
     private volatile Handler worker;
@@ -59,9 +61,10 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     /** One warning per "not recording" episode, cleared when recording is seen again. */
     private boolean warnedThisEpisode;
     /** Automatic "Rede da câmera": one attempt per run (car start), see DashcamStationPolicy. */
-    private volatile boolean stationAttemptedThisRun;
     /** Wall-clock ms of the last automatic move attempt (10 min guard across restarts). */
     static final String KEY_AUTO_STATION_LAST_ATTEMPT = "auto_station_last_attempt_ms";
+    /** Wall-clock ms of the last manual "back to the camera Wi-Fi"; holds the automatic mode off. */
+    public static final String KEY_AUTO_STATION_PAUSED_AT = "auto_station_paused_at_ms";
 
     public DashcamAutomationManager(Context context, ServiceManager serviceManager) {
         this.context = context.getApplicationContext();
@@ -88,10 +91,10 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
             workerThread.start();
             worker = new Handler(workerThread.getLooper());
             started = true;
-            stationAttemptedThisRun = false;
         }
         preferences.registerOnSharedPreferenceChangeListener(this);
         worker.postDelayed(tick, FIRST_CHECK_DELAY_MS);
+        worker.postDelayed(stationTick, FIRST_CHECK_DELAY_MS);
     }
 
     public void stop() {
@@ -122,6 +125,10 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
         if (handler == null) return;
         handler.removeCallbacks(tick);
         handler.postDelayed(tick, PREF_CHANGE_DELAY_MS);
+        if (SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION.getKey().equals(key)) {
+            handler.removeCallbacks(stationTick);
+            handler.postDelayed(stationTick, PREF_CHANGE_DELAY_MS);
+        }
     }
 
     /** Every dashcam option is on until the user turns it off. */
@@ -145,12 +152,6 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     }
 
     private void runCheck() {
-        try {
-            maybeAutoStation();
-        } catch (RuntimeException e) {
-            Log.w(TAG, "auto station failed", e);
-            log("auto_station", "exception=" + e.getClass().getSimpleName());
-        }
         boolean resumeEnabled = pref(SharedPreferencesKeys.ENABLE_DASHCAM_WATCHDOG_RESUME);
         boolean clockEnabled = pref(SharedPreferencesKeys.ENABLE_DASHCAM_CLOCK_SYNC);
         boolean warningEnabled = pref(SharedPreferencesKeys.ENABLE_DASHCAM_FAILURE_WARNING);
@@ -194,51 +195,60 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     }
 
     /**
-     * "Fazer isso sozinho a cada partida" (off by default): on the camera AP with the station SSID
-     * in range, move the camera; on the station network without the camera but with its AP in
-     * range (it went back after a power cycle), hop to the AP and move it again. At most one
-     * attempt per run and per 10 minutes ({@link DashcamStationPolicy#decideAuto}).
+     * "Fazer isso sozinho a cada partida" (off by default): every minute, only while the head unit
+     * is on the camera's own Wi-Fi and the station SSID is in range, move the camera there. Off the
+     * camera Wi-Fi it does nothing. A failed attempt waits 5 min; a manual return holds it 30 min
+     * ({@link DashcamStationPolicy#decideAuto}).
      */
     private void maybeAutoStation() {
         if (!preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION.getKey(), false)) return;
-        if (stationAttemptedThisRun) return;
         String ssid = DashcamCameraHost.stationSsid();
         if (ssid == null) return;
+        // Owner's rule: act only while the head unit is on the camera's own Wi-Fi; anywhere else, nothing.
         DashcamCameraHost.Place place = DashcamCameraHost.place(context);
-        if (place != DashcamCameraHost.Place.CAMERA_AP && place != DashcamCameraHost.Place.STATION) return;
+        if (place != DashcamCameraHost.Place.CAMERA_AP) return;
         long now = System.currentTimeMillis();
-        long last = statePreferences.getLong(KEY_AUTO_STATION_LAST_ATTEMPT, 0L);
-        long since = last <= 0 ? -1L : now - last;
-        if (since >= 0 && since < DashcamStationPolicy.AUTO_RETRY_WINDOW_MS) return;
+        long sinceAttempt = since(statePreferences.getLong(KEY_AUTO_STATION_LAST_ATTEMPT, 0L), now);
+        long sinceReturn = since(statePreferences.getLong(KEY_AUTO_STATION_PAUSED_AT, 0L), now);
         DashcamNetworkManager network = DashcamNetworkManager.getInstance(context);
         if (network.isBusy()) return;
-
-        boolean stationVisible = false;
-        boolean cameraFound = false;
-        boolean apVisible = false;
-        if (place == DashcamCameraHost.Place.CAMERA_AP) {
-            stationVisible = network.isVisible(ssid, true);
-        } else {
-            if (!lock()) return;
-            try {
-                cameraFound = DashcamCameraHost.resolve(context, true, false, novatek::isNovatekAt) != null;
-            } finally {
-                DashcamHisiliconClient.CAMERA_LOCK.unlock();
-            }
-            String apSsid = DashcamCameraHost.cameraApSsid();
-            if (!cameraFound && apSsid != null) apVisible = network.isVisible(apSsid, true);
+        // Cheap guards first, the Wi-Fi scan last.
+        if (DashcamStationPolicy.decideAuto(true, place, true, sinceAttempt, sinceReturn)
+                == DashcamStationPolicy.AutoAction.NONE) {
+            return;
         }
-        DashcamStationPolicy.AutoAction action = DashcamStationPolicy.decideAuto(true, place,
-                stationVisible, apVisible, cameraFound, stationAttemptedThisRun, since);
-        if (action == DashcamStationPolicy.AutoAction.NONE) return;
-
-        stationAttemptedThisRun = true;
-        statePreferences.edit().putLong(KEY_AUTO_STATION_LAST_ATTEMPT, now).apply();
-        log("auto_station", "action=" + action);
-        DashcamNetworkManager.Result result = action == DashcamStationPolicy.AutoAction.MOVE_TO_STATION
-                ? network.moveToStationBlocking("auto")
-                : network.hopToApThenMoveBlocking();
+        boolean stationVisible = network.isVisible(ssid, true);
+        if (DashcamStationPolicy.decideAuto(true, place, stationVisible, sinceAttempt, sinceReturn)
+                == DashcamStationPolicy.AutoAction.NONE) {
+            return;
+        }
+        log("auto_station", "action=move");
+        DashcamNetworkManager.Result result = network.moveToStationBlocking("auto");
         log("auto_station", "ok=" + result.ok + " code=" + result.code);
+        if (result.ok) {
+            statePreferences.edit().remove(KEY_AUTO_STATION_LAST_ATTEMPT).apply();
+        } else {
+            statePreferences.edit().putLong(KEY_AUTO_STATION_LAST_ATTEMPT, now).apply();
+        }
+    }
+
+    private static long since(long at, long now) {
+        return at <= 0 ? -1L : now - at;
+    }
+
+    private void stationTick() {
+        try {
+            maybeAutoStation();
+        } catch (RuntimeException e) {
+            Log.w(TAG, "auto station failed", e);
+            log("auto_station", "exception=" + e.getClass().getSimpleName());
+        } finally {
+            Handler handler = worker;
+            if (handler != null) {
+                handler.removeCallbacks(stationTick);
+                handler.postDelayed(stationTick, DashcamStationPolicy.AUTO_CHECK_INTERVAL_MS);
+            }
+        }
     }
 
     /** A gallery pause left open: resume it, or hand it to the charging pause if that applies. */
