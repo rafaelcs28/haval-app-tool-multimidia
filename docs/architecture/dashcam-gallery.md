@@ -261,3 +261,13 @@ localização, já concedida para o GPS).
   "Trazer câmera para o Wi-Fi próprio" (card ou adb) segura o automático por 30 min.
 - Comandos pela mesma entrada protegida (DUMP): `--es command move` (levar) e `--es command return`
   (trazer). Respondem "started"; o resultado sai no log `DashcamNetwork` e no card.
+
+### 190: pulo segura o Wi-Fi da câmera
+
+No pulo (central no SSID configurado, câmera ausente), o Android largava o Wi-Fi da câmera ~6 s depois de
+entrar (sem internet, com a rede configurada ao alcance) e voltava à rede configurada antes de a câmera
+responder. Durante o pulo o app desliga a validação de internet (`captive_portal_mode` = 0, valor original
+guardado em `dashcam_state` e restaurado no fim, ou na próxima inicialização se o processo morrer) e mantém um
+pedido de rede Wi-Fi sem INTERNET. Os dois são soltos assim que a câmera recebe os comandos. O heartbeat tenta
+6 vezes (189) e o card "Rede da câmera" mostra a última troca automática.
+

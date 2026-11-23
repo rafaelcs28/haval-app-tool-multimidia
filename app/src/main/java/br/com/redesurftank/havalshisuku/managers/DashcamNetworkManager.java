@@ -2,7 +2,13 @@ package br.com.redesurftank.havalshisuku.managers;
 
 import br.com.redesurftank.App;
 
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
+import android.provider.Settings;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
@@ -101,6 +107,12 @@ public final class DashcamNetworkManager {
     private DashcamNetworkManager(Context context) {
         this.context = context.getApplicationContext();
         this.novatek = new DashcamNovatekClient(this.context);
+        // A hop interrupted by a crash or reboot must not leave network validation off.
+        try {
+            restoreCaptiveModeIfLeft();
+        } catch (RuntimeException ignored) {
+            // Best effort; retried on the next hop.
+        }
     }
 
     public static DashcamNetworkManager getInstance(Context context) {
@@ -175,12 +187,16 @@ public final class DashcamNetworkManager {
             String apSsid = DashcamCameraHost.cameraApSsid();
             if (apSsid == null) return Result.fail("ap_unknown", "Wi-Fi próprio da câmera ainda não conhecido.");
             log("hop", "connect_ap");
+            // The camera AP has no internet: with the station network saved and in range, Android
+            // drops the AP a few seconds after joining it. Hold it until the camera has the command.
+            holdCameraAp();
             if (!joinHeadUnit(apSsid, null, AP_RETURN_TIMEOUT_MS, this::cameraAnswersOnAp)) {
                 log("hop", "failed=ap_join");
                 return Result.fail("ap_join", "A central não voltou ao Wi-Fi da câmera.");
             }
             return moveToStationLocked("auto_hop");
         } finally {
+            releaseCameraAp();
             busy.set(false);
         }
     }
@@ -252,6 +268,7 @@ public final class DashcamNetworkManager {
             DashcamHisiliconClient.CAMERA_LOCK.unlock();
         }
         DashcamCameraHost.forgetStationHost();
+        releaseCameraAp();
 
         log("to_station", "camera_sent join_head_unit");
         if (!joinHeadUnit(ssid, password, HEAD_UNIT_JOIN_TIMEOUT_MS, () -> isOn(ssid))) {
@@ -498,4 +515,81 @@ public final class DashcamNetworkManager {
         Log.i(TAG, "phase=" + phase + " " + detail);
         ClusterPersistentEventLogger.logText("dashcam_network", "phase=" + phase + " " + detail);
     }
+
+    // ------------------------------------------------------------------- camera AP hold (hop)
+
+    private static final String CAPTIVE_PORTAL_MODE = "captive_portal_mode";
+    private static final String KEY_CAPTIVE_MODE_SAVED = "station_hop_captive_mode_saved";
+    private ConnectivityManager.NetworkCallback apHoldCallback;
+
+    /**
+     * Keeps the head unit on the camera AP during a hop: validation off (restored afterwards, also
+     * after a crash) so the AP is not "no internet", and a Wi-Fi request without INTERNET so the
+     * network stays wanted.
+     */
+    private void holdCameraAp() {
+        restoreCaptiveModeIfLeft();
+        try {
+            ContentResolver resolver = context.getContentResolver();
+            int mode = Settings.Global.getInt(resolver, CAPTIVE_PORTAL_MODE, 1);
+            if (mode != 0) {
+                hopState().edit().putInt(KEY_CAPTIVE_MODE_SAVED, mode).commit();
+                boolean ok = Settings.Global.putInt(resolver, CAPTIVE_PORTAL_MODE, 0);
+                log("hold", "validation_off=" + ok);
+                if (!ok) hopState().edit().remove(KEY_CAPTIVE_MODE_SAVED).apply();
+            }
+        } catch (RuntimeException e) {
+            log("hold", "validation_failed=" + e.getClass().getSimpleName());
+        }
+        try {
+            ConnectivityManager manager =
+                    (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (manager != null && apHoldCallback == null) {
+                NetworkRequest request = new NetworkRequest.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build();
+                ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback();
+                manager.requestNetwork(request, callback);
+                apHoldCallback = callback;
+            }
+        } catch (RuntimeException e) {
+            log("hold", "request_failed=" + e.getClass().getSimpleName());
+        }
+    }
+
+    private void releaseCameraAp() {
+        ConnectivityManager.NetworkCallback callback = apHoldCallback;
+        apHoldCallback = null;
+        if (callback != null) {
+            try {
+                ConnectivityManager manager =
+                        (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (manager != null) manager.unregisterNetworkCallback(callback);
+            } catch (RuntimeException e) {
+                log("hold", "release_failed=" + e.getClass().getSimpleName());
+            }
+        }
+        restoreCaptiveModeIfLeft();
+    }
+
+    /** Puts back the validation mode a hop turned off (no-op when nothing is pending). */
+    void restoreCaptiveModeIfLeft() {
+        SharedPreferences state = hopState();
+        if (!state.contains(KEY_CAPTIVE_MODE_SAVED)) return;
+        int mode = state.getInt(KEY_CAPTIVE_MODE_SAVED, 1);
+        try {
+            boolean ok = Settings.Global.putInt(context.getContentResolver(), CAPTIVE_PORTAL_MODE, mode);
+            log("hold", "validation_restored=" + mode + " ok=" + ok);
+            if (ok) state.edit().remove(KEY_CAPTIVE_MODE_SAVED).apply();
+        } catch (RuntimeException e) {
+            log("hold", "restore_failed=" + e.getClass().getSimpleName());
+        }
+    }
+
+    private SharedPreferences hopState() {
+        return App.getDeviceProtectedContext()
+                .getSharedPreferences(DashcamGalleryRepository.STATE_PREFS, Context.MODE_PRIVATE);
+    }
+
 }
