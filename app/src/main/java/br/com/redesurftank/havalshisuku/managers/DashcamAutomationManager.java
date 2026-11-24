@@ -208,6 +208,7 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
      */
     private void maybeAutoStation() {
         if (!preferences.getBoolean(SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION.getKey(), false)) return;
+        if (android.os.SystemClock.elapsedRealtime() < DashcamStationPolicy.AUTO_MIN_UPTIME_MS) return;
         String ssid = DashcamCameraHost.stationSsid();
         if (ssid == null) return;
         // Owner's rules: only on the camera's own Wi-Fi or on the station network; anywhere else, nothing.

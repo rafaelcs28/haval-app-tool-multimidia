@@ -116,6 +116,12 @@ public final class DashcamStationPolicy {
     static final String IN_PROGRESS = "in_progress";
     /** How soon the automatic mode continues a move left in progress. */
     static final long IN_PROGRESS_RETRY_MS = 5_000L;
+    /**
+     * The camera powers up with the head unit. Field 2026-11-24: switched ~1 min after power-up
+     * it joined the station network but never answered; switched after ~10 min it worked. The
+     * automatic mode waits this long after boot (head-unit uptime) before switching.
+     */
+    static final long AUTO_MIN_UPTIME_MS = 8L * 60 * 1000;
 
     static boolean stepStillValid(long doneAtMs, long nowMs) {
         return doneAtMs > 0 && nowMs >= doneAtMs && nowMs - doneAtMs < STEP_VALID_MS;

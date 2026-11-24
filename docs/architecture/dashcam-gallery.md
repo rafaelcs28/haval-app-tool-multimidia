@@ -279,3 +279,10 @@ comando e cada etapa feita fica lembrada (10 min): se o Android tira a central d
 (3-4 s depois de um pulo automático), a troca volta como "in_progress", o automático tenta de novo em 5 s e
 continua da etapa seguinte. O 3018 só sai com a central ainda no Wi-Fi da câmera.
 
+### 199: espera a câmera assentar
+
+13:11 de 24/11, ~1 min depois de ligar: comandos espaçados e todos aceitos, a câmera entrou no hotspot e de
+novo não respondeu. No teste manual que funcionou ela estava ligada havia ~10 min. Hipótese em teste: o modo
+cliente só sobe direito com a câmera já assentada. O automático agora só age com a central ligada há 8 min
+(a câmera liga junto).
+
