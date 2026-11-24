@@ -262,13 +262,35 @@ public final class DashcamNetworkManager {
             }
             // The MAC is what finds the camera on the other network: learn it now.
             DashcamCameraHost.rememberApIdentity(context, true);
-            String error = send(DashcamStationPolicy.stationCommand(ssid, password), "3032", false);
-            if (error == null) error = send(DashcamStationPolicy.wifiModeCommand(true), "3033", false);
-            if (error != null) {
-                return fail("to_station", error, "A câmera recusou a configuração (" + error + ").");
+            // Field 2026-11-24: sent back to back, the camera joined the station network but never
+            // answered there; with a few seconds between the three commands it works. Each step is
+            // remembered, so when Android drops the head unit from the camera Wi-Fi mid-way (3-4 s
+            // after an automatic hop) the next attempt resumes instead of starting over.
+            long now = System.currentTimeMillis();
+            SharedPreferences steps = hopState();
+            boolean credsDone = DashcamStationPolicy.stepStillValid(steps.getLong(KEY_STEP_CREDS_AT, 0L), now);
+            boolean modeDone = credsDone
+                    && DashcamStationPolicy.stepStillValid(steps.getLong(KEY_STEP_MODE_AT, 0L), now);
+            log("to_station", "steps creds=" + credsDone + " mode=" + modeDone);
+            if (!credsDone) {
+                String error = send(DashcamStationPolicy.stationCommand(ssid, password), "3032", false);
+                if (error != null) return stepFailed(error, 1);
+                steps.edit().putLong(KEY_STEP_CREDS_AT, System.currentTimeMillis()).remove(KEY_STEP_MODE_AT).commit();
+                if (!sleep(DashcamStationPolicy.STEP_GAP_MS)) return stepFailed("interrupted", 1);
             }
-            error = send(String.valueOf(DashcamStationPolicy.CMD_WIFI_RESTART), "3018", true);
-            if (error != null) return fail("to_station", error, "A câmera recusou reiniciar o Wi-Fi (" + error + ").");
+            if (!modeDone) {
+                String error = send(DashcamStationPolicy.wifiModeCommand(true), "3033", false);
+                if (error != null) return stepFailed(error, 2);
+                steps.edit().putLong(KEY_STEP_MODE_AT, System.currentTimeMillis()).commit();
+                if (!sleep(DashcamStationPolicy.STEP_GAP_MS)) return stepFailed("interrupted", 2);
+            }
+            // 3018 counts a dropped connection as sent (the camera cuts it while restarting), so only
+            // send it while the head unit is still on the camera Wi-Fi.
+            DashcamCameraHost.Wifi still = DashcamCameraHost.wifi(context);
+            if (still == null || !still.onApSubnet) return stepFailed("transport_left_camera_ap", 3);
+            String error = send(String.valueOf(DashcamStationPolicy.CMD_WIFI_RESTART), "3018", true);
+            if (error != null) return stepFailed(error, 3);
+            steps.edit().remove(KEY_STEP_CREDS_AT).remove(KEY_STEP_MODE_AT).commit();
         } finally {
             DashcamHisiliconClient.CAMERA_LOCK.unlock();
         }
@@ -590,6 +612,24 @@ public final class DashcamNetworkManager {
         } catch (RuntimeException e) {
             log("hold", "restore_failed=" + e.getClass().getSimpleName());
         }
+    }
+
+    static final String KEY_STEP_CREDS_AT = "station_step_creds_at_ms";
+    static final String KEY_STEP_MODE_AT = "station_step_mode_at_ms";
+
+    /**
+     * A step could not be sent. Lost transport (Android left the camera Wi-Fi) after a step was
+     * done is progress, not failure: code "in_progress" makes the automatic mode continue soon.
+     */
+    private Result stepFailed(String error, int step) {
+        boolean transport = error.contains("transport") || "interrupted".equals(error);
+        if (transport) {
+            log("to_station", "step_" + step + "_pending=" + error);
+            return Result.fail(DashcamStationPolicy.IN_PROGRESS,
+                    "Troca em andamento (etapa " + step + " de 3). Ela continua na próxima conexão ao Wi-Fi da câmera.");
+        }
+        hopState().edit().remove(KEY_STEP_CREDS_AT).remove(KEY_STEP_MODE_AT).apply();
+        return fail("to_station", error, "A câmera recusou a configuração (" + error + ").");
     }
 
     private SharedPreferences hopState() {

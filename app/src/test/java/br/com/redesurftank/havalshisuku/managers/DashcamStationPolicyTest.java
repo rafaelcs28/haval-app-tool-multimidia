@@ -105,4 +105,14 @@ public class DashcamStationPolicyTest {
         assertEquals(60_000L, DashcamStationPolicy.AUTO_CHECK_INTERVAL_MS);
         assertEquals(5L * 60 * 1000, retry);
     }
+
+    @Test
+    public void rememberedStepIsReusedOnlyWhileFresh() {
+        long now = 1_000_000_000L;
+        assertTrue(DashcamStationPolicy.stepStillValid(now - 1_000L, now));
+        assertTrue(DashcamStationPolicy.stepStillValid(now - DashcamStationPolicy.STEP_VALID_MS + 1, now));
+        assertFalse(DashcamStationPolicy.stepStillValid(now - DashcamStationPolicy.STEP_VALID_MS, now));
+        assertFalse(DashcamStationPolicy.stepStillValid(0L, now));
+        assertFalse(DashcamStationPolicy.stepStillValid(now + 5_000L, now));
+    }
 }

@@ -271,3 +271,11 @@ guardado em `dashcam_state` e restaurado no fim, ou na próxima inicialização 
 pedido de rede Wi-Fi sem INTERNET. Os dois são soltos assim que a câmera recebe os comandos. O heartbeat tenta
 6 vezes (189) e o card "Rede da câmera" mostra a última troca automática.
 
+### 198: comandos espaçados e troca em etapas
+
+Teste de campo 24/11: com 3032, 3033 e 3018 colados (~0,03 s), a câmera entra no hotspot mas não responde a
+ninguém (nem ao celular); com ~3 s entre eles ela entra e responde (10.154.131.78). Agora há 3 s entre cada
+comando e cada etapa feita fica lembrada (10 min): se o Android tira a central do Wi-Fi da câmera no meio
+(3-4 s depois de um pulo automático), a troca volta como "in_progress", o automático tenta de novo em 5 s e
+continua da etapa seguinte. O 3018 só sai com a central ainda no Wi-Fi da câmera.
+

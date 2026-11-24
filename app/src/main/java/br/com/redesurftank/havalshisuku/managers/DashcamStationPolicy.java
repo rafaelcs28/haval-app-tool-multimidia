@@ -108,6 +108,19 @@ public final class DashcamStationPolicy {
     }
 
     /** {@code 3033&par=1} station, {@code par=0} back to the camera's own AP. */
+    /** Pause between 3032, 3033 and 3018: back to back the camera joins but never answers. */
+    static final long STEP_GAP_MS = 3_000L;
+    /** A remembered step older than this is redone (the camera may have restarted meanwhile). */
+    static final long STEP_VALID_MS = 10L * 60 * 1000;
+    /** Result code of a move that sent some steps and continues on the next camera Wi-Fi visit. */
+    static final String IN_PROGRESS = "in_progress";
+    /** How soon the automatic mode continues a move left in progress. */
+    static final long IN_PROGRESS_RETRY_MS = 5_000L;
+
+    static boolean stepStillValid(long doneAtMs, long nowMs) {
+        return doneAtMs > 0 && nowMs >= doneAtMs && nowMs - doneAtMs < STEP_VALID_MS;
+    }
+
     static String wifiModeCommand(boolean station) {
         return CMD_WIFI_MODE + "&par=" + (station ? 1 : 0);
     }

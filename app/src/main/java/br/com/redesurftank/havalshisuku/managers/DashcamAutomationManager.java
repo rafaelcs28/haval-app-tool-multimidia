@@ -52,6 +52,8 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
     private final Runnable tick = this::tick;
     /** Automatic move to the station network: its own 1-minute check (see maybeAutoStation). */
     private final Runnable stationTick = this::stationTick;
+    /** Set by a move left in progress: the next station check runs soon instead of in a minute. */
+    private volatile boolean continueSoon;
 
     private HandlerThread workerThread;
     private volatile Handler worker;
@@ -251,6 +253,15 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
                 .apply();
         if (result.ok) {
             statePreferences.edit().remove(KEY_AUTO_STATION_LAST_ATTEMPT).apply();
+        } else if (DashcamStationPolicy.IN_PROGRESS.equals(result.code)) {
+            // Some steps went through before Android left the camera Wi-Fi: continue soon.
+            statePreferences.edit().remove(KEY_AUTO_STATION_LAST_ATTEMPT).apply();
+            Handler handler = worker;
+            if (handler != null) {
+                handler.removeCallbacks(stationTick);
+                handler.postDelayed(stationTick, DashcamStationPolicy.IN_PROGRESS_RETRY_MS);
+                continueSoon = true;
+            }
         } else {
             statePreferences.edit().putLong(KEY_AUTO_STATION_LAST_ATTEMPT, now).apply();
         }
@@ -268,10 +279,11 @@ public final class DashcamAutomationManager implements SharedPreferences.OnShare
             log("auto_station", "exception=" + e.getClass().getSimpleName());
         } finally {
             Handler handler = worker;
-            if (handler != null) {
+            if (handler != null && !continueSoon) {
                 handler.removeCallbacks(stationTick);
                 handler.postDelayed(stationTick, DashcamStationPolicy.AUTO_CHECK_INTERVAL_MS);
             }
+            continueSoon = false;
         }
     }
 
