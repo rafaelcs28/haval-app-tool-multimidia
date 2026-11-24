@@ -1022,9 +1022,10 @@ private fun CameraNetworkCard() {
             AutomationSwitch(
                 modifier = Modifier.weight(1f),
                 title = "Fazer isso sozinho",
-                hint = "Confere a cada minuto: com a central no Wi-Fi da câmera e a rede acima ao alcance, leva a " +
-                    "câmera para ela; se a central entrou na rede antes da câmera, passa pelo Wi-Fi da câmera e a " +
-                    "leva. A câmera volta ao Wi-Fi próprio quando o carro é desligado.",
+                hint = "Espera ${DashcamStationPolicy.autoWaitMinutes()} min depois de ligar o carro, para a câmera " +
+                    "terminar de iniciar, e então confere a cada minuto: com a central no Wi-Fi da câmera e a rede " +
+                    "acima ao alcance, leva a câmera para ela; se a central entrou na rede antes da câmera, passa " +
+                    "pelo Wi-Fi da câmera e a leva. A câmera volta ao Wi-Fi próprio quando o carro é desligado.",
                 key = SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STATION,
                 prefs = prefs,
                 default = false

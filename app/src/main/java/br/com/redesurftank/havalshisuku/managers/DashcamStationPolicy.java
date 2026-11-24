@@ -123,6 +123,11 @@ public final class DashcamStationPolicy {
      */
     static final long AUTO_MIN_UPTIME_MS = 8L * 60 * 1000;
 
+    /** Minutes the automatic mode waits after the car is switched on (shown on the setting). */
+    public static long autoWaitMinutes() {
+        return AUTO_MIN_UPTIME_MS / 60_000L;
+    }
+
     static boolean stepStillValid(long doneAtMs, long nowMs) {
         return doneAtMs > 0 && nowMs >= doneAtMs && nowMs - doneAtMs < STEP_VALID_MS;
     }
