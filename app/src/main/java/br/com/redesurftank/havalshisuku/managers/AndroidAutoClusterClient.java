@@ -65,6 +65,8 @@ public final class AndroidAutoClusterClient {
         }
         ClusterPersistentEventLogger.log(event,values);
     }
+    /** True while an output may still be owned by the Service (no terminal RELEASED yet). */
+    public boolean hasRemoteOutput() { return ledger.active()!=null; }
     public void setOutput(ClusterSurfaceOutput output) {
         ClusterSurfaceOutput.Borrow next=null;
         if(output!=null && output.isAvailable()) {

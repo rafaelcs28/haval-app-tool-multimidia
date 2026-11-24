@@ -161,7 +161,44 @@ object AndroidAutoClusterController {
      */
     private fun wantsOutput(): Boolean =
         clusterRequested.get() && isSessionActive() && navigationActive.get() &&
-            !secondaryAppActive.get()
+            !secondaryAppActive.get() && !selfUpdateHold.get()
+
+    private val selfUpdateHold = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val selfUpdateHoldExpired = Runnable {
+        if (selfUpdateHold.getAndSet(false)) {
+            ClusterPersistentEventLogger.log("aa_cluster_self_update_hold_expired", emptyMap<String, Any?>())
+            demandEpoch.incrementAndGet()
+            reconcileOutput("self_update_hold_expired")
+        }
+    }
+
+    /**
+     * Before Impulse installs its own update: hand the cluster map back cleanly and wait for the
+     * Android Auto side to confirm the codec released. When the update kills Impulse with the map
+     * live, the AA codec errors with its Surface and its slot stays stuck until AA restarts (field
+     * 2026-11-24). If the install does not happen, the map comes back after [SELF_UPDATE_HOLD_MS].
+     * Call off the main thread. Returns true when nothing is left owned by the Service.
+     */
+    fun holdForSelfUpdate(maxWaitMs: Long = 4_000L): Boolean {
+        selfUpdateHold.set(true)
+        demandEpoch.incrementAndGet()
+        mainHandler.post { reconcileOutput("self_update_hold") }
+        mainHandler.removeCallbacks(selfUpdateHoldExpired)
+        mainHandler.postDelayed(selfUpdateHoldExpired, SELF_UPDATE_HOLD_MS)
+        val started = SystemClock.elapsedRealtime()
+        while (SystemClock.elapsedRealtime() - started < maxWaitMs) {
+            if (!client.hasRemoteOutput()) {
+                ClusterPersistentEventLogger.log("aa_cluster_self_update_released",
+                    mapOf("wait_ms" to (SystemClock.elapsedRealtime() - started)))
+                return true
+            }
+            try { Thread.sleep(100L) } catch (e: InterruptedException) { Thread.currentThread().interrupt(); break }
+        }
+        ClusterPersistentEventLogger.log("aa_cluster_self_update_release_timeout", mapOf("wait_ms" to maxWaitMs))
+        return false
+    }
+
+    private const val SELF_UPDATE_HOLD_MS = 180_000L
 
     fun isSurfaceAttached(): Boolean = surfaceAttached.get()
 

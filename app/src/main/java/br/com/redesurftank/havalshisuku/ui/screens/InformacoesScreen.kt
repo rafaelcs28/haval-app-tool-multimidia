@@ -223,6 +223,10 @@ fun InformacoesTab() {
                                                 showPermissionDialog = true
                                                 return@launch
                                         }
+                                        // Hand the cluster map back first, so the AA codec closes cleanly before Impulse is replaced.
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                br.com.redesurftank.havalshisuku.managers.AndroidAutoClusterController.holdForSelfUpdate()
+                                        }
                                         context.startActivity(
                                                 ApkUpdateInstaller.buildInstallIntent(context, file)
                                         )
