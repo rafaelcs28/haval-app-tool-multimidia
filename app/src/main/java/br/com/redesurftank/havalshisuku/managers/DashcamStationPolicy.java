@@ -123,7 +123,7 @@ public final class DashcamStationPolicy {
      * it joined the station network but never answered; switched after ~10 min it worked. The
      * automatic mode waits this long after boot (head-unit uptime) before switching.
      */
-    static final long AUTO_MIN_UPTIME_MS = 8L * 60 * 1000;
+    static final long AUTO_MIN_UPTIME_MS = 1L * 60 * 1000;
 
     /** Minutes the automatic mode waits after the car is switched on (shown on the setting). */
     public static long autoWaitMinutes() {
