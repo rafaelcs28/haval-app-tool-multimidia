@@ -11,6 +11,10 @@ internal object AndroidAutoClusterStreamHealth {
     const val MAX_RECOVERIES_PER_BURST = 2
     /** An exhausted burst is re-armed after this long, so a stream lost while driving comes back. */
     const val EXHAUSTED_BUDGET_COOLDOWN_MS = 180_000L
+    /** Watchdog: the map is wanted (route + cluster map on) but not live for this long... */
+    const val NOT_LIVE_KICK_AFTER_MS = 20_000L
+    /** ...then it is requested again from scratch, at most once per this interval. */
+    const val NOT_LIVE_KICK_INTERVAL_MS = 60_000L
     const val MIN_MOVING_SPEED_KMH = 3f
     private const val DECODER_FAILURE = "CLUSTER decoder/config failed"
     private const val FAILED_REQUEST = "CLUSTER request failed"
@@ -74,6 +78,11 @@ internal object AndroidAutoClusterStreamHealth {
         if (nowMs < lastRecoveryAtMs || nowMs - lastRecoveryAtMs < HEALTHY_BUDGET_RESET_MS) return false
         return nowMs >= lastFrameAtMs && nowMs - lastFrameAtMs <= HEALTHY_FRAME_MAX_AGE_MS
     }
+
+    fun shouldKickNotLive(nowMs: Long, notLiveSinceMs: Long, lastKickAtMs: Long, recoveryInFlight: Boolean): Boolean =
+        !recoveryInFlight && notLiveSinceMs > 0L && nowMs >= notLiveSinceMs &&
+            nowMs - notLiveSinceMs >= NOT_LIVE_KICK_AFTER_MS &&
+            (lastKickAtMs <= 0L || nowMs - lastKickAtMs >= NOT_LIVE_KICK_INTERVAL_MS)
 
     fun shouldRearmExhaustedBudget(nowMs: Long, lastRecoveryAtMs: Long, recoveryCount: Int): Boolean =
         recoveryCount >= MAX_RECOVERIES_PER_BURST && lastRecoveryAtMs > 0L && nowMs >= lastRecoveryAtMs &&

@@ -213,4 +213,16 @@ class AndroidAutoClusterStreamHealthTest {
         assertFalse(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool, 1_000L, max - 1))
         assertFalse(AndroidAutoClusterStreamHealth.shouldRearmExhaustedBudget(1_000L + cool, 0L, max))
     }
+
+    @Test
+    fun `watchdog re-requests a wanted map only after it stayed down long enough, once a minute`() {
+        val after = AndroidAutoClusterStreamHealth.NOT_LIVE_KICK_AFTER_MS
+        val every = AndroidAutoClusterStreamHealth.NOT_LIVE_KICK_INTERVAL_MS
+        assertFalse(AndroidAutoClusterStreamHealth.shouldKickNotLive(1_000L + after - 1, 1_000L, 0L, false))
+        assertTrue(AndroidAutoClusterStreamHealth.shouldKickNotLive(1_000L + after, 1_000L, 0L, false))
+        assertFalse(AndroidAutoClusterStreamHealth.shouldKickNotLive(1_000L + after, 1_000L, 0L, true))
+        assertFalse(AndroidAutoClusterStreamHealth.shouldKickNotLive(500_000L, 1_000L, 500_000L - every + 1, false))
+        assertTrue(AndroidAutoClusterStreamHealth.shouldKickNotLive(500_000L, 1_000L, 500_000L - every, false))
+        assertFalse(AndroidAutoClusterStreamHealth.shouldKickNotLive(500_000L, 0L, 0L, false))
+    }
 }

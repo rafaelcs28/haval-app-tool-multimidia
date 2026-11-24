@@ -43,6 +43,8 @@ object AndroidAutoClusterController {
     private var decoderFailurePending = false
     private var recoveryCount = 0
     private var lastRecoveryAtMs = 0L
+    private var notLiveSinceMs = 0L
+    private var lastNotLiveKickAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val client by lazy {
         AndroidAutoClusterClient(App.getContext()) { state, reason ->
@@ -414,6 +416,30 @@ object AndroidAutoClusterController {
         }
     }
 
+    /**
+     * Watchdog (owner's rule): a route is projected and the cluster map is on, but the map has not
+     * been live for [AndroidAutoClusterStreamHealth.NOT_LIVE_KICK_AFTER_MS]: whatever made it drop,
+     * request it again from scratch, at most once per minute.
+     */
+    private fun kickIfNotLiveTooLong(nowMs: Long) {
+        if (notLiveSinceMs <= 0L) notLiveSinceMs = nowMs
+        if (!AndroidAutoClusterStreamHealth.shouldKickNotLive(
+                nowMs, notLiveSinceMs, lastNotLiveKickAtMs, recoveryInFlight)) return
+        lastNotLiveKickAtMs = nowMs
+        notLiveSinceMs = nowMs
+        val epoch = demandEpoch.incrementAndGet()
+        recoveryCount = 0
+        lastRecoveryAtMs = 0L
+        decoderFailurePending = false
+        deliveredGeneration = -1L
+        Log.w(TAG, "CLUSTER watchdog: route + cluster map on but not live; requesting it again")
+        ClusterPersistentEventLogger.log("aa_cluster_watchdog_rerequest", mapOf("demand_epoch" to epoch))
+        client.setOutput(null)
+        mainHandler.postDelayed({
+            if (demandEpoch.get() == epoch && wantsOutput()) reconcileOutput("not_live_watchdog")
+        }, 250L)
+    }
+
     private fun checkClusterStreamHealth() {
         val nowMs = SystemClock.elapsedRealtime()
         val lastFrameAtMs = AaClusterVideoHost.lastFrameElapsedRealtimeMs()
@@ -521,7 +547,15 @@ object AndroidAutoClusterController {
             }, 250L)
             return
         }
-        if (!surfaceAttached.get() || !wantsOutput()) return
+        if (!wantsOutput()) {
+            notLiveSinceMs = 0L
+            return
+        }
+        if (!surfaceAttached.get()) {
+            kickIfNotLiveTooLong(nowMs)
+            return
+        }
+        notLiveSinceMs = 0L
 
         val speedKmh = ServiceManager.getInstance()
             .getData(CarConstants.CAR_BASIC_VEHICLE_SPEED.value)
