@@ -124,7 +124,10 @@ def compile_sources(work: Path, android: Path, trust: str) -> None:
     client = ROOT / "app/src/main/java/br/com/redesurftank/havalshisuku/managers/AndroidAutoClusterClient.java"
     ledger = protocol.parent / "ClusterReleaseLedger.java"
     output = client.parent / "ClusterSurfaceOutput.java"
-    run(common + ["-cp", str(android), "-d", str(host), str(protocol), str(barrier), str(ledger), str(output), str(client)])
+    # The client logs through Impulse's Kotlin logger; a host-only stub stands in for it here.
+    host_stubs = sorted((HERE / "host-stubs").rglob("*.java"))
+    run(common + ["-cp", str(android), "-d", str(host), str(protocol), str(barrier), str(ledger), str(output), str(client)]
+        + [str(p) for p in host_stubs])
     jar_classes(stubs, work / "api-stubs.jar")
     jar_classes(classes, work / "helpers.jar")
 
