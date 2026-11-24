@@ -33,6 +33,17 @@ public final class ClusterReleaseLedger<T extends AutoCloseable> {
     public synchronized void quarantine(Entry<T> entry) {
         if (active==entry) { entry.retiring=true; entry.uncertain=true; }
     }
+    /**
+     * The process that owned a quarantined output is dead and a new, verified Service is bound:
+     * no terminal proof can ever arrive. Drop the entry WITHOUT closing its value (the caller keeps
+     * it referenced, so the old consumer is never recycled) and admit a new claim. Returns the
+     * dropped value, or null when the entry is not the current quarantined one.
+     */
+    public synchronized T abandonAfterOwnerDeath(Entry<T> entry) {
+        if (active != entry || !entry.uncertain || entry.settlementStarted) return null;
+        active = null;
+        return entry.value;
+    }
     /** The caller must authenticate the callback before invoking this method. */
     public boolean released(Object connection, long request) throws Exception {
         Entry<T> settled;

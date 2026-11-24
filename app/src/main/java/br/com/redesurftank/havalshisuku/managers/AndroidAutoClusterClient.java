@@ -35,6 +35,8 @@ public final class AndroidAutoClusterClient {
     private final Object lock=new Object();
     private final Listener listener;
     private final ClusterReleaseLedger<RemoteOutput> ledger=new ClusterReleaseLedger<>();
+    /** Outputs abandoned after their Service process died; kept referenced, never closed or reused. */
+    private final java.util.List<RemoteOutput> abandonedAfterDeath=new java.util.ArrayList<>();
     private final AtomicBoolean queued=new AtomicBoolean();
     private final AtomicBoolean dirty=new AtomicBoolean();
     private Binding remote;
@@ -137,6 +139,19 @@ public final class AndroidAutoClusterClient {
             watchRetirement(entry);
             if(!owner.binder.isBinderAlive()) {
                 ledger.quarantine(entry);
+                // Field 2026-11-24: after an Android Auto restart this quarantine never ended (no
+                // RELEASED can come from a dead process) and the cluster map stayed blank until
+                // Impulse restarted. Once a NEW verified Service is bound, the old owner's process
+                // is gone: abandon the old entry without closing it and request a fresh output.
+                if(target!=null && target!=owner && target.binder.isBinderAlive()) {
+                    RemoteOutput dropped=ledger.abandonAfterOwnerDeath(entry);
+                    if(dropped!=null) {
+                        synchronized(lock) { abandonedAfterDeath.add(dropped); }
+                        logEvent("aa_cluster_output_abandoned_after_service_death","request",entry.request,"revision",version);
+                        dirty.set(true);
+                        return;
+                    }
+                }
                 notifyCurrent(version,AaClusterProtocol.FAILED,"old output quarantined after Service death");
                 return; // Out-of-process codec cleanup is NOT proven by Binder death.
             }
