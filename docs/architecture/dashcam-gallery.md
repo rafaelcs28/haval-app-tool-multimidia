@@ -286,3 +286,12 @@ novo não respondeu. No teste manual que funcionou ela estava ligada havia ~10 m
 cliente só sobe direito com a câmera já assentada. O automático agora só age com a central ligada há 8 min
 (a câmera liga junto).
 
+### 201: a central fica no Wi-Fi da câmera até ele cair
+
+Teste isolado 24/11: só os três comandos espaçados, com a central conectada à mão (ficou no CARDV ~18 s até a
+câmera derrubar o AP) → a câmera respondeu no hotspot. Mesmo teste pelo app (19:17), que levou a central ao
+StarlinkAuto ~1 s depois do 3018 → a câmera entrou mas não respondeu. Agora, depois do 3018, a central espera o
+Wi-Fi da câmera cair (até 45 s) e só então vai para a rede configurada. No carro também foi gravado
+`NoInternetAccessExpected=true` na rede CARDV (WifiConfigStore.xml, backup em /data/local/tmp), para o Android
+não tirar a central do Wi-Fi da câmera 3-4 s depois de o app conectá-la.
+

@@ -295,6 +295,11 @@ public final class DashcamNetworkManager {
             DashcamHisiliconClient.CAMERA_LOCK.unlock();
         }
         DashcamCameraHost.forgetStationHost();
+        // Field 2026-11-24 (19:03 vs 19:17): when the head unit stayed on the camera Wi-Fi until the
+        // camera took its own AP down (~18 s after 3018), the camera answered on the station
+        // network; when the head unit left ~1 s after 3018, the camera joined but never answered.
+        // Stay until the AP is gone (or the cap), then move the head unit.
+        waitForCameraApToDrop();
         releaseCameraAp();
 
         log("to_station", "camera_sent join_head_unit");
@@ -402,6 +407,20 @@ public final class DashcamNetworkManager {
     private boolean cameraAnswersOnAp() {
         DashcamCameraHost.Wifi wifi = DashcamCameraHost.wifi(context);
         return wifi != null && wifi.onApSubnet && novatek.isNovatekAt(DashcamCameraHost.AP_HOST);
+    }
+
+    private void waitForCameraApToDrop() {
+        long started = SystemClock.elapsedRealtime();
+        long deadline = started + DashcamStationPolicy.AP_DROP_WAIT_MS;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            DashcamCameraHost.Wifi wifi = DashcamCameraHost.wifi(context);
+            if (wifi == null || !wifi.onApSubnet) {
+                log("to_station", "camera_ap_dropped_after_ms=" + (SystemClock.elapsedRealtime() - started));
+                return;
+            }
+            if (!sleep(POLL_MS)) return;
+        }
+        log("to_station", "camera_ap_still_up_after_ms=" + DashcamStationPolicy.AP_DROP_WAIT_MS);
     }
 
     private boolean isOn(String ssid) {

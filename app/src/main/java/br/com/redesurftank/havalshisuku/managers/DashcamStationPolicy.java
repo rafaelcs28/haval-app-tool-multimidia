@@ -110,6 +110,8 @@ public final class DashcamStationPolicy {
     /** {@code 3033&par=1} station, {@code par=0} back to the camera's own AP. */
     /** Pause between 3032, 3033 and 3018: back to back the camera joins but never answers. */
     static final long STEP_GAP_MS = 3_000L;
+    /** After 3018 the head unit stays on the camera Wi-Fi until the camera drops it, up to this. */
+    static final long AP_DROP_WAIT_MS = 45_000L;
     /** A remembered step older than this is redone (the camera may have restarted meanwhile). */
     static final long STEP_VALID_MS = 10L * 60 * 1000;
     /** Result code of a move that sent some steps and continues on the next camera Wi-Fi visit. */
