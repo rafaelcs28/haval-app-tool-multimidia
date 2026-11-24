@@ -404,7 +404,12 @@ and existing JVM unit tasks are checked by the PR's exact-head CI after publicat
 
 ## Shipped build on v9 (`app/src/main/assets/aa_patches/AndroidAutoService.apk`)
 
-**Current: md5 `05fd3775` — package-only trust (2026-10-14).** Built with
+**Current: md5 `9c5ccfed` (sha256 `e90af377f39e86c8…`) — codec slot fix (2026-11-24).** Same flags and key as below,
+built on the Mac Mini queue (kind `android-aa-service`: pinned tools in `~/BuildCache/aa-service-tools`,
+Java 21, key in `~/.config/haval-aa-signing`, certificate checked). Only change: `ClusterAvcDecoder.close()`
+no longer quarantines the decoder slot when `stop()` throws but `release()` succeeds (d606c669).
+
+**Previous: md5 `05fd3775` — package-only trust (2026-10-14).** Built with
 `--enable-handoff --package-trust-only` from the pinned stock Service (sha256 `a9cfb4c0…`), signed
 v3 with the OEM projection key (`bin/debug.keystore`, alias `debug`, SHA-256 `3c7d7030…`, same as
 before). `ClusterAuthorization` still requires the caller to be the single app installed as
