@@ -136,10 +136,15 @@ public final class ClusterAvcDecoder implements ClusterFramePump.Decoder {
         available.offer(-1);
         Throwable problem = null;
         if (codec != null) {
-            try { codec.stop(); } catch (Throwable stopped) { problem = stopped; }
+            // stop() routinely throws on a codec already in its error state (e.g. its output
+            // Surface died with the Impulse process during an update). release() is what frees
+            // the native codec: when it succeeds the slot is clean, so a failed stop() alone
+            // must not quarantine the slot until the Android Auto process restarts.
+            Throwable stopProblem = null;
+            try { codec.stop(); } catch (Throwable stopped) { stopProblem = stopped; }
             try { codec.release(); } catch (Throwable released) {
-                if (problem == null) problem = released;
-                else if (problem != released) problem.addSuppressed(released);
+                problem = released;
+                if (stopProblem != null && stopProblem != released) released.addSuppressed(stopProblem);
             }
         }
         callbacks.quitSafely();
