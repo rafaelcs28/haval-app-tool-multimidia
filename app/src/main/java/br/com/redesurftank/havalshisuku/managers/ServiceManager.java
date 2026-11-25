@@ -754,6 +754,10 @@ public class ServiceManager {
             }
             handlerThread = null;
             backgroundHandler = null;
+            // The curtain's arm timers and its schedule timer lived on that handler too. Field
+            // 2026-11-25: a re-init 16 s after boot dropped them while curtainAutomationArmed stayed
+            // true, so the second init did not re-arm and the scheduled close never ran that drive.
+            curtainAutomationArmed.set(false);
             // The heartbeat runnable lived on the handler we just destroyed. Without
             // clearing this flag startClusterHeartbeat() short-circuits forever, so the
             // 1s msgId=134 "Android is alive" signal never resumes after a re-init.
@@ -1311,6 +1315,10 @@ public class ServiceManager {
             if (curtainOnStartEnabled || curtainCloseOnTimeEnabled) {
                 armStartupCurtainAutomation();
             }
+        } else if (hasRunStartupCurtainAutomation) {
+            // Already ran this process: put the window timer back on the new handler.
+            traceCurtain("sunroof_curtain_reschedule_after_reinit");
+            rescheduleCurtainEvaluation();
         }
         scheduleStartupReportReconciliations();
         // HEV Prioritário: no boot o carro costuma resetar o % (ex.: 45->80) e o app pode subir
