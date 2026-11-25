@@ -56,8 +56,7 @@ public final class DashcamAutoStamp {
 
     /** A clip was saved: queue it (the .mp4 the gallery shows). */
     public static void enqueue(Context context, File clip) {
-        if (clip == null || !enabled() || DashcamStampJob.isStamped(clip.getName())
-                || !clip.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) return;
+        if (clip == null || !enabled() || !isStampable(clip.getName())) return;
         appContext = context.getApplicationContext();
         Set<String> q = new HashSet<>(queue());
         q.add(clip.getAbsolutePath());
@@ -65,6 +64,16 @@ public final class DashcamAutoStamp {
         STATUS.put(clip.getName(), "carimbo na fila");
         log("queued", clip.getName());
         MAIN.post(DashcamAutoStamp::kick);
+    }
+
+    /**
+     * The camera's own .TS (4K HEVC on this car: the .mp4 remux does not take it) is stamped
+     * directly; the stamp decodes whatever MediaExtractor opens and writes an H.264 .mp4.
+     */
+    public static boolean isStampable(String name) {
+        if (name == null || name.contains("_carimbo.")) return false;
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".mp4") || lower.endsWith(".ts");
     }
 
     /** App start: continue a queue left by a previous drive. */

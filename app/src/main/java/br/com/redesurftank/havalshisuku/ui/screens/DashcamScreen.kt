@@ -1519,7 +1519,7 @@ private fun SavedCard(
                 }
                 OutlinedButton(onClick = { onPlay(file) }) { Text("Assistir", color = ImpTokens.TextPrimary) }
                 Spacer(Modifier.width(8.dp))
-                if (!DashcamStampJob.isStamped(file.name) && file.name.endsWith(".mp4", ignoreCase = true)) {
+                if (DashcamAutoStamp.isStampable(file.name)) {
                     val busy = stampStatus[file.name]?.startsWith("carimbando") == true
                     OutlinedButton(onClick = { onStamp(file) }, enabled = !busy) {
                         Text("Gerar com carimbo", color = ImpTokens.TextPrimary)
