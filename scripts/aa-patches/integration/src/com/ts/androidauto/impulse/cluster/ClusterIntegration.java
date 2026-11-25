@@ -453,7 +453,9 @@ public final class ClusterIntegration {
                     @Override public void acknowledge(int id){session.guard.acknowledge(id);}
                     @Override public void recycle(ByteBuffer buffer){BufferPool.returnBuffer(buffer);}
                 };
-                pump=new ClusterFramePump(token,16,8L*1024*1024,decoder);
+                // Field 2026-11-25: 16 frames (~0.5 s) overflowed on ordinary bursts ("queue capacity exceeded").
+                // 60 frames / 24 MB is ~2 s of slack at 30 fps.
+                pump=new ClusterFramePump(token,60,24L*1024*1024,decoder);
                 pump.termination().whenComplete((ignored,failure)->{
                     if (decoder.slotHealthy) outputBorrow.close();
                     else {
