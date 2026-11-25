@@ -115,8 +115,10 @@ public final class DashcamAutoStamp {
             @Override public void onDone(String name, File output) {
                 busy = false;
                 remove(path);
-                STATUS.put(name, "carimbo pronto: " + output.getName());
-                log("done", name);
+                boolean removed = DashcamClipStore.removeOriginalAfterStamp(clip, output);
+                STATUS.remove(name);
+                STATUS.put(output.getName(), removed ? "carimbo pronto (original removido)" : "carimbo pronto");
+                log("done", name + " original_removed=" + removed);
                 MAIN.post(DashcamAutoStamp::kick);
             }
 

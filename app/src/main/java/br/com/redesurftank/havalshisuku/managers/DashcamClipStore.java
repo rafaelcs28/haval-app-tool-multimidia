@@ -129,20 +129,34 @@ public final class DashcamClipStore {
         boolean deleted = file != null && file.getParentFile() != null
                 && file.getParentFile().equals(directory()) && file.delete();
         if (deleted) {
-            File gpx = new File(file.getParentFile(), gpxName(file.getName()));
-            if (gpx.isFile() && !gpx.delete()) Log.w(TAG, "cannot delete " + gpx);
-            if (!DashcamStampJob.isStamped(file.getName())) {
+            // Sidecars are shared by the original and its stamped copy: remove them with the last one.
+            boolean lastOfPair = !hasPartner(file);
+            if (lastOfPair) {
+                File gpx = new File(file.getParentFile(), gpxName(file.getName()));
+                if (gpx.isFile() && !gpx.delete()) Log.w(TAG, "cannot delete " + gpx);
                 File ev = new File(file.getParentFile(), eventName(file.getName()));
                 if (ev.isFile() && !ev.delete()) Log.w(TAG, "cannot delete " + ev);
             }
             File sha = new File(file.getParentFile(), file.getName() + ".sha256");
             if (sha.isFile() && !sha.delete()) Log.w(TAG, "cannot delete " + sha);
-            if (!DashcamStampJob.isStamped(file.getName())) {
+            if (lastOfPair) {
                 File track = DashcamClipTrack.fileFor(file);
                 if (track.isFile() && !track.delete()) Log.w(TAG, "cannot delete " + track);
             }
         }
         return deleted;
+    }
+
+    /** The other half of an original / stamped pair is still saved. */
+    static boolean hasPartner(File file) {
+        File dir = file.getParentFile();
+        String name = file.getName();
+        if (DashcamStampJob.isStamped(name)) {
+            String base = name.replace("_carimbo.mp4", "");
+            return new File(dir, base + ".mp4").exists() || new File(dir, base + ".TS").exists()
+                    || new File(dir, base + ".ts").exists();
+        }
+        return new File(dir, DashcamStampJob.stampedName(name)).exists();
     }
 
     public void cancel() {
@@ -340,8 +354,23 @@ public final class DashcamClipStore {
     }
 
     static String gpxName(String clipName) {
-        int dot = clipName.lastIndexOf('.');
-        return (dot > 0 ? clipName.substring(0, dot) : clipName) + ".gpx";
+        // A stamped copy shares its original's trail (the original may have been removed).
+        String base = clipName.replace("_carimbo.", ".");
+        int dot = base.lastIndexOf('.');
+        return (dot > 0 ? base.substring(0, dot) : base) + ".gpx";
+    }
+
+    /**
+     * Owner (2026-11-25): once the stamped copy is ready, keep only it. Removes the original clip and
+     * its hash file; the trail, event mark and kept data stay, shared with the stamped copy.
+     */
+    public static boolean removeOriginalAfterStamp(File original, File stamped) {
+        if (original == null || stamped == null || !stamped.isFile() || stamped.length() <= 0
+                || DashcamStampJob.isStamped(original.getName())) return false;
+        boolean removed = !original.exists() || original.delete();
+        File sha = new File(original.getParentFile(), original.getName() + ".sha256");
+        if (sha.isFile() && !sha.delete()) Log.w(TAG, "cannot delete " + sha);
+        return removed;
     }
 
     /** {@code <clip>.gpx} next to the saved clip (same base name for .TS and .mp4). */
