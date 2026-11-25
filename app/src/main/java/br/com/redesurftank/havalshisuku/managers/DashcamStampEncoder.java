@@ -71,8 +71,14 @@ public final class DashcamStampEncoder {
             }
             if (track < 0) return "no_video";
             extractor.selectTrack(track);
-            int width = inFormat.getInteger(MediaFormat.KEY_WIDTH);
-            int height = inFormat.getInteger(MediaFormat.KEY_HEIGHT);
+            int srcWidth = inFormat.getInteger(MediaFormat.KEY_WIDTH);
+            int srcHeight = inFormat.getInteger(MediaFormat.KEY_HEIGHT);
+            // Field 2026-11-25: the head unit's H.264 encoder fails on 4K surface input ("Color
+            // Conversion failed", OMX_ErrorHardware). The stamped copy is made at most 1080p; the
+            // decoded frame is scaled when drawn and the stamp is laid out for the output size.
+            int[] outSize = outputSize(srcWidth, srcHeight);
+            int width = outSize[0];
+            int height = outSize[1];
             long durationUs = inFormat.containsKey(MediaFormat.KEY_DURATION) ? inFormat.getLong(MediaFormat.KEY_DURATION) : 60_000_000L;
             int fps = inFormat.containsKey(MediaFormat.KEY_FRAME_RATE) ? inFormat.getInteger(MediaFormat.KEY_FRAME_RATE) : 30;
 
@@ -183,6 +189,18 @@ public final class DashcamStampEncoder {
     }
 
     /** Roughly the camera's own quality: ~12 Mbit/s at 1080p, scaled by area. */
+    static final int MAX_OUT_WIDTH = 1920;
+    static final int MAX_OUT_HEIGHT = 1080;
+
+    /** Source size scaled down (never up) to fit 1920x1080, aspect kept, even dimensions. */
+    static int[] outputSize(int width, int height) {
+        if (width <= MAX_OUT_WIDTH && height <= MAX_OUT_HEIGHT) return new int[]{width & ~1, height & ~1};
+        double k = Math.min(MAX_OUT_WIDTH / (double) width, MAX_OUT_HEIGHT / (double) height);
+        int w = (int) Math.round(width * k) & ~1;
+        int h = (int) Math.round(height * k) & ~1;
+        return new int[]{Math.max(2, w), Math.max(2, h)};
+    }
+
     static int bitrateFor(int width, int height) {
         long px = (long) width * height;
         long bps = px * 12_000_000L / (1920L * 1080L);
