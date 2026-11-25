@@ -85,8 +85,12 @@ public final class DashcamStampJob {
             }
             long from = start - 5_000L;
             long to = start + DashcamGpsTrack.CLIP_MS + 10_000L;
-            List<DashcamGpsTrack.Fix> fixes = DashcamGpsTrack.getInstance(context).query(from, to);
-            List<DashcamCarTrack.Sample> samples = DashcamCarTrack.getInstance(context).query(from, to);
+            // Data kept with the saved clip first (survives the 72 h of the live trails).
+            DashcamClipTrack.Data kept = DashcamClipTrack.read(clip);
+            List<DashcamGpsTrack.Fix> fixes = kept != null && !kept.isEmpty() ? kept.fixes
+                    : DashcamGpsTrack.getInstance(context).query(from, to);
+            List<DashcamCarTrack.Sample> samples = kept != null && !kept.isEmpty() ? kept.samples
+                    : DashcamCarTrack.getInstance(context).query(from, to);
             if (fixes.isEmpty() && samples.isEmpty()) {
                 post(() -> listener.onFailed(name, "sem_dados"));
                 return;

@@ -773,6 +773,7 @@ public class ForegroundService extends Service implements Shizuku.OnBinderDeadLi
                             getApplicationContext(), ServiceManager.getInstance());
         }
         dashcamAutomationManager.start();
+        br.com.redesurftank.havalshisuku.managers.DashcamAutoStamp.resume(getApplicationContext());
         br.com.redesurftank.havalshisuku.managers.DashcamStatusPublisher.start(
                 getApplicationContext(), ServiceManager.getInstance());
         startCarPlaySystemUiIconWatchdogSafely("post-service-init");

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.Stroke
+import br.com.redesurftank.havalshisuku.managers.DashcamAutoStamp
 import br.com.redesurftank.havalshisuku.managers.DashcamAutomationManager
 import br.com.redesurftank.havalshisuku.managers.DashcamGpsTrack
 import br.com.redesurftank.havalshisuku.managers.DashcamStampJob
@@ -191,6 +192,17 @@ fun DashcamTab() {
     var autoRefreshed by remember { mutableStateOf(false) }
     val store = remember { DashcamClipStore.getInstance(context) }
     var savedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    // Background stamping: refresh the saved list while it works, so progress and the new copy show.
+    var autoStampTick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(3_000L)
+            if (DashcamAutoStamp.isActive() || autoStampTick > 0) {
+                savedFiles = withContext(Dispatchers.IO) { store.list() }
+                autoStampTick = if (DashcamAutoStamp.isActive()) 2 else autoStampTick - 1
+            }
+        }
+    }
     val saveStatus = remember { mutableStateMapOf<String, String>() }
     val stampStatus = remember { mutableStateMapOf<String, String>() }
     var sharing by remember { mutableStateOf<File?>(null) }
@@ -1093,7 +1105,15 @@ private fun AutomationCard() {
                 prefs = prefs,
                 default = true
             )
-            Spacer(Modifier.weight(1f))
+            AutomationSwitch(
+                modifier = Modifier.weight(1f),
+                title = "Gerar o carimbo sozinho",
+                hint = "Todo vídeo salvo ganha uma cópia com carimbo (velocidade, dados do carro, endereço e " +
+                    "mapa), feita em segundo plano quando a central tiver internet. Fica em Salvos no carro.",
+                key = SharedPreferencesKeys.ENABLE_DASHCAM_AUTO_STAMP,
+                prefs = prefs,
+                default = true
+            )
         }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -1491,7 +1511,8 @@ private fun SavedCard(
                 Column(Modifier.weight(1f)) {
                     Text(file.name, color = ImpTokens.TextPrimary, fontSize = ImpulseTextSizes.BodyCompact, fontWeight = FontWeight.Medium)
                     Text(
-                        formatBytes(file.length()) + (stampStatus[file.name]?.let { " · $it" } ?: ""),
+                        formatBytes(file.length()) +
+                            ((stampStatus[file.name] ?: DashcamAutoStamp.statusFor(file.name))?.let { " · $it" } ?: ""),
                         color = ImpTokens.TextMuted,
                         fontSize = ImpulseTextSizes.BodyCompact
                     )

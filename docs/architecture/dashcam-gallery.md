@@ -295,3 +295,11 @@ Wi-Fi da câmera cair (até 45 s) e só então vai para a rede configurada. No c
 `NoInternetAccessExpected=true` na rede CARDV (WifiConfigStore.xml, backup em /data/local/tmp), para o Android
 não tirar a central do Wi-Fi da câmera 3-4 s depois de o app conectá-la.
 
+### 203: carimbo sozinho em segundo plano
+
+Salvar um vídeo grava ao lado `<clip>.track` com o GPS e os sinais do carro daquele minuto (o carimbo usa esse
+arquivo primeiro, então funciona depois das 72 h das trilhas) e põe o vídeo na fila de `DashcamAutoStamp`. A fila
+fica nas preferências (sobrevive ao carro desligado), espera internet validada (mapa, endereço, limite da via) e,
+sem internet por 1 h, carimba mesmo assim. O `_carimbo.mp4` aparece em Salvos no carro com "Enviar ao celular".
+Opção "Gerar o carimbo sozinho" (Automação), ligada por padrão.
+

@@ -106,6 +106,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamGpsTrack",
             "Registrar o trajeto GPS para localizar os vídeos da dashcam no mapa"
     ),
+    ENABLE_DASHCAM_AUTO_STAMP(
+            "enableDashcamAutoStamp",
+            "Gerar sozinho a cópia com carimbo dos vídeos salvos da dashcam"
+    ),
     ENABLE_DASHCAM_FAILURE_WARNING(
             "enableDashcamFailureWarning",
             "Avisar quando a dashcam não estiver gravando"

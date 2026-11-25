@@ -137,6 +137,10 @@ public final class DashcamClipStore {
             }
             File sha = new File(file.getParentFile(), file.getName() + ".sha256");
             if (sha.isFile() && !sha.delete()) Log.w(TAG, "cannot delete " + sha);
+            if (!DashcamStampJob.isStamped(file.getName())) {
+                File track = DashcamClipTrack.fileFor(file);
+                if (track.isFile() && !track.delete()) Log.w(TAG, "cannot delete " + track);
+            }
         }
         return deleted;
     }
@@ -262,13 +266,17 @@ public final class DashcamClipStore {
             if (recording.isEmergency()) markEvent(target);
             List<DashcamGpsTrack.Fix> trail = trailFor(name);
             writeGpx(target, trail);
+            // The minute's GPS and car data travel with the clip, so it can be stamped after 72 h.
+            DashcamClipTrack.snapshot(context, target);
             if (isTs(name)) {
                 saving = "converting";
                 post(() -> listener.onProgress(name, PROGRESS_CONVERTING));
                 File mp4 = convertToMp4(target, trail.isEmpty() ? null : trail.get(0));
                 File result = mp4 != null ? mp4 : target;
+                DashcamAutoStamp.enqueue(context, result);
                 post(() -> listener.onDone(name, result));
             } else {
+                DashcamAutoStamp.enqueue(context, target);
                 post(() -> listener.onDone(name, target));
             }
         } catch (Exception e) {
