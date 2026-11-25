@@ -151,12 +151,18 @@ public final class DashcamClipStore {
     static boolean hasPartner(File file) {
         File dir = file.getParentFile();
         String name = file.getName();
-        if (DashcamStampJob.isStamped(name)) {
+        if (isStampedName(name)) {
             String base = name.replace("_carimbo.mp4", "");
             return new File(dir, base + ".mp4").exists() || new File(dir, base + ".TS").exists()
                     || new File(dir, base + ".ts").exists();
         }
-        return new File(dir, DashcamStampJob.stampedName(name)).exists();
+        int dot = name.lastIndexOf('.');
+        return new File(dir, (dot > 0 ? name.substring(0, dot) : name) + "_carimbo.mp4").exists();
+    }
+
+    /** Same rule as DashcamStampJob.isStamped, without loading that class (it needs a Looper). */
+    static boolean isStampedName(String name) {
+        return name != null && name.contains("_carimbo.");
     }
 
     public void cancel() {
@@ -366,7 +372,7 @@ public final class DashcamClipStore {
      */
     public static boolean removeOriginalAfterStamp(File original, File stamped) {
         if (original == null || stamped == null || !stamped.isFile() || stamped.length() <= 0
-                || DashcamStampJob.isStamped(original.getName())) return false;
+                || isStampedName(original.getName())) return false;
         boolean removed = !original.exists() || original.delete();
         File sha = new File(original.getParentFile(), original.getName() + ".sha256");
         if (sha.isFile() && !sha.delete()) Log.w(TAG, "cannot delete " + sha);
