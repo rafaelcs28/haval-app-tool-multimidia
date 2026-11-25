@@ -44,6 +44,8 @@ object AndroidAutoClusterController {
     private var recoveryCount = 0
     private var lastRecoveryAtMs = 0L
     private var notLiveSinceMs = 0L
+    /** When the request made by an in-flight recovery failed (0 = it has not). */
+    private var recoveryFailedAtMs = 0L
     private var lastNotLiveKickAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val client by lazy {
@@ -58,10 +60,14 @@ object AndroidAutoClusterController {
                 recoveryInFlight = false
                 recoveryDemandEpoch = -1L
             }
+            if (recoveryInFlight && state == AaClusterProtocol.FAILED && recoveryFailedAtMs == 0L) {
+                recoveryFailedAtMs = SystemClock.elapsedRealtime()
+            }
             if (live) {
                 if (!wasLive) liveSinceMs = SystemClock.elapsedRealtime()
                 recoveryInFlight = false
                 recoveryDemandEpoch = -1L
+                recoveryFailedAtMs = 0L
             } else {
                 liveSinceMs = 0L
             }
@@ -475,7 +481,9 @@ object AndroidAutoClusterController {
         }
 
         if (recoveryInFlight) {
-            if (AndroidAutoClusterStreamHealth.isRecoveryTimedOut(nowMs, lastRecoveryAtMs)) {
+            if (AndroidAutoClusterStreamHealth.isRecoveryTimedOut(nowMs, lastRecoveryAtMs) ||
+                AndroidAutoClusterStreamHealth.isFailedRecoveryDue(nowMs, recoveryFailedAtMs)) {
+                recoveryFailedAtMs = 0L
                 recoveryInFlight = false
                 AaClusterVideoHost.setLive(false)
                 notifyHostProjectionFlag(false)

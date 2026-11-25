@@ -404,7 +404,9 @@ and existing JVM unit tasks are checked by the PR's exact-head CI after publicat
 
 ## Shipped build on v9 (`app/src/main/assets/aa_patches/AndroidAutoService.apk`)
 
-**Current: md5 `9c5ccfed` (sha256 `e90af377f39e86c8…`) — codec slot fix (2026-11-24).** Same flags and key as below,
+**Current: md5 `7f1aabdf` — CLUSTER queue 60 frames / 24 MB (2026-11-25).** Same build path as below.
+
+**Previous: md5 `9c5ccfed` (sha256 `e90af377f39e86c8…`) — codec slot fix (2026-11-24).** Same flags and key as below,
 built on the Mac Mini queue (kind `android-aa-service`: pinned tools in `~/BuildCache/aa-service-tools`,
 Java 21, key in `~/.config/haval-aa-signing`, certificate checked). Only change: `ClusterAvcDecoder.close()`
 no longer quarantines the decoder slot when `stop()` throws but `release()` succeeds (d606c669).

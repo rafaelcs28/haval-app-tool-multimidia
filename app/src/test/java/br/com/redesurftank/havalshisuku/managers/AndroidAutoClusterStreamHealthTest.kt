@@ -225,4 +225,12 @@ class AndroidAutoClusterStreamHealthTest {
         assertTrue(AndroidAutoClusterStreamHealth.shouldKickNotLive(500_000L, 1_000L, 500_000L - every, false))
         assertFalse(AndroidAutoClusterStreamHealth.shouldKickNotLive(500_000L, 0L, 0L, false))
     }
+
+    @Test
+    fun `a recovery whose request failed is retried after the short delay, not the full timeout`() {
+        val quick = AndroidAutoClusterStreamHealth.FAILED_RECOVERY_RETRY_MS
+        assertFalse(AndroidAutoClusterStreamHealth.isFailedRecoveryDue(10_000L, 0L))
+        assertFalse(AndroidAutoClusterStreamHealth.isFailedRecoveryDue(10_000L + quick - 1, 10_000L))
+        assertTrue(AndroidAutoClusterStreamHealth.isFailedRecoveryDue(10_000L + quick, 10_000L))
+    }
 }
