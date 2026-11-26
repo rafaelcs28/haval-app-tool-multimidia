@@ -15,7 +15,28 @@ note() {
 }
 if [ "$MODE" != "app-only" ] && ! [ -f $SVC ]; then note MOUNT_NO_SOURCE; exit 0; fi
 if ! [ -f $APP ]; then note MOUNT_NO_SOURCE; exit 0; fi
-if pidof com.ts.androidauto >/dev/null 2>&1; then note MOUNT_LATE; exit 0; fi
+# Field 2026-11-26: the race is ~1 s (Impulse up at 15 s, Android Auto at 14-16 s). Lost, the
+# whole drive had no cluster map. A process younger than LATE_MAX_AGE (no phone session yet) is
+# restarted after the binds, so the new one opens the patched APKs like an early mount; an older
+# one is never touched (a swap under a live session broke the phone certificate before).
+LATE_MAX_AGE=45
+LATE_RESTART=0
+proc_age() {
+    p=$(pidof "$1" 2>/dev/null | cut -d' ' -f1)
+    [ -n "$p" ] || { echo -1; return; }
+    st=$(cut -d' ' -f22 /proc/$p/stat 2>/dev/null)
+    up=$(cut -d. -f1 /proc/uptime)
+    [ -n "$st" ] || { echo 99999; return; }
+    echo $(( up - st / 100 ))
+}
+if pidof com.ts.androidauto >/dev/null 2>&1; then
+    age=$(proc_age com.ts.androidauto)
+    if [ "$age" -ge 0 ] && [ "$age" -lt $LATE_MAX_AGE ]; then
+        LATE_RESTART=1
+    else
+        note "MOUNT_LATE age=$age"; exit 0
+    fi
+fi
 mkdir -p $STAGE/empty_oat
 chmod 755 $STAGE $STAGE/empty_oat
 chmod 644 $APP
@@ -46,6 +67,20 @@ fi
 if [ -d /vendor/app/AndroidAutoApp/oat ]; then
     mount --bind $STAGE/empty_oat /vendor/app/AndroidAutoApp/oat || true
 fi
-if pidof com.ts.androidauto >/dev/null 2>&1; then note MOUNT_LATE; exit 0; fi
 rm -f /data/dalvik-cache/arm64/*AndroidAutoService* /data/dalvik-cache/arm64/*AndroidAutoApp*
+if [ "$LATE_RESTART" = 1 ]; then
+    for n in com.ts.androidauto com.ts.androidauto.app; do
+        p=$(pidof $n 2>/dev/null) && [ -n "$p" ] && kill $p
+    done
+    note "MOUNT_LATE_RESTARTED $MODE"
+    exit 0
+fi
+if pidof com.ts.androidauto >/dev/null 2>&1; then
+    # Started while the binds were made: it is seconds old, restart it on the patched APKs.
+    for n in com.ts.androidauto com.ts.androidauto.app; do
+        p=$(pidof $n 2>/dev/null) && [ -n "$p" ] && kill $p
+    done
+    note "MOUNT_LATE_RESTARTED $MODE"
+    exit 0
+fi
 note "MOUNT_EARLY $MODE"

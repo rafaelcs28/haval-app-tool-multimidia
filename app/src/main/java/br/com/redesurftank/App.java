@@ -110,7 +110,7 @@ public class App extends Application {
             String mode = clusterServiceEnabled() ? "" : " app-only";
             String output = telnet.executeCommand("sh " + script.getAbsolutePath() + mode, 3000);
             if (output == null) return 0;
-            if (output.contains("MOUNT_EARLY")) return 1;
+            if (output.contains("MOUNT_EARLY") || output.contains("MOUNT_LATE_RESTARTED")) return 1;
             if (output.contains("MOUNT_LATE")) return 2;
             if (output.contains("MOUNT_NO_SOURCE")) return -1;
             return 0;
