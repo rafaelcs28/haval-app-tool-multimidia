@@ -106,6 +106,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "enableDashcamGpsTrack",
             "Registrar o trajeto GPS para localizar os vídeos da dashcam no mapa"
     ),
+    OPEN_MAIN_APP_ON_NAVIGATION(
+            "openMainAppOnNavigation",
+            "Abrir o app da tela principal quando uma rota começar no Android Auto"
+    ),
     ENABLE_DASHCAM_AUTO_STAMP(
             "enableDashcamAutoStamp",
             "Gerar sozinho a cópia com carimbo dos vídeos salvos da dashcam"

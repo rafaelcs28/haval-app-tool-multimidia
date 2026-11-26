@@ -209,6 +209,27 @@ object StartupAppManager {
             .getOrDefault(false)
 
     /** "Abrir agora", para a interface — sem token de boot e sem repetições. */
+    private const val NAVIGATION_OPEN_COOLDOWN_MS = 60_000L
+    @Volatile private var lastNavigationOpenAtMs = 0L
+
+    /**
+     * Owner (2026-11-26): a route started on Android Auto (Waze / Google Maps) opens the main-screen
+     * app, e.g. the 3D viewer, when "Abrir também ao iniciar um destino" is on. Once a minute at most,
+     * so a route that flickers off and on does not keep pulling the app to the front.
+     */
+    fun onNavigationStarted() {
+        val enabled = prefs().getBoolean(SharedPreferencesKeys.OPEN_MAIN_APP_ON_NAVIGATION.key, false)
+        val pkg = mainDisplayPackage()
+        if (!enabled || pkg.isEmpty() || !canLaunch(pkg)) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastNavigationOpenAtMs > 0 && now - lastNavigationOpenAtMs < NAVIGATION_OPEN_COOLDOWN_MS) return
+        lastNavigationOpenAtMs = now
+        handler.post {
+            val started = start(pkg)
+            Log.w(TAG, "Rota iniciada: abrindo $pkg (started=$started)")
+        }
+    }
+
     fun launchNow(): Boolean {
         running = false
         handler.removeCallbacksAndMessages(null)

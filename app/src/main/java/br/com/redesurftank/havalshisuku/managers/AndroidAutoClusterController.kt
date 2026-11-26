@@ -274,6 +274,7 @@ object AndroidAutoClusterController {
             mainHandler.removeCallbacks(navigationEndedRunnable)
             if (!navigationActive.getAndSet(true)) {
                 Log.w(TAG, "CLUSTER navigation started")
+                StartupAppManager.onNavigationStarted()
                 // A new trip is a fresh demand: forget an old failed request and the spent budget,
                 // so the map is requested again instead of staying blank until a reboot.
                 if (!surfaceAttached.get()) {

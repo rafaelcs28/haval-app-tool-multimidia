@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -116,6 +117,28 @@ fun StartupAppsDialog(onDismiss: () -> Unit) {
                             TextButton(onClick = { StartupAppManager.launchNow() }) {
                                 Text("Abrir agora", color = ImpTokens.Accent)
                             }
+                        }
+                        var openOnRoute by remember {
+                            mutableStateOf(prefs.getBoolean(SharedPreferencesKeys.OPEN_MAIN_APP_ON_NAVIGATION.key, false))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Abrir também ao iniciar um destino", color = Color.White,
+                                    fontSize = ImpulseTextSizes.BodyCompact)
+                                Text("Quando uma rota começar no Waze ou no Google Maps (Android Auto), " +
+                                    "abre este app na tela principal.", color = ImpTokens.TextSecondary,
+                                    fontSize = ImpulseTextSizes.BodyCompact)
+                            }
+                            Switch(
+                                checked = openOnRoute,
+                                onCheckedChange = {
+                                    openOnRoute = it
+                                    prefs.edit { putBoolean(SharedPreferencesKeys.OPEN_MAIN_APP_ON_NAVIGATION.key, it) }
+                                }
+                            )
                         }
                     }
                 }
