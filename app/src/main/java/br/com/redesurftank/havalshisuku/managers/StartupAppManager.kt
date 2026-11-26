@@ -214,7 +214,8 @@ object StartupAppManager {
 
     /**
      * Owner (2026-11-26): a route started on Android Auto (Waze / Google Maps) opens the main-screen
-     * app, e.g. the 3D viewer, when "Abrir também ao iniciar um destino" is on. Once a minute at most,
+     * app (whichever is chosen) after a configurable delay, when "Abrir também ao iniciar um
+     * destino" is on and the route is still active then. Once a minute at most,
      * so a route that flickers off and on does not keep pulling the app to the front.
      */
     fun onNavigationStarted() {
@@ -224,10 +225,30 @@ object StartupAppManager {
         val now = android.os.SystemClock.elapsedRealtime()
         if (lastNavigationOpenAtMs > 0 && now - lastNavigationOpenAtMs < NAVIGATION_OPEN_COOLDOWN_MS) return
         lastNavigationOpenAtMs = now
-        handler.post {
-            val started = start(pkg)
-            Log.w(TAG, "Rota iniciada: abrindo $pkg (started=$started)")
-        }
+        val delayS = navigationOpenDelaySeconds()
+        handler.postDelayed({
+            // The route may have been cancelled during the wait.
+            if (!AndroidAutoClusterController.isNavigationActive()) {
+                Log.w(TAG, "Rota encerrada antes de ${delayS}s: $pkg não foi aberto")
+                return@postDelayed
+            }
+            val target = mainDisplayPackage()
+            if (target.isEmpty()) return@postDelayed
+            val started = start(target)
+            Log.w(TAG, "Rota iniciada há ${delayS}s: abrindo $target (started=$started)")
+        }, delayS * 1000L)
+    }
+
+    const val NAVIGATION_OPEN_DELAY_DEFAULT_S = 5
+    const val NAVIGATION_OPEN_DELAY_MAX_S = 60
+
+    fun navigationOpenDelaySeconds(): Int =
+        prefs().getInt(SharedPreferencesKeys.OPEN_MAIN_APP_ON_NAVIGATION_DELAY_S.key, NAVIGATION_OPEN_DELAY_DEFAULT_S)
+            .coerceIn(0, NAVIGATION_OPEN_DELAY_MAX_S)
+
+    fun setNavigationOpenDelaySeconds(seconds: Int) {
+        prefs().edit().putInt(SharedPreferencesKeys.OPEN_MAIN_APP_ON_NAVIGATION_DELAY_S.key,
+            seconds.coerceIn(0, NAVIGATION_OPEN_DELAY_MAX_S)).apply()
     }
 
     fun launchNow(): Boolean {

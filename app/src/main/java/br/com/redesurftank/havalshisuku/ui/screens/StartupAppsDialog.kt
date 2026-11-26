@@ -140,6 +140,29 @@ fun StartupAppsDialog(onDismiss: () -> Unit) {
                                 }
                             )
                         }
+                        if (openOnRoute) {
+                            var delayS by remember { mutableStateOf(StartupAppManager.navigationOpenDelaySeconds()) }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("Esperar depois de iniciar a rota", color = ImpTokens.TextSecondary,
+                                    fontSize = ImpulseTextSizes.BodyCompact, modifier = Modifier.weight(1f))
+                                TextButton(
+                                    onClick = { delayS = (delayS - 1).coerceAtLeast(0); StartupAppManager.setNavigationOpenDelaySeconds(delayS) },
+                                    enabled = delayS > 0
+                                ) { Text("−", color = Color.White, fontSize = ImpulseTextSizes.Label) }
+                                Text("$delayS s", color = Color.White, fontSize = ImpulseTextSizes.Label)
+                                TextButton(
+                                    onClick = {
+                                        delayS = (delayS + 1).coerceAtMost(StartupAppManager.NAVIGATION_OPEN_DELAY_MAX_S)
+                                        StartupAppManager.setNavigationOpenDelaySeconds(delayS)
+                                    },
+                                    enabled = delayS < StartupAppManager.NAVIGATION_OPEN_DELAY_MAX_S
+                                ) { Text("+", color = Color.White, fontSize = ImpulseTextSizes.Label) }
+                            }
+                        }
                     }
                 }
 

@@ -110,6 +110,10 @@ enum class SharedPreferencesKeys(val key: String, val description: String) {
             "openMainAppOnNavigation",
             "Abrir o app da tela principal quando uma rota começar no Android Auto"
     ),
+    OPEN_MAIN_APP_ON_NAVIGATION_DELAY_S(
+            "openMainAppOnNavigationDelayS",
+            "Segundos entre o início da rota e a abertura do app da tela principal"
+    ),
     ENABLE_DASHCAM_AUTO_STAMP(
             "enableDashcamAutoStamp",
             "Gerar sozinho a cópia com carimbo dos vídeos salvos da dashcam"

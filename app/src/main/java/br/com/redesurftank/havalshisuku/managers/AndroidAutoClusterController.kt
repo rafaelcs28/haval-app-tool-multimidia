@@ -210,6 +210,9 @@ object AndroidAutoClusterController {
 
     fun isSurfaceAttached(): Boolean = surfaceAttached.get()
 
+    /** A route is in progress on Android Auto (debounced like the cluster map). */
+    fun isNavigationActive(): Boolean = navigationActive.get()
+
     /**
      * Theme / external command. Does not persist across disconnects: a new
      * session starts over and the theme must ask again.
