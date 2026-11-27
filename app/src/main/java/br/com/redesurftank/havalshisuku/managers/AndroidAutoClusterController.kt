@@ -172,6 +172,45 @@ object AndroidAutoClusterController {
             !secondaryAppActive.get() && !selfUpdateHold.get()
 
     private val selfUpdateHold = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** The theme (or an API client) said yes or no to the map in this AA session. */
+    private val clusterAnswered = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var routeUnrequestedSinceMs = 0L
+    private var lastBlockedLogAtMs = 0L
+
+    /**
+     * Owner's rule (2026-11-27): a projected route with "Mapa no cluster" on means the map on the
+     * cluster. Field: a drive where the theme never asked for it left the map off the whole trip
+     * (and the watchdog only acts on a requested map). When the theme has not answered at all in
+     * this session and a route has been active for [ROUTE_UNANSWERED_REQUEST_MS], Impulse asks for
+     * the map itself. An explicit "no" from the theme is respected. Also logs, once a minute, which
+     * condition keeps the map off while a route is active.
+     */
+    private fun requestForActiveRouteIfUnanswered(nowMs: Long) {
+        if (!navigationActive.get()) {
+            routeUnrequestedSinceMs = 0L
+            return
+        }
+        if (nowMs - lastBlockedLogAtMs >= 60_000L) {
+            lastBlockedLogAtMs = nowMs
+            ClusterPersistentEventLogger.log("aa_cluster_route_without_map", mapOf(
+                "requested" to clusterRequested.get(), "answered" to clusterAnswered.get(),
+                "session" to isSessionActive(), "secondary_app" to secondaryAppActive.get(),
+                "update_hold" to selfUpdateHold.get(),
+                "map_enabled" to AndroidAutoPatchManager.isClusterServiceEnabled()))
+        }
+        if (clusterRequested.get() || clusterAnswered.get() || !isSessionActive()
+            || !AndroidAutoPatchManager.isClusterServiceEnabled()) {
+            routeUnrequestedSinceMs = 0L
+            return
+        }
+        if (routeUnrequestedSinceMs <= 0L) routeUnrequestedSinceMs = nowMs
+        if (nowMs - routeUnrequestedSinceMs < ROUTE_UNANSWERED_REQUEST_MS) return
+        routeUnrequestedSinceMs = 0L
+        ClusterPersistentEventLogger.log("aa_cluster_route_request", emptyMap<String, Any?>())
+        setClusterMapEnabled(true, "route_watchdog")
+    }
+
+    private const val ROUTE_UNANSWERED_REQUEST_MS = 10_000L
     private val selfUpdateHoldExpired = Runnable {
         if (selfUpdateHold.getAndSet(false)) {
             ClusterPersistentEventLogger.log("aa_cluster_self_update_hold_expired", emptyMap<String, Any?>())
@@ -219,6 +258,7 @@ object AndroidAutoClusterController {
      */
     fun setClusterMapEnabled(enabled: Boolean, source: String) {
         Log.w(TAG, "setClusterMapEnabled enabled=$enabled source=$source session=$lastSessionValue")
+        if (source == "theme" || source.startsWith("receiver")) clusterAnswered.set(true)
         if (clusterRequested.getAndSet(enabled) != enabled) demandEpoch.incrementAndGet()
         if (!enabled) {
             detachSurface("disabled_by_$source")
@@ -327,6 +367,7 @@ object AndroidAutoClusterController {
 
     private fun onSessionStopped() {
         if (clusterRequested.getAndSet(false)) demandEpoch.incrementAndGet()
+        clusterAnswered.set(false)
         mainHandler.removeCallbacks(navigationEndedRunnable)
         navigationActive.set(false)
         lastNavigationActiveAtMs.set(0L)
@@ -561,6 +602,7 @@ object AndroidAutoClusterController {
         }
         if (!wantsOutput()) {
             notLiveSinceMs = 0L
+            requestForActiveRouteIfUnanswered(nowMs)
             return
         }
         if (!surfaceAttached.get()) {
